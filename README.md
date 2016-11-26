@@ -15,7 +15,83 @@ There are (semantic) intelligent search engines that continuously crawl and over
 Tagsplorer uses a simple concept which enables you to continue using simple and compatible file trees, keep all your data under version control of your choice, allows you to put files or entire folders into more than one (virtual) category, and still benefit from little manual maintenance or additional setup.
 
 # Usage
-Currently it's not possible to glob over folder names efficiently; trying to do so will need to walk all folders that are left in the filter process. TODO true?
+Hint: Currently it's not possible to glob over folder names efficiently; trying to do so will need to walk all folders that are left in the filter process. TODO true?
+
+## Command-line interface
+The current main and only user interface is `tp.py`, a thin layer over the library's basic functions.
+Here is a short description of valid programoptions and arguments:
+
+* `--help`
+  
+  Shows user options, as does this section
+
+* `--test [-v]`
+
+  Runs unit tests from `tests.py`. If `-v` is specified, use verbose mode. TODO create global `-v` mode? Currently covered by `-1`
+
+* `--version`
+
+  Shows version string of code base
+
+* `--init [-r rootfolder]`
+
+  Create an empty configuration in the current folder (or the relative or absolute one specified by the -r option). TODO don't overwrite unless `--force` specified.
+  The location of a configuration file `.tagsplorer.cfg` marks the root path for an entire indexed file tree. No other configuration files higher up the parent hierarchy will be considered.
+
+`--update` or `-u`
+
+  Update the file index by walking the entire folder tree from the root to child folders.
+  This creates or updates the `.tagsplorer.idx` file with newly found contents.
+  Since this file will be written over on every inde run, there is no need to track outdated items, perform memory management or garbage collections inside the index.
+
+* `--search [[+]tag1[,tags2[,tags...]]] [[-]tag3[,tag4[,tags...]]] [-r rootfolder]` or `-s` or no option
+
+  Perform a search (which is like as virtual folder listing).
+  This is the main use case for the tagsplorer tools and accepts inclusive as well as exclusive search terms.
+  There can be any number of arguments, which optionally can also be specified in a comma-separated way (after positives tags), or using the `-x` option.
+  Note, however, that negative (exclusive) tag arguments must be specified after a comma, as the command line interface currently cannot distinguish between valid options and negative arguments. TODO
+
+* `--exclude tag1[,tag2[,tags...]]` or `-x` or `-n`
+
+  Specify exclusive tags when searching.
+  TODO check if not accidentally still accepting +/-.
+  TODO check if we can remove this option? only when -tag coincides with an option.
+  TODO check if -y -n syntax is better than +/- or --x?
+
+* `--tag [+][-]tag1[,[+][-]tag2[,tags...]] file[,file2[,files...]]` or `-t`
+
+  Specifies a (set of) (inclusive or exlusive) tag(s) for the following file names, or glob patterns.
+  This information is stored in the configuration file and is respected in the index upon next search and file tree walk.
+
+* `--log level` or `-l`
+
+  Specify detail level for printed messages.
+  Note, however, that the program still prints to both stderr and stdout, depending on content.
+  Also note, that the maximum log level displayed, is hard-coded into the source code (default: INFO - not printing DEBUG statements).
+
+* `--set key=value`
+
+  Sets a global configuration value.
+
+* `--get key`
+
+  Prints out a global configuration value.
+
+* `--unset key`
+
+  Removes a global configuration value. This usually switches back to the default logic or value.
+
+* `--strict`
+
+  Fail earlier. TODO explain and expand places to use this
+
+* `--simulate`
+
+  Don't write anything to the file system. TODO use `-n` for that (like rsync?)
+
+* `--force` or `-f`
+
+  Do things even against warning or in a potentially dangerous situation. TODO explain where and expand uses.
 
 # Architecture and program semantics
 ## Configuration file
