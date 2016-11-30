@@ -17,15 +17,7 @@
 #   For the skip-folder logic, we could use an "index the folder, but don't recurse into sub folders" instead, but we prefer skipping the entire current folder, which is more flexible.
 #   All tags are indexed in a case depending on the global configuration parameter case_sensitive (because index is recreated on every change anyway), which has a per-OS default but can be set manually.
 
-# TODO: size index equidist
-# TODO feature: keep comments in config file
-# TODO define semantics of single file vs. glob: if order defined, we can force-allow addition of single file pattern (or multiple patterns) althugh already included
-# TODO consider from in froms? make set of all dependencies avoiding circles. however if setting up symlinks, this becomes very comlex
-# TODO file contents use locale.getpreferredencoding(). in cygwin problems with unicode encountered
-# TODO filenames on windows are ANSI with a CP, therefore difficult to handle, if round-tripping and converting to unicode in between. transfer FS/App as bytes (keep as is), or os.fsencode/fsdecode, or sys.getfilesystemencoding()->native bytes (win: utf-16-le)
-# TODO check symblinks and hardlinks, requires a stat on every file? only if implementing real links. create links whenvever mismatch to configuration has been detected?
-
-import collections,copy,fnmatch,os,sys,time,zlib
+import collections, copy, fnmatch, os, sys, time, zlib
 
 DEBUG = 3; INFO = 2; WARN = 1; ERROR = 0
 LOG = INFO # select maximum log level
@@ -63,7 +55,7 @@ globmatch = None # dito
 # Constants
 PICKLE_VERSION = 2 # since Python 3 comes with different protocol, we pin the protocol here
 CONFIG =  ".tagsplorer.cfg" # main tag configuration file
-INDEX =   ".tagsplorer.dmp" # index file (re-built when timestamps differ)
+INDEX =   ".tagsplorer.idx" # index file (re-built when timestamps differ)
 SKPFILE = ".tagsplorer.skp" # marker file (can also be configured in configuration instead) 
 IGNFILE = ".tagsplorer.ign" # marker file (dito)
 IGNORE, SKIP, TAG, FROM, SKIPD, IGNORED, GLOBAL = intern("ignore"), intern("skip"), intern("tag"), intern("from"), intern("skipd"), intern("ignored"), intern("global") # can be augmented to excludef for files
@@ -115,13 +107,16 @@ def isunderroot(root, folder): return os.path.commonprefix([root, folder]).start
 def isglob(f): return '*' in f or '?' in f
 def getTs(): return int(time.time() * 10.)
 def safeSplit(s, d): return s.split(d) if s != '' else []
+def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s
 def dd(tipe = list): return collections.defaultdict(tipe)
 def dictget(dikt, key, default):
   ''' Improved dict.get(key, default).
-  >>> a = {}; b = a.get(0, 0); print(a) # normal dict get
-  {}
-  >>> a = {}; b = dictget(a, 0, 0); print(a) # improved dict get
-  {0: 0}
+  >>> a = {}; b = a.get(0, 0); print((a, b)) # normal dict get
+  ({}, 0)
+  >>> a = {}; b = dictget(a, 0, 0); print((a, b)) # improved dict get
+  ({0: 0}, 0)
+  >>> a = {}; b = dictget(a, 0, lambda: 1); print((a, b))
+  ({0: 1}, 1)
   '''
   try: return dikt[key]
   except: dikt[key] = ret = default() if callable(default) else default; return ret
@@ -176,7 +171,7 @@ class Config(object):
     _.paths = {} # map from relative dir path to dict of marker -> [entries]
     _.case_sensitive = sys.platform != 'win32' # dynamic default unless specified in the config file
     global filenorm, globmatch # modify global function reference
-    filenorm = (lambda s: s) if _.case_sensitive else (lambda s: s.lower())
+    filenorm = (lambda s: s) if _.case_sensitive else str.lower
     globmatch = fnmatch.fnmatch if _.case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower()) # define tag matching logic
   
   def load(_, filename, index_ts = None):
@@ -188,10 +183,10 @@ class Config(object):
         if _.log >= 1: info("Skip loading configuration, because index is up to date")
         return False # no skew detected, allow using old index' interned configuration ("self" will be discarded)
       if _.log >= 1: info("Loading configuration from file system" + ("" if index_ts is None else " because index is outdated"))
-      cp = ConfigParser(); dat = cp.load(fd); _.__dict__.update(dat) # TODO merge
+      cp = ConfigParser(); dat = cp.load(fd); _.__dict__.update(dat)
       _.paths = cp.sections
       global filenorm, globmatch # modify global function reference
-      filenorm = (lambda s: s) if _.case_sensitive else (lambda s: s.lower())
+      filenorm = (lambda s: s) if _.case_sensitive else str.lower
       globmatch = fnmatch.fnmatch if _.case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower()) # update tag matching logic
       return True
 
@@ -217,23 +212,27 @@ class Config(object):
     pname = "Glob" if is_glob else "File"
     keep_pos, keep_neg = dd(), dd()
 
-    for tag in poss + negs: # checks for positive tags
-      keep = True
+    for tag in poss + negs:
+      keep = True # marker
       for line in conf.get(TAG, []):
         tg, inc, exc = line.split(SEPA)
         if tg == tag: # if positive tag specified in configuration
           for i in safeSplit(inc, ","):
-            if isglob(i) and not is_glob and globmatch(pattern, i):
-              keep = force; error("File '%s' already included by glob pattern '%s' for tag '%s'%s" % (pattern, i, tag, "" if force else ", skipping"), file = sys.stderr); break # TODO allow override against error? only if semantics worked out (single file stronger than glob?)
-            elif i == pattern: # pattern already contained, no matter if glob or file
-              keep = force; error("%s '%s' already%s specified for tag '%s'%s" % (pname, pattern, " inversely" if tag in negs else "", tag, "" if force else ", skipping")); break
+            if isglob(i) and not is_glob and globmatch(pattern, i): # is file matched by inclusive glob
+              keep = force
+              (warn if force else error)("File '%s' already included by glob pattern '%s' for tag '%s'%s" % (pattern, i, tag, "" if force else ", skipping"), file = sys.stderr)
+              break
+            elif i == pattern: # file/glob already contained
+              keep = False; error("%s '%s' already%s specified for tag '%s'%s" % (pname, pattern, " inversely" if tag in negs else "", tag, "" if force else ", skipping")); break
           for e in safeSplit(exc, ","):
-            if isglob(e) and not is_glob and globmatch(pattern, e):
-              keep = force; error("File '%s' excluded by glob pattern '%s' for tag '%s'%s" % (pattern, e, tag, "" if force else ", skipping")); break
-            elif e == pattern: # pattern already contained - do nothing
-              keep = force; error("%s '%s' already%s specified for tag '%s'%s" % (pname, pattern, " inversely" if tag in poss else "", tag, "" if force else ", skipping")); break
-          break # because already found, cannot have more than one per folder
-      if keep: (keep_pos if tag in poss else keep_neg)[tag].append(pattern) # keep tags, if no error (or forced to keep)
+            if isglob(e) and not is_glob and globmatch(pattern, e): # is file matched by exclusive glob
+              keep = force
+              (warn if force else error)("File '%s' excluded by glob pattern '%s' for tag '%s'%s" % (pattern, e, tag, "" if force else ", skipping"))
+              break
+            elif e == pattern: # file/glob already contained
+              keep = False; error("%s '%s' already%s specified for tag '%s'%s" % (pname, pattern, " inversely" if tag in poss else "", tag, "" if force else ", skipping")); break
+          break # because tag was found
+      if keep: (keep_pos if tag in poss else keep_neg)[tag].append(pattern)
 
     # Now really add new patterns to config
     modified = list(keep_pos.keys()) + list(keep_neg.keys())
@@ -299,8 +298,8 @@ class Indexer(object):
     _.mapTagsIntoDirs() # unified with folder entries for simple lookup and filtering
     tags = len(_.tags)
     del _.tags, _.tag2paths # remove temporary structures
-    rm = [tag for tag, dirs in dictviewitems(_.tagdir2paths) if len(dirs) == 0] # not using generator expression to avoid accessing structure during deletion TODO check if ever removing anything
-    for r in rm: _.tagdir2paths.pop(r) # remove empty lists (was too optimistic, removed by skip)
+    rm = [tag for tag, dirs in dictviewitems(_.tagdir2paths) if len(dirs) == 0] # finding entries that were emptied due to ignores
+    for r in rm: _.tagdir2paths.pop(r) # remove empty lists from index (was too optimistic, removed by ignore or skip)
     if _.log >= 1: info("Indexed %d folders and %d tags/globs/extensions." % (tagdirs, tags))
   
   def _walk(_, aDir, parent = 0, tags = []):
@@ -357,9 +356,8 @@ class Indexer(object):
       idx = len(_.tagdirs) # add new element at next index
       _.tagdir2parent[idx] = parent
       _.tagdirs.append(intern(child)) 
-      tags.append(_.tagdirs.index(_.tagdirs[idx])) # temporary add of first occurence of that tag string
-      for tag in frozenset(tags + adds):
-        _.tagdir2paths[tag].append(idx)
+      tags.append(_.tagdirs.index(_.tagdirs[idx])) # temporary addition of first occurence of that tag string
+      for tag in frozenset(tags + adds): _.tagdir2paths[tag].append(idx)
       _._walk(aDir + SLASH + child, idx, tags) # store first occurence index only
       tags.pop() # remove temporary add after recursion
   
@@ -388,10 +386,10 @@ class Indexer(object):
     return new
 
   def getPaths(_, ids, cache = {}):
-    ''' Returns all paths for the given list of ids, using intermediate hashing. '''
-    return [_.getPath(i, cache) for i in ids]
+    ''' Returns generator for all paths for the given list of ids, using intermediate caching. '''
+    return (_.getPath(i, cache) for i in ids)
 
-  def removeIncluded(includedTags, excludePaths):
+  def removeIncluded(_, includedTags, excludedPaths):
     ''' Return those paths, that have no manual tags or from tags from inclusion list; subtract from the exclusion list to reduce set of paths to ignore.
         includedTags: search tags (no extensions, no globs) to keep included: will be removed from the excludedPaths list returned
         excludedPaths: the paths not found in the index, scheduled for removal
@@ -423,7 +421,7 @@ class Indexer(object):
         tg, inc, exc = value.split(SEPA)
         if tg in includedTags: retainit = False; break # removed from retained paths
       if retainit: retain.append(path)
-    return retain
+    return set(retain)
   
   def findFolders(_, include, exclude = [], returnAll = False):
     ''' Find intersection of all directories with matching tags.
@@ -431,8 +429,7 @@ class Indexer(object):
         exclude: list of cleaned tag names to exclude
         returnAll: shortcut flag that simply returns all paths from index
     '''
-    if returnAll:
-      return _.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set()))) # all existing paths
+    if returnAll: return list(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))) # all existing paths
     paths, first, cache = set(), True, {}
     for tag in include: # positive restrictive matching
       if _.log >= 2: info("Filtering paths by inclusive tag %s" % tag)
@@ -454,30 +451,32 @@ class Indexer(object):
       first = False
     for tag in exclude: # we don't excluded globs here, because we would also exclude potential candidates (because index is over-specified)
       if _.log >= 2: info("Filtering paths by exclusive tag %s" % tag)
-      potentialRemove = set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)) # can only be removed, if no manual tag/file extension/glob in config or "from"
-      new = removeIncluded(include, potentialRemove) # remove paths with includes from "remove" list (adding back...)
+      potentialRemove = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set()) # can only be removed, if no manual tag/file extension/glob in config or "from"
+      new = _.removeIncluded(include, potentialRemove) # remove paths with includes from "remove" list (adding back...)
       if first: # start with all all paths, except determined excluded paths
-        allPaths = _.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set()))) # get paths from index data structure
+        allPaths = list(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))) # get paths from index data structure
         paths = allPaths - new
       else:
         paths -= new # reduce found paths
       first = False
     return list(paths)
 
-  def filterFiles(_, aFolder, remainder, excludes):
+  def findFiles(_, aFolder, poss, excludes = [], strict = True):
     ''' Determine files for the given folder.
         aFolder: folder to filter
         remainder: positive tags, extension, or file/glob to consider
         excludes: negative assertions
+        strict: perform real file existence checks
         returns: returns list of filenames for given folder
     '''
+    remainder = set(poss) - set(aFolder.split(SLASH)[1:]) # split folder path into tags and remove from remaining criteria
     if _.log >= 1: info("Filtering folder %s%s" % (aFolder, (" by remaining tags: " + (", ".join(remainder)) if len(remainder) > 0 else DOT)))
     conf = _.cfg.paths.get(aFolder, {}) # if empty, files remains unchanged, we return all 
     folders = [aFolder] + [norm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])] # all mapped folders
     if _.log >= 1 and len(folders) > 1: info("Considering (mapped) folders: %s" % str(folders[1:]))
 
-    allfiles = set() # contains files from current or mapped folders (without path, since "mapped", but could have local symlink - TODO of different name? disallow?)
-    for folder in folders: # WARN shadowing a function argument, make sure this doesn't change the folders list reference?
+    allfiles = set() # contains files from current or mapped folders (without path, since "mapped", but could have local symlink - TODO
+    for folder in folders:
       if _.log >= 1: debug("Checking folder %s" % folder)
       files = set(wrapExc(lambda: [f for f in os.listdir(_.root + folder) if isfile(_.root + folder + SLASH + f)], lambda: [])) # all from current folder, exc: folder name (unicode etc.)
       conf = _.cfg.paths.get(folder, {}) # if empty, files remains unchanged, we return all of them regularly
@@ -497,12 +496,12 @@ class Indexer(object):
             news = set(files) # collect all files subsumed under the tag that should remain. hint: this is not a tag ^ tag match!
             for i in inc.split(","): # if tag manually specified, only keep those included files
               if isglob(i): news &= set([f for f in files if globmatch(f, i)]) # is glob
-              else: news &= set([i] if i in files and isfile(_.root + folder + SLASH + i) else []) # is no glob - add, only if exists TODO add check if file really exists? --strict?
-            for e in exc.split(","): # if tag manually specified, except these files (add back) TODO: order of tags may make a difference, because we add back unconditionally from other rules? but only to the "news" set
+              else: news &= set([i] if i in files and (not strict or isfile(_.root + folder + SLASH + i)) else []) # is no glob: add only if file exists
+            for e in exc.split(","): # if tag is manually specified, exempt these files (add back)
               if isglob(e): news |= set([n for n in news if globmatch(n, e)])
-              else: news.add(e) # news.discard(e)
+              else: news.add(e)
             keep = keep & news
-            break # TODO no break, check froms
+            break # TODO froms checking missing before break!
         if not found: keep = set() # if no inclusive tag 
 
       remo = set() # start with none to remove, than enlarge set
@@ -517,23 +516,18 @@ class Indexer(object):
             news = set() # collect all file that should be excluded
             for i in inc.split(","):
               if isglob(i): news |= set([f for f in files if globmatch(f, i)]) # is glob
-              else: news |= set([i] if i in files and isfile(_.root + folder + SLASH + i) else []) # is no glob - add, only if exists TODO add check if file really exists? --strict?
+              else: news |= set([i] if i in files and (not strict or isfile(_.root + folder + SLASH + i)) else []) # is no glob: add, only if exists
             for e in exc.split(","):
-              if isglob(e): news -= set([n for n in news if globmatch(n, e)]) # TODO remove unconditionally, is this correct? see above
+              if isglob(e): news -= set([n for n in news if globmatch(n, e)])
               else: news.discard(e)
             remo |= news
             break
         if not found: keep = set(files)
       files = (files & keep) - remo
       allfiles |= files
-    return list(allfiles) # TODO option to return full paths (originating (froms?) instead of mapped)
+    return list(allfiles)
   
-  def findFiles(_, folder, poss, negs = []):
-    ''' Find files in the folders given. '''
-    remainder = set(poss) - set(folder.split(SLASH)[1:]) # split folder path into tags and remove from remaining criteria
-    return _.filterFiles(folder, remainder, negs)
-
 
 if __name__ == '__main__':
   ''' This code is just for testing. Run in svn/projects by tagsplorer/lib.py '''
-  if len(sys.argv) > 1 and sys.argv[1] == '--test': import doctest; doctest.testmod(); os.system(sys.executable + " tests.py"); sys.exit(0)
+  if len(sys.argv) > 1 and sys.argv[1] == '--test': import doctest; doctest.testmod(); os.system(sys.executable + " tests.py")

@@ -2,21 +2,21 @@
 # This script is written for easiest command-line access
 #
 # Globbing on tags not supported by design
-# TODO separate timestamp from conf once more - better to exclude from vcs
-# TODO implement delete option similar to add - safety checks for removal of patterns
-# TODO simplify find, add from, add map option
-# TODO use argparse instead, to allow for many arguments after --no, and dependent options
-# TODO option to create xml or json output for query outputs files
-# TODO create graphical interface, copy to clipboard, explorer integration etc.
+# TODO separate timestamp from conf once more - better to exclude from vcs (?) or use modtim?
+# TODO simplify find, add from, add map option (?)
 
-import fnmatch,optparse,os,sys,time
-from lib import Config,Indexer,CONFIG,INDEX,DOT,SLASH,GLOBAL,splitCrit,norm,isunderroot,safeSplit,isglob,debug,info,warn,error,wrapExc,lindex,getTs # direct namespace import is necessary to enable correct unpickling
+import fnmatch, optparse, os, sys, time
+from lib import Config,Indexer,CONFIG,INDEX,DOT,SLASH,GLOBAL,splitCrit,norm,isunderroot,safeSplit,safeRSplit,isglob,debug,info,warn,error,wrapExc,lindex,getTs # direct namespace import is necessary to enable correct unpickling
 # Python version dependent imports
 if sys.version_info.major == 3:
   from functools import reduce # not built-in
+  printo = eval("lambda s: print(s)")
   printe = eval("lambda s: print(s, file = sys.stderr)")
 else:
+  printo = eval("lambda s: sys.stdout.write(str(s) + '\\n') and sys.stdout.flush()")
   printe = eval("lambda s: sys.stderr.write(str(s) + '\\n') and sys.stderr.flush()")
+
+VERSION = "2016.Q4"
 
 # Little helper functions
 def any(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if type(lizt) == list else list(lizt), False) # performs faster than built-in any when using Python 3, because explicit conversion to list would be required otherwise
@@ -37,7 +37,7 @@ def removeTagPrefixes(poss, negs):
   >>> print(removeTagPrefixes(["+a", "b"], ["-c", "d"]))
   (['a', 'b'], ['c', 'd'])
   '''
-  return [p if not p.startswith('+') else p[1:]for p in poss], [n[1:] if n.startswith('-') else n for n in negs] # remove leading +/-
+  return [p if p[0] != '+' else p[1:] for p in poss], [n[1:] if n[0] == '-' else n for n in negs] # remove leading +/-
 
 def dotidx(p): return p.index(DOT) + 1
 def lowerExtensions(patterns):
@@ -70,7 +70,7 @@ def findRootFolder(options, filename):
 def getRoot(options, args):
   ''' Determine root folder by checking arguments and some fall-back logic.
   >>> class O: pass
-  >>> def findRootFolder(o, f): return "/z/a.b" # TODO doesn'T override def
+  >>> def findRootFolder(o, f): return "/z/a.b" # TODO doesn't override def
   >>> o = O()
   >>> o.root = "/x"; print(getRoot(o, []))
   /x
@@ -87,6 +87,19 @@ def getRoot(options, args):
   if folder is None: folder = os.curdir
   return folder
 
+
+class CatchExclusionsParser(optparse.OptionParser):
+  def __init__(_):
+    optparse.OptionParser.__init__(_,
+      prog = "TagsPlorer",
+      usage = "python tp.py <tags or options>",
+  #    formatter = optparse.TitledHelpFormatter(),
+      version = "Tagsplorer Release " + VERSION
+    )
+  def _process_args(_, largs, rargs, values):
+    while rargs:
+      try: optparse.OptionParser._process_args(_,largs, rargs, values)
+      except (optparse.BadOptionError, optparse.AmbiguousOptionError) as E: largs.append(E.opt_str)
 
 class Main(object):
 
@@ -129,26 +142,29 @@ class Main(object):
     filename = os.path.join(getRoot(_.options, []), INDEX)
     if filename is None or not os.path.exists(filename):
       error("No configuration file found. Use -u to update the index."); return
-    filename = os.path.join(os.path.dirname(filename), INDEX)
     if not os.path.exists(filename):
       error("No index file found. Crawling file tree")
       idx = updateIndex(_.options, []) # crawl file tree
     else:
       idx = Indexer(os.path.dirname(filename)); idx.log = _.options.log
       idx.load(filename)
-    if _.options.log >= 1: info("Searching for tags <%s>%s in %s" % (','.join(poss), "" if len(negs) == 0 else " excluding <%s>" % ','.join(negs), os.path.dirname(filename)))
+    if _.options.log >= 1: info("Searching for tags +<%s> -<%s> in %s" % (','.join(poss), ','.join(negs), os.path.dirname(filename)))
     paths = idx.findFolders([p for p in poss if not isglob(p) and DOT not in p[1:]], [n for n in negs if not isglob(n) and DOT not in n[1:]])
-    if _.options.onlyfolders or _.options.log >= 2: info("Potential matches found in %d folders" % (len(paths))); [debug(path) for path in paths] # optimistic: all folders "seem" to match all tags, but only some might actually be (due to excludes etc)
-    if _.options.onlyfolders:
-      if len(paths) > 0: printe("%d paths found for +%s / -%s." % (len(paths), ",".join(poss), ".".join(negs)))
-      return # don't filter actual files, and omit from mappings
+    if _.options.log >= 1: info("Potential matches found in %d folders" % (len(paths)))
+    if _.options.log >= 2: [debug(path) for path in paths] # optimistic: all folders "seem" to match all tags, but only some might actually be (due to excludes etc)
     if len(paths) == 0 and any(lambda x: isglob(x) or DOT in x, poss + negs):
       warn("Cannot filter on folder names. Checking entire folder tree") # the logic is wrong: we ignore lots of tags while finding folders, and the continue filtering. better first filter on exts or all, then continue??
-      paths = idx.findFolders([], [], True) # return all folders unfiltered
+    paths = idx.findFolders([], [], True) # return all folders names unfiltered
+    if _.options.onlyfolders:
+      for p in poss: paths[:] = [x for x in paths if fnmatch.fnmatch(safeRSplit(x, SLASH), p)]
+      for n in negs: paths[:] = [x for x in paths if not fnmatch.fnmatch(safeRSplit(x, SLASH), n)]
+      if _.options.log >= 1: info("Found %d paths for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
+      [printo(path) for path in paths]
+      return
     dcount, counter = 0, 0
     for path, files in ((path, idx.findFiles(path, poss, negs)) for path in paths):
       dcount += 1
-      if len(files) > 0: print("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files) # incremental output
+      if len(files) > 0: printo("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files) # incremental output
     if counter > 0: info("%d files found in %d checked paths for +%s / -%s." % (counter, dcount, ",".join(poss), ".".join(negs)))
 
   def add(_):
@@ -167,16 +183,15 @@ class Main(object):
 
     filez = _.tags # process function arguments
     tags = safeSplit(_.options.tag, ",")
-    poss, negs = splitCrit(tags, lambda e: e[0] != '-') # HINT: faster than "not e.startswoth('-')"
+    poss, negs = splitCrit(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
     if not cfg.case_sensitive: poss, negs = map(lowerExtensions, (poss, negs))
     if (len(poss) + len(negs)) == 0: error("No tag(s) given for %s" % ", ".join(file)); return
     if any(lambda p: p in negs, poss): error("Won't allow same tag in both inclusive and exclusiv file assignment: %s" % ', '.join(["'%s'" % p for p in poss if p in negs])); return
 
     modified = False  
-    for file in filez: # first, handle single files TODO same as globs; allow to assign tags to globs here! already done, but issue warning?
-      if _.options.strict and not os.path.exists(file):
-        warn("File not found, skipping %s" % file)
+    for file in filez:
+      if _.options.strict and not (os.path.exists(file) or any(fnmatch.filter(os.listdir("."), file))): warn("File or glob not found, skipping %s" % file) # TODO allow other relative/absolute paths than CWD
       parent, file = os.path.split(file)
       parent = norm(os.path.abspath(parent)) # check if this is a relative path
       if not isunderroot(root, parent): # if outside folder tree
@@ -185,7 +200,7 @@ class Main(object):
     if modified and not options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
 
   def setConfig(_, unset = False, get = False):
-    ''' Define a global configuration parameter. '''
+    ''' Define, retrieve or remove a global configuration parameter. '''
     value = ((_.options.setconfig if not get else _.options.getconfig) if not unset else _.options.unsetconfig)
     if value is None: warn("Missing global configuration key argument"); return
     if not unset and not get and "=" not in value: warn("Global configuration entry must be specified in the form key=value"); return
@@ -214,11 +229,7 @@ class Main(object):
   def parse(_):
     ''' Main logic that analyses the command line arguments and starts an opteration. '''
     ts = time.time() # https://docs.python.org/3/library/optparse.html#optparse-option-callbacks
-    op = optparse.OptionParser(
-      prog = "TagsPlorer",
-      usage = "python tp.py <tags or options>",
-  #    formatter = optparse.TitledHelpFormatter(),
-      version = "Tagsplorer Release 2016.Q3")
+    op = CatchExclusionsParser()
     op.add_option('--init', action = "store_true", dest = "init", help = "Create empty index (repository root)")
     op.add_option('-u', '--update', action = "store_true", dest = "update", help = "Update index, crawling files in folder tree")
     op.add_option('-s', '--search', action = "store_true", dest = "find", help = "Find files by tags (default action if no option given)")
@@ -230,7 +241,7 @@ class Main(object):
     op.add_option('--get', action = "store", dest = "getconfig", default = None, help = "Get global configuration parameter")
     op.add_option('--set', action = "store", dest = "setconfig", default = None, help = "Set global configuration parameter key=value")
     op.add_option('--unset', action = "store", dest = "unsetconfig", default = None, help = "Unset global configuration parameter")
-    op.add_option('--strict', action = "store_true", dest = "strict", help = "Force strict checks")
+    op.add_option('--relaxed', action = "store_false", dest = "strict", default = True, help = "Force strict checks")
     op.add_option('--simulate', action = "store_true", dest = "simulate", help = "Don't write anything")
     op.add_option('--dirs', action = "store_true", dest = "onlyfolders", help = "Only find directories that contain matches")
     op.add_option('-f', '--force', action = "store_true", dest = "force", help = "Override safety warnings")
@@ -238,6 +249,9 @@ class Main(object):
     # --no-reindex?
     op.add_option('-v', action = "store_true", dest = "verbose", help = "Switch only for unit test")
     _.options, _.args = op.parse_args()
+    _.args, excludes = splitCrit(_.args, lambda e: e[0] != '-')
+    _.options.excludes.extend([e[e.rindex('-') + 1:] for e in excludes]) # remove "--" from "--tag"
+    if _.options.log >= 1: info("Started at %s" % (time.strftime("%H:%M:%S")))
     if _.options.init: _.initIndex()
     elif _.options.update: _.updateIndex()
     elif _.options.tag: _.add()
@@ -247,7 +261,7 @@ class Main(object):
     elif len(_.args) > 0: _.find() # default action is always find
     elif _.options.test: import doctest; doctest.testmod(verbose = _.options.verbose); os.system(sys.executable + " tests.py"); sys.exit(0)
     else: error("No option given.")
-    if _.options.log >= 1: info("Finished after %.1fs" % (time.time() - ts))
+    if _.options.log >= 1: info("Finished at %s after %.1fs" % (time.strftime("%H:%M:%S"), time.time() - ts))
 
 
 if __name__ == '__main__':

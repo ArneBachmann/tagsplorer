@@ -49,7 +49,7 @@ Here is a short description of valid programoptions and arguments:
   Perform a search (which is like as virtual folder listing).
   This is the main use case for the tagsplorer tools and accepts inclusive as well as exclusive search terms.
   There can be any number of arguments, which optionally can also be specified in a comma-separated way (after positives tags), or using the `-x` option.
-  Note, however, that negative (exclusive) tag arguments must be specified after a comma, as the command line interface currently cannot distinguish between valid options and negative arguments. TODO
+  Note, however, as the command line interface cannot distinguish between valid options and negative tag arguments well, negative (exclusive) tag arguments must be specified after either after a double-dash `--` or after a comma. TODO this is error prone if using wrong options we'd get wrong results (e.g. --verbose would search for exclusive tag -verbose).
 
 * `--exclude tag1[,tag2[,tags...]]` or `-x` or `-n`
 
@@ -81,9 +81,9 @@ Here is a short description of valid programoptions and arguments:
 
   Removes a global configuration value. This usually switches back to the default logic or value.
 
-* `--strict`
+* `--relaxed`
 
-  Fail earlier. TODO explain and expand places to use this
+  Be more lenient when adding tags (allow to define tags even more missing files or globs that don't match any file at the time of definition).
 
 * `--simulate`
 
@@ -105,13 +105,14 @@ The following list describes all potential settings:
 
 * `tag=tagname;includes;excludes`
  
-  Defines a tag `tagname` for the file names specified in `includes`, except those specified in `excludes`. `tagname` should differ from the current folder name, to give a sensible added value.
+  Defines a tag `tagname` for the file names specified in `includes`, except those specified in `excludes`. `tagname` should differ from the current folder name, to give a sensible added value. TODO check
   `includes` and `excludes` are comma-separated lists of file names and file globs.
+  The order of evaluation during search is always left-to-right; there is no deeper semantics prohibiting the user to add e.g. file names or stricter globs that are already included in other looser glob patterns (inclusive or exclusive).
 
 * `from=path`
 
   Virtually maps the provided folder `path`'s contents into the current folder, including all its specified tags, observing respective include and exclude constraints.
-  There is not recursive mapping; only one level of mapping is available.
+  There is not recursive `from` mapping; only one level of mapping is considered.
 
 * `ignore=`
 
@@ -134,10 +135,10 @@ In addition, it's possible to specify global settings under the root configurati
   This defines a global configuration variable `key` with the contents of `value`, which is either a string or boolean toggle.
   The following values are currently allowed:
 
-  * `case_sensitive`
+  * *`case_sensitive`*
 
-    This key is either `true` or `false` or undefined.
-    If undefined, the operating system determines, if case is used for file name indexing and searching (Windows false, other OS true).
+      This key is either `true` or `false` or undefined.
+      If undefined, the operating system determines, if case is used for file name indexing and searching (Windows false, other OS true).
 
 * `ignored=dirname`
 
@@ -160,3 +161,20 @@ If files are hard-linked between different locations in the file tree and are su
 1. Option: tagsplorer has to intercept update/checkout and re-establish file links according to its metadata (configuration). This is hard to guarantee.
 2. Option: Add ignore details to the used VCS (.gitignore or SVN ignore list) for all linked (or rather mapped) files. The danger here is of course to ignore files that later could be added manually, and not being able to distinguish between automatically ignored files, and those that the user wants to ignore on purpose.
 3. Option: As by the current design the snapshot `*.dmp` file is not persisted in VCS (TODO add ignore automatically), all links can be recreated on first file tree walk (as option 1), even if linked files were earlier submitted as separate files, the folder walk would re-establish the link (potentially asking the user to confirm linking forcing to choose one master version, of issueing a warning for diverging file contents).
+
+## Other design decisions
+Although semantically better suited, in many places we don't use `not a.startswith(b)`, rather the shorter (and faster) `a[0] != b`, but we must assume a length > 0 of course.
+
+Program output is written to stdout for further processing by other tools, all logging on stderr.
+
+# Development
+
+## Git and Github workflows
+The master branch should always run fine and contain the latest stable version (release). Currently we are pre-V1.0 therefore everything is still happening on master.
+Development activities are merged on the develop branch, and only merged to master for a release.
+
+# Issues
+
+* It's possible to commit file names into Subversion, that aren't allowed to checkout on Windows, e.g. `file.`. Since this is no problem that tagsplorer can solve, we ignore this potential problem. In the code, the only difference was whether to check for the DOT from first to last character, or only from first to second last.
+
+* ...
