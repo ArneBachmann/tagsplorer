@@ -1,6 +1,9 @@
 # tagsplorer
 A quick and resource-efficient OS-independent tagging filetree extension tool and library written in Python, working with both Python versions 2 and 3.
 
+Each folder name of the indexed file tree is implicitly treated as a tag name, and additional tags can be set or excluded on singular files or file globs. Contents of other folders in the file tree can virtually be mapped. TODO check if globs operate only on files or accidentally also on folders.
+The entire system is fully backwards-compatible with the common file tree metaphor present in most file systems.
+
 ## Problem statement
 Nowadays most operating systems and window managers still adhere to the "tree of files" metaphor, or try to employ some kind of integrated search engine to find and access existing files.
 Both approaches have strong drawbacks that could be solved by tagging files individually, and only when needed.
@@ -46,7 +49,7 @@ Here is a short description of valid programoptions and arguments:
 
 * `--search [[+]tag1[,tags2[,tags...]]] [[-]tag3[,tag4[,tags...]]] [-r rootfolder]` or `-s` or no option
 
-  Perform a search (which is like as virtual folder listing).
+  Perform a search (which is like a virtual folder listing).
   This is the main use case for the tagsplorer tools and accepts inclusive as well as exclusive search terms.
   There can be any number of arguments, which optionally can also be specified in a comma-separated way (after positives tags), or using the `-x` option.
   Note, however, as the command line interface cannot distinguish between valid options and negative tag arguments well, negative (exclusive) tag arguments must be specified after either after a double-dash `--` or after a comma. TODO this is error prone if using wrong options we'd get wrong results (e.g. --verbose would search for exclusive tag -verbose).
@@ -94,6 +97,11 @@ Here is a short description of valid programoptions and arguments:
   Do things even against warning or in a potentially dangerous situation. TODO explain where and expand uses.
 
 # Architecture and program semantics
+## Search algorithm
+In general, simple boolean set operations. The index maps tags to folders, with the risk of false positives (it's an over-specified, optimistic index, linking folders with both inclusive or exclusive manual tag settings and tags mapped from other folders, plus file extension information).
+After determination of potential folders in a first search step, the found folders' contents are filtered by potential further tags and inclusive or exclusive file name patterns. This step always operates on the actual current files, not on any indexed and potentially outdated state.
+
+
 ## Configuration file
 Using the tagsplorer's `-i` option, we can create an empty configuration file which also serves as the marker for the file tree's root (just like the `.svn` or `.git` folders).
 Usually, all access to the configuration file should be performed through the `tp.py` command line interface or the `lib.py` library functions. For quick initialization, however, it may be benefitial to add some options manually.
@@ -163,9 +171,17 @@ If files are hard-linked between different locations in the file tree and are su
 3. Option: As by the current design the snapshot `*.dmp` file is not persisted in VCS (TODO add ignore automatically), all links can be recreated on first file tree walk (as option 1), even if linked files were earlier submitted as separate files, the folder walk would re-establish the link (potentially asking the user to confirm linking forcing to choose one master version, of issueing a warning for diverging file contents).
 
 ## Other design decisions
-Although semantically better suited, in many places we don't use `not a.startswith(b)`, rather the shorter (and faster) `a[0] != b`, but we must assume a length > 0 of course.
+* Although semantically better suited, in many places we don't use `not a.startswith(b)`, rather the shorter (and faster) `a[0] != b`, but we must assume a length > 0 of course.
 
-Program output is written to stdout for further processing by other tools, all logging on stderr.
+* Program output is written to stdout for further processing by other tools, all logging on stderr.
+
+* For the "skip folder" logic, we could have used a semantics of "index the folder, but don't recurse into its sub-folders". However, we prefer marking and skipping each sub-folder, because it's more flexible. TODO discuss replacement by or addition of "don't recurse" logic?
+
+* Different implementations and replacements for the built-in configuration parser have been tested; there is, however, no version that both a) allows reading values for duplicate keys, and b) is fully interoperable between Python 2 and 3. The alternative of using JSON may be considered, but is potentially harder to edit by humans and requires profiling to make a decision.
+
+* The index itself is designed to be both low on memory consumption and fast to load from the file system. After profiling storing it compressed vs. not compressed, the level 2 zlib approach delivered optimal results on both resource restricted and modern office computers, and offers only minimally worse compacted file size compared even to bz2 compression level 9, while almost being as fast to unpickle as pure uncompressed data (which again was faster than any bz2 level).
+
+
 
 # Development
 
@@ -173,7 +189,7 @@ Program output is written to stdout for further processing by other tools, all l
 The master branch should always run fine and contain the latest stable version (release). Currently we are pre-V1.0 therefore everything is still happening on master.
 Development activities are merged on the develop branch, and only merged to master for a release.
 
-# Issues
+# Known issues
 
 * It's possible to commit file names into Subversion, that aren't allowed to checkout on Windows, e.g. `file.`. Since this is no problem that tagsplorer can solve, we ignore this potential problem. In the code, the only difference was whether to check for the DOT from first to last character, or only from first to second last.
 

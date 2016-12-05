@@ -1,21 +1,6 @@
 # Tagging library to augment OS folder structures by tags (and queries over tags)
-# This code is written for maximum OS and Python version interoperability and should run fine on any Linux, Windows, Python2, Python3.
+# This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python2 and Python3.
 
-# Main idea: folder names are considered tags (unless marked otherwise) to make everything backwards compatible with normal folder-tree metaphor.
-#   single files and globs can additionally be tagged in any folder (using a central configuration file, which also defines the root directory of all files indexed)
-#   folder contents can virtually be mapped into other folders (creating an augmented view and retaining any additional tags from the mapped folder)
-# Search Algorithm:
-#   The index maps tags to folders, with the risk for false positives (optimistic index, including manual tag settings and tags mapped from other folders, also potentially ignoring case and adding file extension information)
-#     After determination of potential folders, the current folder contents are filtered by potential further tags, and inclusive or exclusive file name patterns.
-
-# System integration:
-#   Windows allows Explorer extensions with additonal context menu actions to access the tag functionality. Existing load/save dialogs cannot be extended for safety reasons. Command line operation may still be very useful, and stand-alone GUIs can be created from this library easily, either as a thin layer to CRUD operations or in a more active design that keeps the index in memory and serves as a quick starter app.
-
-# Design decisions:
-#   Different implementations and replacements for the built-in config parser have been tested; there is, however, no version that both a) allows reading values for duplicate keys, and b) is fully compatible between Python 2 and 3. The alternative of using JSON may be considered, albeit worse to edit by humans and potentially slower (profiling pending).
-#   The index itself is designed to be both low on memory consumption and fast to load from disk. After profiling compression vs. no compression, the level 2 zlib approach delivered optimal results on resource restricted and office devices (with only minimal difference in compacted file size even to bz2 level 9, but almost as fast as pure uncompressed object pickling (which was faster than any bz2 level)).
-#   For the skip-folder logic, we could use an "index the folder, but don't recurse into sub folders" instead, but we prefer skipping the entire current folder, which is more flexible.
-#   All tags are indexed in a case depending on the global configuration parameter case_sensitive (because index is recreated on every change anyway), which has a per-OS default but can be set manually.
 
 import collections, copy, fnmatch, os, sys, time, zlib
 
@@ -25,16 +10,16 @@ LOG = INFO # select maximum log level
 # Version-dependent imports
 if sys.version_info.major >= 3:
   intern = sys.intern # not global anymore
-  import pickle
-  from functools import reduce # not built-in
+  import pickle # instead of cPickle
+  from functools import reduce # not built-in anymore
   from sys import intern
-  dictviewkeys, dictviewvalues, dictviewitems = dict.keys, dict.values, dict.items # returns generators in Python 3, operating on underlying data
+  dictviewkeys, dictviewvalues, dictviewitems = dict.keys, dict.values, dict.items # returns generators operating on underlying data in Python 3
   def xreadlines(fd): return fd.readlines()
   debug = eval('lambda s: print("Debug:   " + s, file = sys.stderr)') if LOG >= DEBUG else lambda _: None
   info = eval('lambda s:  print("Info:    " + s, file = sys.stderr)') if LOG >= INFO else lambda _: None
   warn = eval('lambda s:  print("Warning: " + s, file = sys.stderr)') if LOG >= WARN else lambda _: None
   error = eval('lambda s: print("Error:   " + s, file = sys.stderr)') if LOG >= ERROR else lambda _: None
-else: # is Python 2
+else: # is Python 2 (for old versions like e.g. 2.4 this might fail)
   import cPickle as pickle
   dictviewkeys, dictviewvalues, dictviewitems = dict.iterkeys, dict.itervalues, dict.iteritems
   def xreadlines(fd): return fd.xreadlines()
@@ -48,8 +33,8 @@ else: # is Python 2
   if LOG >= ERROR:
     def error(s): print >> sys.stderr, "Error:   ", s
 # OS-dependent definitions
-filenorm = None # filenorm function undefined, updated in config object to 
-globmatch = None # dito
+filenorm = None # cf. setupCasematching
+globmatch = None # cf. setupCasematching
 
 
 # Constants
@@ -61,7 +46,13 @@ IGNFILE = ".tagsplorer.ign" # marker file (dito)
 IGNORE, SKIP, TAG, FROM, SKIPD, IGNORED, GLOBAL = intern("ignore"), intern("skip"), intern("tag"), intern("from"), intern("skipd"), intern("ignored"), intern("global") # can be augmented to excludef for files
 SEPA, SLASH, DOT = intern(";"), intern("/"), intern(".")
 
+
 # Functions
+def setupCasematching(case_sensitive):
+  global filenorm, globmatch # modify global function references
+  filenorm = str if case_sensitive else str.lower
+  globmatch = fnmatch.fnmatch if case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower()) # update tag matching logic
+
 def wrapExc(func, otherwise = lambda: None):
   ''' Wrap an exception and compute return value lazily if an exception is raised. Useful for recursive function application.
   >>> print(wrapExc(lambda: 1))
@@ -109,6 +100,7 @@ def getTs(): return int(time.time() * 10.)
 def safeSplit(s, d): return s.split(d) if s != '' else []
 def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s
 def dd(tipe = list): return collections.defaultdict(tipe)
+def step(): import pdb; pdb.set_trace()
 def dictget(dikt, key, default):
   ''' Improved dict.get(key, default).
   >>> a = {}; b = a.get(0, 0); print((a, b)) # normal dict get
@@ -170,9 +162,7 @@ class Config(object):
     _.log = 0 # level
     _.paths = {} # map from relative dir path to dict of marker -> [entries]
     _.case_sensitive = sys.platform != 'win32' # dynamic default unless specified in the config file
-    global filenorm, globmatch # modify global function reference
-    filenorm = (lambda s: s) if _.case_sensitive else str.lower
-    globmatch = fnmatch.fnmatch if _.case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower()) # define tag matching logic
+    setupCasematching(_.case_sensitive)
   
   def load(_, filename, index_ts = None):
     ''' Load configuration from file, if timestamp differs from index' timestamp. '''
@@ -185,9 +175,7 @@ class Config(object):
       if _.log >= 1: info("Loading configuration from file system" + ("" if index_ts is None else " because index is outdated"))
       cp = ConfigParser(); dat = cp.load(fd); _.__dict__.update(dat)
       _.paths = cp.sections
-      global filenorm, globmatch # modify global function reference
-      filenorm = (lambda s: s) if _.case_sensitive else str.lower
-      globmatch = fnmatch.fnmatch if _.case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower()) # update tag matching logic
+      setupCasematching(_.case_sensitive)
       return True
 
   def store(_, filename, timestamp):
@@ -340,10 +328,11 @@ class Indexer(object):
     # Second recurse folder-wise
     files = wrapExc(lambda: os.listdir(aDir), lambda: [])
     if SKPFILE in files:
-      if _.log >= 1: info("  Skip %s due to local skipfile" % aDir)
+      if _.log >= 1: info("  Skip %s due to local skip file" % aDir)
       return
     ignore = ignore or (IGNFILE in files)
     if ignore:
+      if _.log >= 1: info("  Skip %s due to local ignore file" % aDir)
       _.tagdir2paths[tags[-1]].remove(parent) # remove from index and children markers
 
     for file in (f for f in files if DOT in f[1:]): # only index files with real extension
@@ -496,17 +485,17 @@ class Indexer(object):
             news = set(files) # collect all files subsumed under the tag that should remain. hint: this is not a tag ^ tag match!
             for i in inc.split(","): # if tag manually specified, only keep those included files
               if isglob(i): news &= set([f for f in files if globmatch(f, i)]) # is glob
-              else: news &= set([i] if i in files and (not strict or isfile(_.root + folder + SLASH + i)) else []) # is no glob: add only if file exists
+              else: news &= set([i] if filenorm(i) in files and (not strict or isfile(_.root + folder + SLASH + i)) else []) # is no glob: add only if file exists
             for e in exc.split(","): # if tag is manually specified, exempt these files (add back)
               if isglob(e): news |= set([n for n in news if globmatch(n, e)])
-              else: news.add(e)
+              else: news.discard(e) # add file to keep TODO why not remove?
             keep = keep & news
             break # TODO froms checking missing before break!
         if not found: keep = set() # if no inclusive tag 
 
       remo = set() # start with none to remove, than enlarge set
       for tag in excludes:
-        if tag.startswith(DOT): remo |= set([f for f in files if f[-len(tag):] == tag]); continue
+        if tag.startswith(DOT): remo |= set([f for f in files if filenorm(f[-len(tag):]) == tag]); continue
         elif isglob(tag) or tag in files: remo |= set([f for f in files if globmatch(f, tag)]); continue
         found = False # marker for case not even a manual tag matched
         for value in tags:
@@ -519,7 +508,7 @@ class Indexer(object):
               else: news |= set([i] if i in files and (not strict or isfile(_.root + folder + SLASH + i)) else []) # is no glob: add, only if exists
             for e in exc.split(","):
               if isglob(e): news -= set([n for n in news if globmatch(n, e)])
-              else: news.discard(e)
+              else: news.add(e)
             remo |= news
             break
         if not found: keep = set(files)
@@ -530,4 +519,4 @@ class Indexer(object):
 
 if __name__ == '__main__':
   ''' This code is just for testing. Run in svn/projects by tagsplorer/lib.py '''
-  if len(sys.argv) > 1 and sys.argv[1] == '--test': import doctest; doctest.testmod(); os.system(sys.executable + " tests.py")
+  if len(sys.argv) > 1 and sys.argv[1] == '--test': import doctest; doctest.testmod()

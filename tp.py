@@ -6,7 +6,7 @@
 # TODO simplify find, add from, add map option (?)
 
 import fnmatch, optparse, os, sys, time
-from lib import Config,Indexer,CONFIG,INDEX,DOT,SLASH,GLOBAL,splitCrit,norm,isunderroot,safeSplit,safeRSplit,isglob,debug,info,warn,error,wrapExc,lindex,getTs # direct namespace import is necessary to enable correct unpickling
+from lib import Config,Indexer,CONFIG,INDEX,DOT,SLASH,GLOBAL,splitCrit,norm,isunderroot,safeSplit,safeRSplit,isglob,debug,info,warn,error,wrapExc,lindex,getTs,dictget,dd,step # direct namespace import is necessary to enable correct unpickling
 # Python version dependent imports
 if sys.version_info.major == 3:
   from functools import reduce # not built-in
@@ -19,8 +19,23 @@ else:
 VERSION = "2016.Q4"
 
 # Little helper functions
-def any(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if type(lizt) == list else list(lizt), False) # performs faster than built-in any when using Python 3, because explicit conversion to list would be required otherwise
+def any(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if type(lizt) == list else list(lizt), False) # short-circuit cross-2/3 implementation
 def all(pred, lizt): return reduce(lambda a, b: a and pred(b), lizt if type(lizt) == list else list(lizt), True)
+
+class ComputeOnce(object):
+  ''' Lazy somewhat functional computation.
+  >>> c = ComputeOnce(lambda a, b: a + b)
+  >>> print(c.value(1, 3))
+  4
+  >>> print(c.values[frozenset([1, 3])])
+  4
+  >>> c.func = None
+  >>> print(c.value(1, 3))
+  4
+  '''
+  def __init__(_, func): _.func, _.values = func, {}
+  def reset(_): _.values.clear(); return _
+  def value(_, *params): return dictget(_.values, frozenset(params), lambda: _.func(*params))
 
 def commaArgsIntoList(lizt):
   '''
@@ -39,14 +54,15 @@ def removeTagPrefixes(poss, negs):
   '''
   return [p if p[0] != '+' else p[1:] for p in poss], [n[1:] if n[0] == '-' else n for n in negs] # remove leading +/-
 
-def dotidx(p): return p.index(DOT) + 1
+def dotidx(p): return (p.index(DOT) + 1) # assumes DOT is contained
 def lowerExtensions(patterns):
   '''
   Used in the find() and add() calls for the inclusive/exclusive tag arguments.
   >>> print(lowerExtensions(["a.B", "c??X*y.RX", ".TXT"]))
   ['a.b', 'c??X*y.rx', '.txt']
   '''
-  return [pattern[:dotidx(pattern)] + pattern[dotidx(pattern):].lower() if DOT in pattern[:-1] else pattern for pattern in patterns]
+  co = ComputeOnce(dotidx)
+  return [pattern[:co.reset().value(pattern)] + pattern[co.value(pattern):].lower() if DOT in pattern[:-1] else pattern for pattern in patterns] # calls function twice
 
 def findRootFolder(options, filename):
   ''' Utility function that tries to auto-detect the given filename in parent folders.
@@ -153,19 +169,20 @@ class Main(object):
     if _.options.log >= 1: info("Potential matches found in %d folders" % (len(paths)))
     if _.options.log >= 2: [debug(path) for path in paths] # optimistic: all folders "seem" to match all tags, but only some might actually be (due to excludes etc)
     if len(paths) == 0 and any(lambda x: isglob(x) or DOT in x, poss + negs):
-      warn("Cannot filter on folder names. Checking entire folder tree") # the logic is wrong: we ignore lots of tags while finding folders, and the continue filtering. better first filter on exts or all, then continue??
+      warn("No folder match; cannot filter on folder names. Checking entire folder tree") # the logic is wrong: we ignore lots of tags while finding folders, and the continue filtering. better first filter on exts or all, then continue??
     paths = idx.findFolders([], [], True) # return all folders names unfiltered
     if _.options.onlyfolders:
       for p in poss: paths[:] = [x for x in paths if fnmatch.fnmatch(safeRSplit(x, SLASH), p)]
       for n in negs: paths[:] = [x for x in paths if not fnmatch.fnmatch(safeRSplit(x, SLASH), n)]
       if _.options.log >= 1: info("Found %d paths for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
       [printo(path) for path in paths]
+      info("%d directories found for +%s / -%s." % (len(paths), ",".join(poss), ".".join(negs)))
       return
-    dcount, counter = 0, 0
+    dcount, counter = 0, 0 # if not only folders, but also files
     for path, files in ((path, idx.findFiles(path, poss, negs)) for path in paths):
       dcount += 1
       if len(files) > 0: printo("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files) # incremental output
-    if counter > 0: info("%d files found in %d checked paths for +%s / -%s." % (counter, dcount, ",".join(poss), ".".join(negs)))
+    if _.options.log >= 1: info("%d files found in %d checked paths for +%s / -%s." % (counter, dcount, ",".join(poss), ".".join(negs)))
 
   def add(_):
     ''' Add one or more (inclusive adn/or exclusive) tag(s) to the appended file and glob argument(s).
@@ -214,16 +231,18 @@ class Main(object):
     if get:
       if key in cfg.__dict__: info("Get global configuration entry: %s = %s" % (key, cfg.__dict__[key])); return
       else: info("Global configuration entry '%s' not found" % key); return
-    entries = cfg.paths[""][GLOBAL]
-    index = lindex([kv.split("=")[0].lower() for kv in entries], key)
-    if "" not in cfg.paths: cfg.paths[""] = {}
-    if GLOBAL not in cfg.paths[""]: cfg.paths[""]["GLOBAL"] = []
-    if not unset: # set
-      if index is not None: cfg.__dict__[key] = value if value.lower() not in ("true", "false") else value.lower() == "true"; entries[index] = "%s=%s" % (key, value); info("Modified global configuration entry")
+    if '' not in cfg.paths: cfg.paths[''] = dd()
+    entries = dictget(cfg.paths[''], GLOBAL, [])
+    index = wrapExc(lambda: lindex([kv.split("=")[0].lower() for kv in entries], key)) # find index for specified key, or return None (by wrap mechanics)
+    if not unset: # must be set
+      if index is not None: entries[index] = "%s=%s" % (key, value); info("Modified global configuration entry")
       else: entries.append("%s=%s" % (key, value)); info("Added global configuration entry")
+      cfg.__dict__[key] = value if value.lower() not in ("true", "false") else value.lower() == "true"
     else: # unset
-      if index is not None: del cfg.__dict__[key]; del entries[index]; info("Removed global configuration entry")
+      if index is not None: del entries[index]; info("Removed global configuration entry")
       else: info("Configuration entry not found, nothing to do") # Not contained - nothing to do
+      try: del cfg.__dict__[key]
+      except: pass
     if not _.options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
 
   def parse(_):
@@ -259,7 +278,7 @@ class Main(object):
     elif _.options.setconfig: _.setConfig()
     elif _.options.unsetconfig: _.setConfig(unset = True)
     elif len(_.args) > 0: _.find() # default action is always find
-    elif _.options.test: import doctest; doctest.testmod(verbose = _.options.verbose); os.system(sys.executable + " tests.py"); sys.exit(0)
+    elif _.options.test: import doctest; doctest.testmod(verbose = _.options.verbose); sys.exit(0)
     else: error("No option given.")
     if _.options.log >= 1: info("Finished at %s after %.1fs" % (time.strftime("%H:%M:%S"), time.time() - ts))
 
