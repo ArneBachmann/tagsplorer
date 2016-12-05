@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/ArneBachmann/tagsplorer.svg?branch=master)](https://travis-ci.org/ArneBachmann/tagsplorer)
+
 # tagsplorer
 A quick and resource-efficient OS-independent tagging filetree extension tool and library written in Python, working with both Python versions 2 and 3.
 
