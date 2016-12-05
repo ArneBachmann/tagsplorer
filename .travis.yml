@@ -4,4 +4,5 @@ python:
   - "3.5"
   - "pypy"  # PyPy2 2.5.0
   - "pypy3" # Pypy3 2.4.0
-script: python tests.py
+install: "pip install coverage"
+script: coverage run tests.py
