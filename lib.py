@@ -9,10 +9,9 @@ LOG = INFO # select maximum log level
 
 # Version-dependent imports
 if sys.version_info.major >= 3:
-  intern = sys.intern # not global anymore
   import pickle # instead of cPickle
-  from functools import reduce # not built-in anymore
   from sys import intern
+  from functools import reduce # not built-in anymore
   dictviewkeys, dictviewvalues, dictviewitems = dict.keys, dict.values, dict.items # returns generators operating on underlying data in Python 3
   def xreadlines(fd): return fd.readlines()
   debug = eval('lambda s: print("Debug:   " + s, file = sys.stderr)') if LOG >= DEBUG else lambda _: None
@@ -43,27 +42,27 @@ CONFIG =  ".tagsplorer.cfg" # main tag configuration file
 INDEX =   ".tagsplorer.idx" # index file (re-built when timestamps differ)
 SKPFILE = ".tagsplorer.skp" # marker file (can also be configured in configuration instead) 
 IGNFILE = ".tagsplorer.ign" # marker file (dito)
-IGNORE, SKIP, TAG, FROM, SKIPD, IGNORED, GLOBAL = intern("ignore"), intern("skip"), intern("tag"), intern("from"), intern("skipd"), intern("ignored"), intern("global") # can be augmented to excludef for files
-SEPA, SLASH, DOT = intern(";"), intern("/"), intern(".")
+IGNORE, SKIP, TAG, FROM, SKIPD, IGNORED, GLOBAL = map(intern, ("ignore", "skip", "tag", "from", "skipd", "ignored", "global")) # config file options
+SEPA, SLASH, DOT = map(intern, (";", "/", "."))
 
 
 # Functions
 def setupCasematching(case_sensitive):
   global filenorm, globmatch # modify global function references
   filenorm = str if case_sensitive else str.lower
-  globmatch = fnmatch.fnmatch if case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower()) # update tag matching logic
+  globmatch = fnmatch.fnmatchcase if case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower()) # fnmatch behavior depends on file system, there fixed here
 
-def wrapExc(func, otherwise = lambda: None):
+def wrapExc(func, otherwise = None):
   ''' Wrap an exception and compute return value lazily if an exception is raised. Useful for recursive function application.
   >>> print(wrapExc(lambda: 1))
   1
-  >>> print(wrapExc(lambda: 1 / 0))
+  >>> print(wrapExc(lambda: 1 / 0)) # return default
   None
+  >>> print(wrapExc(lambda: 1 / 0, lambda: 1 + 1)) # return default by function call
+  2
   '''
   try: return func()
-  except: return otherwise()
-
-def lappend(lizt, elem): lizt.append(elem); return lizt  # functional list.append that returns self afterwards to avoid new array creation (lizt + [elem])
+  except: return otherwise() if callable(otherwise) else otherwise
 
 def lindex(list, value, otherwise = lambda list, value: None):
   ''' List index function with lazy computation if not found.
@@ -74,26 +73,11 @@ def lindex(list, value, otherwise = lambda list, value: None):
   '''
   return wrapExc(lambda: list.index(value), lambda: otherwise(list, value)) # ValueError
 
-def consec(lambdas):
-  ''' Consecutive function calls.
-  >>> print(consec([lambda a, b: sys.stdout.write(str(a * b + 1) + ","), (lambda a, b: a * b / 2) if sys.version_info.major == 2 else (lambda a, b: a * b // 2)])(2, 3))
-  7,3
-  '''
-  def _consec(*args, **kwargs):
-    for _lambda in lambdas: ret = _lambda(*args, **kwargs)
-    return ret
-  return _consec
-
-def splitCrit(lizt, pred):
-  ''' Split lists by a binary predicate.
-  >>> print(splitCrit([1,2,3,4,5], lambda e: e % 2 == 0))
-  ([2, 4], [1, 3, 5])
-  '''
-  return reduce(lambda acc, next: (lappend(acc[0], next), acc[1]) if pred(next) else (acc[0], lappend(acc[1], next)), lizt, ([], []))
 def isdir(f): return os.path.isdir(f) and not os.path.islink(f) and not os.path.ismount(f)
 def isfile(f): return wrapExc(lambda: os.path.isfile(f) and not os.path.ismount(f) and not os.path.isdir(f), lambda: False) # on error "no file"
-norm = (lambda s: s.replace("\\", SLASH)) if sys.platform == 'win32' else (lambda s: s)
-appendandreturnindex = consec([lambda l, v: l.append(v), lambda l, v: len(l) - 1])
+pathnorm = (lambda s: s.replace("\\", SLASH)) if sys.platform == 'win32' else (lambda s: s)
+def lappend(lizt, elem): lizt.append(elem); return lizt  # functional list.append that returns self afterwards to avoid new array creation (lizt + [elem])
+def appendandreturnindex(lizt, elem): return len(lappend(lizt, elem)) - 1
 def isunderroot(root, folder): return os.path.commonprefix([root, folder]).startswith(root)
 def isglob(f): return '*' in f or '?' in f
 def getTs(): return int(time.time() * 10.)
@@ -112,6 +96,12 @@ def dictget(dikt, key, default):
   '''
   try: return dikt[key]
   except: dikt[key] = ret = default() if callable(default) else default; return ret
+def splitCrit(lizt, pred):
+  ''' Split lists by a binary predicate.
+  >>> print(splitCrit([1,2,3,4,5], lambda e: e % 2 == 0))
+  ([2, 4], [1, 3, 5])
+  '''
+  return reduce(lambda acc, next: (lappend(acc[0], next), acc[1]) if pred(next) else (acc[0], lappend(acc[1], next)), lizt, ([], []))
 
 
 # Classes
@@ -244,7 +234,7 @@ class Indexer(object):
     _.compressed = 2 # pure pickling is faster than any bz2 compression, but zlib level 2 had best size/speed combination. if changed to 0, index needs to be re-created (or removed) manually
     _.timestamp = 1.23456789 # for comparison with configuration timestamp
     _.cfg = None # reference to latest corresponding configuration
-    _.root = norm(os.path.abspath(startDir))
+    _.root = pathnorm(os.path.abspath(startDir))
     _.tagdirs = [] # array of tags (plain dirnames and manually set tags (not represented in parent)
     _.tagdir2parent = {} # index of dir -> index of parent to represent tree structure (exclude folder links)
     _.tagdir2paths = dd() # dirname index (first occurrence?) to [all path indices containing dirname]
@@ -295,10 +285,10 @@ class Indexer(object):
         Adds all directories as tags unless ignored; considers manually set configuration
         aDir: path relative to root (always with preceding and no trailing forward slash)
     '''
-    if _.log >= 2: print(aDir)
+    if _.log >= 2: info(aDir)
     
-    # First check folder's configuration
-    skip, ignore = False, False # marks dir as "no recursion"/"no taggin" respectively
+    # First part: check folder's configuration
+    skip, ignore = False, False # marks dir as "no recursion"/"no tagging" respectively
     adds = [] # additional tags for single files in this folder, not to be promoted to sub-directories
     marks = _.cfg.paths.get(aDir[len(_.root):], {})
     if SKIP in marks or (aDir != '' and aDir[aDir.rindex(SLASH) + 1:] in dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])):
@@ -317,7 +307,7 @@ class Indexer(object):
       if FROM in marks: # use tags from that folder to include here
         for f in marks[FROM]:
           if _.log >= 1: info("  Map from %s into %s" % (f, aDir))
-          other = norm(os.path.abspath(os.path.join(aDir, f))[len(_.root):] if not f.startswith(SLASH) else os.path.join(_.root, f))
+          other = pathnorm(os.path.abspath(os.path.join(aDir, f))[len(_.root):] if not f.startswith(SLASH) else os.path.join(_.root, f))
           _marks = _.cfg.paths.get(other, {})
           if TAG in _marks:
             for t in _marks[TAG]:
@@ -325,7 +315,7 @@ class Indexer(object):
               i = lindex(_.tags, tag, appendandreturnindex)
               adds.append(i); _.tag2paths[i].append(parent)
 
-    # Second recurse folder-wise
+    # Second part: recurse folder-wise
     files = wrapExc(lambda: os.listdir(aDir), lambda: [])
     if SKPFILE in files:
       if _.log >= 1: info("  Skip %s due to local skip file" % aDir)
@@ -335,20 +325,20 @@ class Indexer(object):
       if _.log >= 1: info("  Skip %s due to local ignore file" % aDir)
       _.tagdir2paths[tags[-1]].remove(parent) # remove from index and children markers
 
-    for file in (f for f in files if DOT in f[1:]): # only index files with real extension
+    for file in (f for f in files if DOT in f[1:]): # index file extensions
       ext = filenorm(file[file.rindex(DOT):])
       i = lindex(_.tags, ext, appendandreturnindex) # add file extension to local dir's tags only
-      adds.append(i); _.tag2paths[i].append(parent)
-    tags = tags[:-1] if ignore else [t for t in tags] # copy
+      adds.append(i); _.tag2paths[i].append(parent) # add current dir to index of that extension
+    tags = tags[:-1] if ignore else [t for t in tags] # if ignore: all except current, else copy all
     children = (f[len(aDir) + 1:] for f in filter(isdir, (os.path.join(aDir, d) for d in files)))
     for child in children:
       idx = len(_.tagdirs) # add new element at next index
       _.tagdir2parent[idx] = parent
-      _.tagdirs.append(intern(child)) 
+      _.tagdirs.append(intern(filenorm(child)))
       tags.append(_.tagdirs.index(_.tagdirs[idx])) # temporary addition of first occurence of that tag string
-      for tag in frozenset(tags + adds): _.tagdir2paths[tag].append(idx)
-      _._walk(aDir + SLASH + child, idx, tags) # store first occurence index only
-      tags.pop() # remove temporary add after recursion
+      for tag in frozenset(tags + adds): _.tagdir2paths[tag].append(idx) # store first occurence index only
+      _._walk(aDir + SLASH + child, idx, tags)
+      tags.pop() # remove temporary add after recursion (modify list instead of full copy on each recursion)
   
   def mapTagsIntoDirs(_):
     ''' After all manual tags have been added, we map them into the tagdir structure. '''
@@ -426,7 +416,7 @@ class Indexer(object):
         if DOT in tag: # [:-1]: # contains an extension in non-final position (in final should not be possible)
           ext = filenorm(tag[tag.index(DOT):])
           if isglob(ext): # glob search with glob extension
-            new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), fnmatch.filter(_.tagdirs, ext), set()) # filters all extensions in index by glob (e.g. .c??)
+            new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), fnmatch.filter(_.tagdirs, ext), set()) # filters all extensions in index by glob (e.g. .c??). Filter is always case-sensitive, index differs by flag
           else: # glob search with fixed extension
             new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(ext)], cache)), lambda: set()) # exception is unknown index in getPath()
         else: # no extension: cannot filter folder; ignore glob altogether
@@ -461,7 +451,7 @@ class Indexer(object):
     remainder = set(poss) - set(aFolder.split(SLASH)[1:]) # split folder path into tags and remove from remaining criteria
     if _.log >= 1: info("Filtering folder %s%s" % (aFolder, (" by remaining tags: " + (", ".join(remainder)) if len(remainder) > 0 else DOT)))
     conf = _.cfg.paths.get(aFolder, {}) # if empty, files remains unchanged, we return all 
-    folders = [aFolder] + [norm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])] # all mapped folders
+    folders = [aFolder] + [pathnorm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])] # all mapped folders
     if _.log >= 1 and len(folders) > 1: info("Considering (mapped) folders: %s" % str(folders[1:]))
 
     allfiles = set() # contains files from current or mapped folders (without path, since "mapped", but could have local symlink - TODO

@@ -1,9 +1,11 @@
 import os
 import subprocess
+import StringIO
 import sys
 import unittest
 
-import lib, tp
+import lib
+import tp
 
 PYTHON = os.path.realpath(sys.executable)
 REPO = '_test-data'
@@ -11,17 +13,25 @@ CFG = '.tagsplorer.cfg'
 IDX = '.tagsplorer.idx'
 
 def call(argstr): return subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE).communicate()[0]
-def runP(argstr): return subprocess.Popen(PYTHON + " tp.py " + argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).communicate()[0]
 
+def runP(argstr): # replaces old implementation to allow for coverage stats
+  sys.argv = ["tp.py"] + argstr.split(" ")
+  oldo, olde = sys.stdout, sys.stderr
+  buf = StringIO.StringIO()
+  sys.stdout = sys.stderr = buf
+  m = tp.Main().parse()
+  sys.stdout, sys.stderr = oldo, olde
+  return buf.getvalue()
 
 def setUpModule():
-  try: os.unlink(REPO + os.sep + IDX)
-  except: pass # if earlier tests finished without errors
-  try:
-    call("svn revert %s" % (REPO + os.sep + CFG)) # for subversion
-#    call("git checkout %s/%s" % (REPO, CFG)) # for git
-  except: pass
-  print(runP("-r %s -u -l1" % REPO)) # initial indexing, invisible
+  if not os.environ.get("SKIP", False):
+    try: os.unlink(REPO + os.sep + IDX)
+    except: pass # if earlier tests finished without errors
+    try:
+      call("svn revert %s" % (REPO + os.sep + CFG)) # for subversion
+  #    call("git checkout %s/%s" % (REPO, CFG)) # for git
+    except: pass
+  runP("-r %s -u -l1" % REPO) # initial indexing, invisible
 
 def tearDownModule():
   os.unlink(REPO + os.sep + IDX)
@@ -65,10 +75,11 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("No folder match", runP("-r %s -s x.d -l1" % REPO)) # TODO should not find
 
   def testLocalTag(_):
-    pass
+    _.assertIn("1 files found", runP("-r %s -s b1,tag1 -l1" % REPO)) # The other file is excluded manually TODO separate testswith inc/exc and file/glob
 
   def testMappedTag(_):
-    pass
+    _.assertIn("1 files found", runP("-r %s -s a2,tag1 -l1" % REPO)) # One mapped file by include pattern
+    # TODO double find mapped when having glob exclude - distinct? where from?
 
   def testMappedGlobExclude(_):
     pass
@@ -109,7 +120,7 @@ def compressionTest_():
     print("Level %d: %f %d" % (j, timeit.Timer(lambda: i.load(INDEX)).timeit(number = 20), s))
 
 def load_tests(loader, tests, ignore):
-  ''' The function suffix of "_tests" is the conventional way of telling unittest about a test case. '''
+  ''' The "_tests" suffix is the conventional way of telling unittest about a test case. '''
   import doctest
   tests.addTests(doctest.DocTestSuite(lib))
   tests.addTests(doctest.DocTestSuite(tp))

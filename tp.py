@@ -5,40 +5,29 @@
 # TODO separate timestamp from conf once more - better to exclude from vcs (?) or use modtim?
 # TODO simplify find, add from, add map option (?)
 
-import fnmatch, optparse, os, sys, time
-from lib import Config,Indexer,CONFIG,INDEX,DOT,SLASH,GLOBAL,splitCrit,norm,isunderroot,safeSplit,safeRSplit,isglob,debug,info,warn,error,wrapExc,lindex,getTs,dictget,dd,step # direct namespace import is necessary to enable correct unpickling
-# Python version dependent imports
+VERSION = "2016.Q4"
+
+import optparse
+from lib import * # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports
+
+# Version-dependent imports
 if sys.version_info.major == 3:
   from functools import reduce # not built-in
-  printo = eval("lambda s: print(s)")
+  printo = eval("lambda s: print(s)") # perfectly legal use of eval - supporting P2/P3
   printe = eval("lambda s: print(s, file = sys.stderr)")
 else:
   printo = eval("lambda s: sys.stdout.write(str(s) + '\\n') and sys.stdout.flush()")
   printe = eval("lambda s: sys.stderr.write(str(s) + '\\n') and sys.stderr.flush()")
 
-VERSION = "2016.Q4"
 
 # Little helper functions
 def any(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if type(lizt) == list else list(lizt), False) # short-circuit cross-2/3 implementation
 def all(pred, lizt): return reduce(lambda a, b: a and pred(b), lizt if type(lizt) == list else list(lizt), True)
 
-class ComputeOnce(object):
-  ''' Lazy somewhat functional computation.
-  >>> c = ComputeOnce(lambda a, b: a + b)
-  >>> print(c.value(1, 3))
-  4
-  >>> print(c.values[frozenset([1, 3])])
-  4
-  >>> c.func = None
-  >>> print(c.value(1, 3))
-  4
-  '''
-  def __init__(_, func): _.func, _.values = func, {}
-  def reset(_): _.values.clear(); return _
-  def value(_, *params): return dictget(_.values, frozenset(params), lambda: _.func(*params))
-
 def commaArgsIntoList(lizt):
   '''
+  >>> print(commaArgsIntoList([]))
+  []
   >>> print(commaArgsIntoList(["a,b"]))
   ['a', 'b']
   >>> print(commaArgsIntoList(["ab"]))
@@ -49,20 +38,12 @@ def commaArgsIntoList(lizt):
 
 def removeTagPrefixes(poss, negs):
   '''
+  >>> print(removeTagPrefixes(["a"], []))
+  (['a'], [])
   >>> print(removeTagPrefixes(["+a", "b"], ["-c", "d"]))
   (['a', 'b'], ['c', 'd'])
   '''
   return [p if p[0] != '+' else p[1:] for p in poss], [n[1:] if n[0] == '-' else n for n in negs] # remove leading +/-
-
-def dotidx(p): return (p.index(DOT) + 1) # assumes DOT is contained
-def lowerExtensions(patterns):
-  '''
-  Used in the find() and add() calls for the inclusive/exclusive tag arguments.
-  >>> print(lowerExtensions(["a.B", "c??X*y.RX", ".TXT"]))
-  ['a.b', 'c??X*y.rx', '.txt']
-  '''
-  co = ComputeOnce(dotidx)
-  return [pattern[:co.reset().value(pattern)] + pattern[co.value(pattern):].lower() if DOT in pattern[:-1] else pattern for pattern in patterns] # calls function twice
 
 def findRootFolder(options, filename):
   ''' Utility function that tries to auto-detect the given filename in parent folders.
@@ -152,9 +133,9 @@ class Main(object):
     poss, negs = splitCrit(poss, lambda e: e[0] != '-') # potentially including +/-
     negs.extend(commaArgsIntoList(_.options.excludes)) # each argument could contain , or not
     poss, negs = removeTagPrefixes(poss, negs)
-    poss, negs = map(lowerExtensions, (poss, negs))
-    if len([p for p in poss if p.startswith(DOT)]) > 1: error("Cannot have multiple extension filters (would always return empty match)"); return
+    poss, negs = map(filenorm, (poss, negs))
     if _.options.log >= 1: info("Effective filters +<%s> -<%s>" % (",".join(poss), ",".join(negs)))
+    if len([p for p in poss if p.startswith(DOT)]) > 1: error("Cannot have multiple positive extension filters (would always return empty match)"); return
     filename = os.path.join(getRoot(_.options, []), INDEX)
     if filename is None or not os.path.exists(filename):
       error("No configuration file found. Use -u to update the index."); return
@@ -172,8 +153,8 @@ class Main(object):
       warn("No folder match; cannot filter on folder names. Checking entire folder tree") # the logic is wrong: we ignore lots of tags while finding folders, and the continue filtering. better first filter on exts or all, then continue??
     paths = idx.findFolders([], [], True) # return all folders names unfiltered
     if _.options.onlyfolders:
-      for p in poss: paths[:] = [x for x in paths if fnmatch.fnmatch(safeRSplit(x, SLASH), p)]
-      for n in negs: paths[:] = [x for x in paths if not fnmatch.fnmatch(safeRSplit(x, SLASH), n)]
+      for p in poss: paths[:] = [x for x in paths if globmatch(safeRSplit(x, SLASH), p)]
+      for n in negs: paths[:] = [x for x in paths if not globmatch(safeRSplit(x, SLASH), n)]
       if _.options.log >= 1: info("Found %d paths for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
       [printo(path) for path in paths]
       info("%d directories found for +%s / -%s." % (len(paths), ",".join(poss), ".".join(negs)))
@@ -183,6 +164,7 @@ class Main(object):
       dcount += 1
       if len(files) > 0: printo("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files) # incremental output
     if _.options.log >= 1: info("%d files found in %d checked paths for +%s / -%s." % (counter, dcount, ",".join(poss), ".".join(negs)))
+    print idx.tagdirs
 
   def add(_):
     ''' Add one or more (inclusive adn/or exclusive) tag(s) to the appended file and glob argument(s).
@@ -193,7 +175,7 @@ class Main(object):
         returns: None
     '''
     folder = getRoot(_.options, _.args)
-    root = norm(os.path.abspath(folder))
+    root = pathnorm(os.path.abspath(folder))
     if _.options.log >= 1: info("Using configuration from %s" % folder)
     cfg = Config(); cfg.log = _.options.log # need to load config early for case_sensitive flag
     cfg.load(os.path.join(folder, CONFIG))
@@ -202,7 +184,7 @@ class Main(object):
     tags = safeSplit(_.options.tag, ",")
     poss, negs = splitCrit(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
-    if not cfg.case_sensitive: poss, negs = map(lowerExtensions, (poss, negs))
+    poss, negs = map(filenorm, (poss, negs))
     if (len(poss) + len(negs)) == 0: error("No tag(s) given for %s" % ", ".join(file)); return
     if any(lambda p: p in negs, poss): error("Won't allow same tag in both inclusive and exclusiv file assignment: %s" % ', '.join(["'%s'" % p for p in poss if p in negs])); return
 
@@ -210,7 +192,7 @@ class Main(object):
     for file in filez:
       if _.options.strict and not (os.path.exists(file) or any(fnmatch.filter(os.listdir("."), file))): warn("File or glob not found, skipping %s" % file) # TODO allow other relative/absolute paths than CWD
       parent, file = os.path.split(file)
-      parent = norm(os.path.abspath(parent)) # check if this is a relative path
+      parent = pathnorm(os.path.abspath(parent)) # check if this is a relative path
       if not isunderroot(root, parent): # if outside folder tree
         warn("Relative file path outside indexed folder tree; skipping %s" % file); continue
       if cfg.addTag(parent[len(root):], file, poss, negs, options.force): modified = True
@@ -224,7 +206,7 @@ class Main(object):
     key, value = value.split("=")[:2] if not unset and not get else (value, None)
     key = key.lower() # config keys are normalized to lower case
     folder = getRoot(_.options, _.args)
-    root = norm(os.path.abspath(folder))
+    root = pathnorm(os.path.abspath(folder))
     if _.options.log >= 1: info("Using configuration from %s" % folder)
     cfg = Config(); cfg.log = _.options.log
     cfg.load(os.path.join(folder, CONFIG))
