@@ -20,19 +20,19 @@ There are (semantic) intelligent search engines that continuously crawl and over
 Tagsplorer uses a simple concept which enables you to continue using simple and compatible file trees, keep all your data under version control of your choice, allows you to put files or entire folders into more than one (virtual) category, and still benefit from little manual maintenance or additional setup.
 
 # Usage
-Hint: Currently it's not possible to glob over folder names efficiently; trying to do so will need to walk all folders that are left in the filter process. TODO true?
+Hint: Currently it's not possible to glob over folder names efficiently; trying to do so will need to walk all folders that are left in the filter process.
 
 ## Command-line interface
 The current main and only user interface is `tp.py`, a thin layer over the library's basic functions.
 Here is a short description of valid programoptions and arguments:
 
 * `--help`
-  
+
   Shows user options, as does this section
 
 * `--test [-v]`
 
-  Runs unit tests from `tests.py`. If `-v` is specified, use verbose mode. TODO create global `-v` mode? Currently covered by `-1`
+  Runs unit tests from `tp.py`. If `-v` is specified, use verbose mode.
 
 * `--version`
 
@@ -40,7 +40,7 @@ Here is a short description of valid programoptions and arguments:
 
 * `--init [-r rootfolder]`
 
-  Create an empty configuration in the current folder (or the relative or absolute one specified by the -r option). TODO don't overwrite unless `--force` specified.
+  Create an empty configuration in the current folder (or the relative or absolute one specified by the -r option).
   The location of a configuration file `.tagsplorer.cfg` marks the root path for an entire indexed file tree. No other configuration files higher up the parent hierarchy will be considered.
 
 `--update` or `-u`
@@ -54,14 +54,14 @@ Here is a short description of valid programoptions and arguments:
   Perform a search (which is like a virtual folder listing).
   This is the main use case for the tagsplorer tools and accepts inclusive as well as exclusive search terms.
   There can be any number of arguments, which optionally can also be specified in a comma-separated way (after positives tags), or using the `-x` option.
-  Note, however, as the command line interface cannot distinguish between valid options and negative tag arguments well, negative (exclusive) tag arguments must be specified after either after a double-dash `--` or after a comma. TODO this is error prone if using wrong options we'd get wrong results (e.g. --verbose would search for exclusive tag -verbose).
+  Note, however, as the command line interface cannot distinguish between valid options and negative tag arguments well, negative (exclusive) tag arguments must be specified after either after a double-dash `--` or after a comma. TODO this is error-prone if using wrong options we'd get wrong results (e.g. --verbose would search for exclusive tag -verbose).
 
-* `--exclude tag1[,tag2[,tags...]]` or `-x` or `-n`
+* `--exclude tag1[,tag2[,tags...]]` or `-x`
 
   Specify exclusive tags when searching.
   TODO check if not accidentally still accepting +/-.
   TODO check if we can remove this option? only when -tag coincides with an option.
-  TODO check if -y -n syntax is better than +/- or --x?
+  We don't employ a --yes --no (-y -n) syntax, as it would collide with -n (--simulate)
 
 * `--tag [+][-]tag1[,[+][-]tag2[,tags...]] file[,file2[,files...]]` or `-t`
 
@@ -90,13 +90,13 @@ Here is a short description of valid programoptions and arguments:
 
   Be more lenient when adding tags (allow to define tags even more missing files or globs that don't match any file at the time of definition).
 
-* `--simulate`
+* `--simulate` or `-n`
 
-  Don't write anything to the file system. TODO use `-n` for that (like rsync?)
+  Don't write anything to the file system.
 
 * `--force` or `-f`
 
-  Do things even against warning or in a potentially dangerous situation. TODO explain where and expand uses.
+  Do things even against warning or in a potentially dangerous situations: Creating a new index root file, adding tag file patterns already covered by globs for that tag.
 
 # Architecture and program semantics
 ## Search algorithm
@@ -114,7 +114,7 @@ For each section, including the root section `[]`, any number of occurencens of 
 The following list describes all potential settings:
 
 * `tag=tagname;includes;excludes`
- 
+
   Defines a tag `tagname` for the file names specified in `includes`, except those specified in `excludes`. `tagname` should differ from the current folder name, to give a sensible added value. TODO check
   `includes` and `excludes` are comma-separated lists of file names and file globs.
   The order of evaluation during search is always left-to-right; there is no deeper semantics prohibiting the user to add e.g. file names or stricter globs that are already included in other looser glob patterns (inclusive or exclusive).
@@ -148,7 +148,7 @@ In addition, it's possible to specify global settings under the root configurati
   * *`case_sensitive`*
 
       This key is either `true` or `false` or undefined.
-      If undefined, the operating system determines, if case is used for file name indexing and searching (Windows false, other OS true).
+      If undefined, the current operating system determines, if case is used for file name indexing and searching (Windows defaults to false, other OSs default to true).
 
 * `ignored=dirname`
 
@@ -161,9 +161,7 @@ In addition, it's possible to specify global settings under the root configurati
 
 ## Tagging semantics
 TODO What happens if a file with a tag gets mapped into the current folder, where the same tag excludes that file? Or the other way around?
-This currently cannot happen, as all folders are processed individually and then get merged into a single view.
-
-TODO define semantics of globs vs. single files
+This currently cannot happen, as all folders are processed individually and then get merged into a single view, with duplicates being removed. There is no real link to the originating folder for the folder list, as we have the concept of virtual (tag) folders in a unified view.
 
 ## Design decisions regarding linking on the file system level
 If files are hard-linked between different locations in the file tree and are submitted to the version control system, they won't be linked when checking out at different locations, and modifying one instance will result on several linked copies being modified on the original file system when updated. This leads to all kinds of irritating errors or VCS conflicts.
@@ -173,11 +171,13 @@ If files are hard-linked between different locations in the file tree and are su
 3. Option: As by the current design the snapshot `*.dmp` file is not persisted in VCS (TODO add ignore automatically), all links can be recreated on first file tree walk (as option 1), even if linked files were earlier submitted as separate files, the folder walk would re-establish the link (potentially asking the user to confirm linking forcing to choose one master version, of issueing a warning for diverging file contents).
 
 ## Other design decisions
-* Although semantically better suited, in many places we don't use `not a.startswith(b)`, rather the shorter (and faster) `a[0] != b`, but we must assume a length > 0 of course.
+* The implementation of the simple switch for `case_sensitive` raised quite a lot of semantic questions. For one, should file extensions be treated differently from file names? Is there a benefit of ignoring case for extensions, but not for the actual names? Probably not. Secondly, if we store data case-normalized in the index, we lose the relationship to the actual writings of the indexed folder names, which might cause problems. This would only occur on a case_sensitive file system with `case_sensitive` set to `false`. As a conclusion, we might need to separate storage of tag dirs from other tags or file extensions, or modify search operation to case-normalize instead of doing this in the index, which would slow down the program. Current conclusion: Tough, would need mapping from case-normalized to actual naming on filesystem, or lower() comparisons all over the place :-( to be delayed
+
+* Although semantically better suited, in many places we don't use `not a.startswith(b)`, rather the shorter (and faster) `a[0] != b`, but we must ensure a length > 0 of course.
 
 * Program output is written to stdout for further processing by other tools, all logging on stderr.
 
-* For the "skip folder" logic, we could have used a semantics of "index the folder, but don't recurse into its sub-folders". However, we prefer marking and skipping each sub-folder, because it's more flexible. TODO discuss replacement by or addition of "don't recurse" logic?
+* For the "skip folder" logic, we *could* have used a semantics of "index the folder, but don't recurse into its sub-folders". However, we prefer marking and skipping each sub-folder, because it's more flexible; implementation complexity may be similar.
 
 * Different implementations and replacements for the built-in configuration parser have been tested; there is, however, no version that both a) allows reading values for duplicate keys, and b) is fully interoperable between Python 2 and 3. The alternative of using JSON may be considered, but is potentially harder to edit by humans and requires profiling to make a decision.
 

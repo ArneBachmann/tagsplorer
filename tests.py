@@ -1,8 +1,11 @@
 import os
 import subprocess
-import StringIO
 import sys
 import unittest
+if sys.version_info.major < 3:
+  import StringIO
+else:
+  import io.StringIO
 
 import lib
 import tp

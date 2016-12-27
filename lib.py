@@ -40,7 +40,7 @@ globmatch = None # cf. setupCasematching
 PICKLE_VERSION = 2 # since Python 3 comes with different protocol, we pin the protocol here
 CONFIG =  ".tagsplorer.cfg" # main tag configuration file
 INDEX =   ".tagsplorer.idx" # index file (re-built when timestamps differ)
-SKPFILE = ".tagsplorer.skp" # marker file (can also be configured in configuration instead) 
+SKPFILE = ".tagsplorer.skp" # marker file (can also be configured in configuration instead)
 IGNFILE = ".tagsplorer.ign" # marker file (dito)
 IGNORE, SKIP, TAG, FROM, SKIPD, IGNORED, GLOBAL = map(intern, ("ignore", "skip", "tag", "from", "skipd", "ignored", "global")) # config file options
 SEPA, SLASH, DOT = map(intern, (";", "/", "."))
@@ -153,7 +153,7 @@ class Config(object):
     _.paths = {} # map from relative dir path to dict of marker -> [entries]
     _.case_sensitive = sys.platform != 'win32' # dynamic default unless specified in the config file
     setupCasematching(_.case_sensitive)
-  
+
   def load(_, filename, index_ts = None):
     ''' Load configuration from file, if timestamp differs from index' timestamp. '''
     with open(filename, 'r') as fd: # HINT: don't use rb, because in Python 3 this return bytes objects
@@ -175,14 +175,14 @@ class Config(object):
       if _.log >= 1: info("Writing configuration to " + filename)
       fd.write("%d\n" % timestamp); cp.store(fd, parent = _)
     if _.log >= 1: info("Wrote %d config bytes" % os.stat(filename)[6])
-  
+
   def addTag(_, folder, pattern, poss, negs, force = False):
     ''' For given  folder, add poss and negs tags to file or glob pattern.
         folder: folder to operate on (relative to root)
         pattern: the file or glob pattern to add to the configuration
         poss: inclusive tags or globs to add
         negs: exclusive tags or globs to add
-        force: allows
+        force: allows adding tags already subsumed by globs
         returns: modified?
     '''
     conf = dictget(_.paths, folder, {}) # creates empty config entry if it doesn't exist
@@ -225,7 +225,7 @@ class Config(object):
           break # line iteration
       if missing: entry.append("%s;%s;%s" % (tag, ",".join(keep_pos.get(tag, [])), ",".join(keep_neg.get(tag, [])))) # if new: create entry
     return len(modified) > 0
- 
+
 
 class Indexer(object):
   ''' Main index creation. Goes through all recursive file paths and indexes the folder tags. Addtionally, tags for single files or globs, and those mapped by the FROM tag are included in the index. File-specific tags are only determined during the find phase. '''
@@ -238,7 +238,7 @@ class Indexer(object):
     _.tagdirs = [] # array of tags (plain dirnames and manually set tags (not represented in parent)
     _.tagdir2parent = {} # index of dir -> index of parent to represent tree structure (exclude folder links)
     _.tagdir2paths = dd() # dirname index (first occurrence?) to [all path indices containing dirname]
-  
+
   def load(_, filename, ignore_skew = False, recreate_index = True):
     ''' Load a pickled index into memory. Optimized for speed. '''
     with open(filename, "rb") as fd:
@@ -262,7 +262,7 @@ class Indexer(object):
         if _.log >= 1: info("Updating configuration to match new index timestamp")
         _.cfg.store(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp) # update timestamp in configuration
     if _.log >= 1: info("Wrote %d index bytes (%d tag entries -> %d mapped path entries)" % (os.stat(filename)[6], len(_.tagdirs), sum([len(p) for p in _.tagdir2paths.values()])))
-  
+
   def walk(_, cfg = None):
     ''' Build index. cfg: if set, use that configuration instead of contained one. '''
     if _.log >= 1: info("Walking folder tree")
@@ -279,14 +279,14 @@ class Indexer(object):
     rm = [tag for tag, dirs in dictviewitems(_.tagdir2paths) if len(dirs) == 0] # finding entries that were emptied due to ignores
     for r in rm: _.tagdir2paths.pop(r) # remove empty lists from index (was too optimistic, removed by ignore or skip)
     if _.log >= 1: info("Indexed %d folders and %d tags/globs/extensions." % (tagdirs, tags))
-  
+
   def _walk(_, aDir, parent = 0, tags = []):
     ''' Recursive walk through folder tree.
         Adds all directories as tags unless ignored; considers manually set configuration
         aDir: path relative to root (always with preceding and no trailing forward slash)
     '''
     if _.log >= 2: info(aDir)
-    
+
     # First part: check folder's configuration
     skip, ignore = False, False # marks dir as "no recursion"/"no tagging" respectively
     adds = [] # additional tags for single files in this folder, not to be promoted to sub-directories
@@ -339,21 +339,21 @@ class Indexer(object):
       for tag in frozenset(tags + adds): _.tagdir2paths[tag].append(idx) # store first occurence index only
       _._walk(aDir + SLASH + child, idx, tags)
       tags.pop() # remove temporary add after recursion (modify list instead of full copy on each recursion)
-  
+
   def mapTagsIntoDirs(_):
     ''' After all manual tags have been added, we map them into the tagdir structure. '''
     if _.log >= 1: info("Mapping tags into index")
     for itag, tag in enumerate(_.tags):
       idx = lindex(_.tagdirs, tag, appendandreturnindex) # get index in list, or append
       _.tagdir2paths[idx] += _.tag2paths[itag]
-  
+
   def unwalk(_, idx = 0, path = ""):
     ''' Walk entire tree from index (slow but proof of correctness). '''
     tag = _.tagdirs[idx] # name of head element
     children = (f[0] for f in filter(lambda a: a[1] == idx and a[0] != idx, dictviewitems(_.tagdir2parent))) # using generator expression
     if _.log >= 1: info(path + tag + SLASH)
     for child in children: _.unwalk(child, path + tag + SLASH)
-  
+
   def getPath(_, id, cache):
     ''' Return one root-relative path for the given index id by recursively going through index-> name mappings. '''
     assert id < len(_.tagdirs) # otherwise hell on earth
@@ -401,7 +401,7 @@ class Indexer(object):
         if tg in includedTags: retainit = False; break # removed from retained paths
       if retainit: retain.append(path)
     return set(retain)
-  
+
   def findFolders(_, include, exclude = [], returnAll = False):
     ''' Find intersection of all directories with matching tags.
         include: list of cleaned tag names to include
@@ -450,7 +450,7 @@ class Indexer(object):
     '''
     remainder = set(poss) - set(aFolder.split(SLASH)[1:]) # split folder path into tags and remove from remaining criteria
     if _.log >= 1: info("Filtering folder %s%s" % (aFolder, (" by remaining tags: " + (", ".join(remainder)) if len(remainder) > 0 else DOT)))
-    conf = _.cfg.paths.get(aFolder, {}) # if empty, files remains unchanged, we return all 
+    conf = _.cfg.paths.get(aFolder, {}) # if empty, files remains unchanged, we return all
     folders = [aFolder] + [pathnorm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])] # all mapped folders
     if _.log >= 1 and len(folders) > 1: info("Considering (mapped) folders: %s" % str(folders[1:]))
 
@@ -481,7 +481,7 @@ class Indexer(object):
               else: news.discard(e) # add file to keep TODO why not remove?
             keep = keep & news
             break # TODO froms checking missing before break!
-        if not found: keep = set() # if no inclusive tag 
+        if not found: keep = set() # if no inclusive tag
 
       remo = set() # start with none to remove, than enlarge set
       for tag in excludes:
@@ -505,7 +505,7 @@ class Indexer(object):
       files = (files & keep) - remo
       allfiles |= files
     return list(allfiles)
-  
+
 
 if __name__ == '__main__':
   ''' This code is just for testing. Run in svn/projects by tagsplorer/lib.py '''

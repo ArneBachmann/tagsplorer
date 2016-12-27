@@ -105,7 +105,11 @@ class Main(object):
     folder = getRoot(_.options, _.args)
     cfg = Config(); cfg.log = _.options.log
     if _.options.log >= 1: info("Creating root configuration at %s" % folder)
-    if not _.options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
+    if not _.options.simulate:
+      if not _.options.force or os.path.exists(os.path.join(folder, CONFIG)):
+        error("Index already exists. Use --force to create anew anyway. Aborting.")
+      else:
+        cfg.store(os.path.join(folder, CONFIG), getTs())
 
   def updateIndex(_):
     ''' Crawl the folder tree and create a new index file.
@@ -188,7 +192,7 @@ class Main(object):
     if (len(poss) + len(negs)) == 0: error("No tag(s) given for %s" % ", ".join(file)); return
     if any(lambda p: p in negs, poss): error("Won't allow same tag in both inclusive and exclusiv file assignment: %s" % ', '.join(["'%s'" % p for p in poss if p in negs])); return
 
-    modified = False  
+    modified = False
     for file in filez:
       if _.options.strict and not (os.path.exists(file) or any(fnmatch.filter(os.listdir("."), file))): warn("File or glob not found, skipping %s" % file) # TODO allow other relative/absolute paths than CWD
       parent, file = os.path.split(file)
@@ -238,12 +242,12 @@ class Main(object):
     op.add_option('-r', '--root', action = "store", dest = "root", type = str, help = "Specify root folder for index and configuration")
     op.add_option('-l', '--log', action = "store", dest = "log", type = int, default = 0, help = "Set log level (0=none, 1=debug, 2=trace)")
     op.add_option('-x', '--exclude', action = "append", dest = "excludes", default = [], help = "Tags to ignore") # allow multiple args
-    op.add_option('-n', '--no', action = "append", dest = "excludes", default = [], help = "Same as --exclude or -tag") # same as above TODO allow multiple arguments
+    op.add_option('--no', action = "append", dest = "excludes", default = [], help = "Same as --exclude or -tag") # same as above TODO allow multiple arguments
     op.add_option('--get', action = "store", dest = "getconfig", default = None, help = "Get global configuration parameter")
     op.add_option('--set', action = "store", dest = "setconfig", default = None, help = "Set global configuration parameter key=value")
     op.add_option('--unset', action = "store", dest = "unsetconfig", default = None, help = "Unset global configuration parameter")
     op.add_option('--relaxed', action = "store_false", dest = "strict", default = True, help = "Force strict checks")
-    op.add_option('--simulate', action = "store_true", dest = "simulate", help = "Don't write anything")
+    op.add_option('-n', '--simulate', action = "store_true", dest = "simulate", help = "Don't write anything")
     op.add_option('--dirs', action = "store_true", dest = "onlyfolders", help = "Only find directories that contain matches")
     op.add_option('-f', '--force', action = "store_true", dest = "force", help = "Override safety warnings")
     op.add_option('--test', action = "store_true", help = "Perform self-tests")
@@ -252,6 +256,7 @@ class Main(object):
     _.options, _.args = op.parse_args()
     _.args, excludes = splitCrit(_.args, lambda e: e[0] != '-')
     _.options.excludes.extend([e[e.rindex('-') + 1:] for e in excludes]) # remove "--" from "--tag"
+    _.options.log = max(1 if _.options.verbose else 0, _.options.log)
     if _.options.log >= 1: info("Started at %s" % (time.strftime("%H:%M:%S")))
     if _.options.init: _.initIndex()
     elif _.options.update: _.updateIndex()
