@@ -43,6 +43,7 @@ def tearDownModule():
 class TestRepoTestCase(unittest.TestCase):
   ''' All tests are run through the command-line interface of tp.py. '''
 
+  @unittest.SkipTest
   def testFilenameCaseSetting(_):
     ''' This test confirms that case setting works (only executed on Linux). '''
     _.assertIn("Modified global configuration entry", runP("-r %s --set case_sensitive=False -l1" % REPO))
