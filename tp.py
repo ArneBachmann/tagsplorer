@@ -160,7 +160,6 @@ class Main(object):
       for p in poss: paths[:] = [x for x in paths if globmatch(safeRSplit(x, SLASH), p)]
       for n in negs: paths[:] = [x for x in paths if not globmatch(safeRSplit(x, SLASH), n)]
       if _.options.log >= 1: info("Found %d paths for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
-      [printo(path) for path in paths]
       info("%d directories found for +%s / -%s." % (len(paths), ",".join(poss), ".".join(negs)))
       return
     dcount, counter = 0, 0 # if not only folders, but also files
@@ -168,7 +167,6 @@ class Main(object):
       dcount += 1
       if len(files) > 0: printo("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files) # incremental output
     if _.options.log >= 1: info("%d files found in %d checked paths for +%s / -%s." % (counter, dcount, ",".join(poss), ".".join(negs)))
-    print idx.tagdirs
 
   def add(_):
     ''' Add one or more (inclusive adn/or exclusive) tag(s) to the appended file and glob argument(s).

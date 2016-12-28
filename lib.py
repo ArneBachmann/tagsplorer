@@ -2,7 +2,7 @@
 # This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python2 and Python3.
 
 
-import collections, copy, fnmatch, os, sys, time, zlib
+import collections, copy, fnmatch, os, re, sys, time, zlib
 
 DEBUG = 3; INFO = 2; WARN = 1; ERROR = 0
 LOG = INFO # select maximum log level
@@ -291,10 +291,10 @@ class Indexer(object):
     skip, ignore = False, False # marks dir as "no recursion"/"no tagging" respectively
     adds = [] # additional tags for single files in this folder, not to be promoted to sub-directories
     marks = _.cfg.paths.get(aDir[len(_.root):], {})
-    if SKIP in marks or (aDir != '' and aDir[aDir.rindex(SLASH) + 1:] in dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])):
+    if SKIP in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' else '') in dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])):
       if _.log >= 1: info("  Skip %s%s" % (aDir, '' if SKIP in marks else ' due to global skip setting'))
       return # completely ignore sub-tree
-    elif IGNORE in marks or (aDir != '' and aDir[aDir.rindex(SLASH) + 1:] in dictget(dictget(_.cfg.paths, '', {}), IGNORED, [])):
+    elif IGNORE in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' else '') in dictget(dictget(_.cfg.paths, '', {}), IGNORED, [])):
       ignore = True # ignore this directory as tag, don't index contents
       if _.log >= 1: info("  Ignore %s%s" % (aDir, '' if IGNORE in marks else ' due to global ignore setting'))
     else:
@@ -408,7 +408,8 @@ class Indexer(object):
         exclude: list of cleaned tag names to exclude
         returnAll: shortcut flag that simply returns all paths from index
     '''
-    if returnAll: return list(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))) # all existing paths
+    idirs, sdirs = dictget(dictget(_.cfg.paths, '', {}), IGNORED, []), dictget(dictget(_.cfg.paths, '', {}), SKIPD, []) # get lists of ignored or skipped paths
+    if returnAll: return list([path for path in _.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))if not (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs and not any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])]) # all existing paths
     paths, first, cache = set(), True, {}
     for tag in include: # positive restrictive matching
       if _.log >= 2: info("Filtering paths by inclusive tag %s" % tag)
@@ -438,7 +439,7 @@ class Indexer(object):
       else:
         paths -= new # reduce found paths
       first = False
-    return list(paths)
+    return list([path for path in paths if not (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs and not any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])]) # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well
 
   def findFiles(_, aFolder, poss, excludes = [], strict = True):
     ''' Determine files for the given folder.

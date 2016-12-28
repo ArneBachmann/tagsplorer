@@ -63,16 +63,17 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Get global configuration", ret)
     _.assertIn("Removed global configuration entry", runP("-r %s --unset __test -l1" % REPO))
 
-
   def testGlobalIgnoreDir(_):
-    _.assertIn("No folder match", runP("-r %s -s filea.exta" % REPO)) # TODO should not find
+    _.assertIn("No folder match", runP("-r %s -s filea.exta" % REPO))
+    _.assertNotIn("filea.exta", runP("-r %s -s filea.exta" % REPO))
 
   def testGlobalSkipDir(_):
-    _.assertIn("No folder match", runP("-r %s -s filec.extb" % REPO)) # TODO should not find
+    _.assertIn("No folder match", runP("-r %s -s filec.extb" % REPO))
+    _.assertNotIn("filec.extb", runP("-r %s -s filec.extb" % REPO))
 
   def testLocalIgnoreDir(_):
-    _.assertIn("No folder match", runP("-r %s -s a.b -l1" % REPO)) # TODO should not find
-    _.assertIn("1 files found", runP("-r %s -s x.c -l1" % REPO)) # should show number of instances found
+    _.assertIn("No folder match", runP("-r %s -s x.x -l1" % REPO))
+    _.assertNotIn("x.x", runP("-r %s -s a.b -l1" % REPO))
 
   def testLocalSkipDir(_):
     _.assertIn("No folder match", runP("-r %s -s x.d -l1" % REPO)) # TODO should not find
