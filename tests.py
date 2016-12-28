@@ -3,9 +3,9 @@ import subprocess
 import sys
 import unittest
 if sys.version_info.major < 3:
-  import StringIO
+  from StringIO import StringIO
 else:
-  import io.StringIO
+  from io import StringIO
 
 import lib
 import tp
@@ -20,7 +20,7 @@ def call(argstr): return subprocess.Popen(argstr, shell = True, bufsize = 100000
 def runP(argstr): # replaces old implementation to allow for coverage stats
   sys.argv = ["tp.py"] + argstr.split(" ")
   oldo, olde = sys.stdout, sys.stderr
-  buf = StringIO.StringIO()
+  buf = StringIO()
   sys.stdout = sys.stderr = buf
   m = tp.Main().parse()
   sys.stdout, sys.stderr = oldo, olde
