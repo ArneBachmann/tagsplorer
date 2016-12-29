@@ -37,7 +37,12 @@ def setUpModule():
   runP("-r %s -u -l1" % REPO) # initial indexing, invisible
 
 def tearDownModule():
-  os.unlink(REPO + os.sep + IDX)
+  if not os.environ.get("SKIP", False):
+    os.unlink(REPO + os.sep + IDX)
+    try:
+      call("svn revert %s" % (REPO + os.sep + CFG)) # for subversion
+      #    call("git checkout %s/%s" % (REPO, CFG)) # for git
+    except: pass
 
 
 class TestRepoTestCase(unittest.TestCase):
@@ -82,9 +87,15 @@ class TestRepoTestCase(unittest.TestCase):
   def testLocalTag(_):
     _.assertIn("1 files found", runP("-r %s -s b1,tag1 -l1" % REPO)) # The other file is excluded manually TODO separate testswith inc/exc and file/glob
 
-  def testMappedTag(_):
-    _.assertIn("1 files found", runP("-r %s -s a2,tag1 -l1" % REPO)) # One mapped file by include pattern
-    # TODO double find mapped when having glob exclude - distinct? where from?
+  def testMappedInclude(_):
+    _.assertIn("2 files found", runP("-r %s -s two,test -l1" % REPO)) # one direct match and one mapped
+    _.assertIn("/a.a", runP("-r %s -s two,test" % REPO)) # direct match in /two
+    _.assertIn("/2.2", runP("-r %s -s two,test" % REPO)) # mapped match from /one
+
+  def testMappedExclude(_):
+    _.assertIn("2 files found", runP("-r %s -s one,test -l1" % REPO)) # one direct match and one mapped
+    _.assertIn("/2.2", runP("-r %s -s two,test -l1" % REPO)) # direct match in /two
+    _.assertIn("/a.a", runP("-r %s -s two,test -l1" % REPO)) # mapped match from /one
 
   def testMappedGlobExclude(_):
     pass
