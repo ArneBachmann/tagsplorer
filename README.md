@@ -152,8 +152,8 @@ In addition, it's possible to specify global settings under the root configurati
 
 * `ignored=dirname`
 
-  Similar to `ignore` this defines a global folder name to ignore and not index.
-  TODO glob? several per line?
+  Similar to `ignore` this defines a global folder (directory) name to ignore and to not index.
+  TODO allow glob(s)?allow several per line?
 
 * `skipd=dirname`
 
