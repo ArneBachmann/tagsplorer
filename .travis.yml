@@ -1,9 +1,10 @@
 language: python
-os:
-  - linux
-dist:
-  - trusty
-  - precise
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+    - os: linux
+      dist: precise
 python:
   - "2.7"
   - "3.5"
