@@ -2,6 +2,7 @@
 # This script is written for easiest command-line access
 #
 # Globbing on tags not supported by design
+# TODO check if globs operate only on files or accidentally also on folders.
 # TODO separate timestamp from conf once more - better to exclude from vcs (?) or use modtim?
 # TODO simplify find, add from, add map option (?)
 
