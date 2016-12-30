@@ -151,7 +151,7 @@ class Main(object):
     if _.options.log >= 2: [debug(path) for path in paths]  # optimistic: all folders "seem" to match all tags, but only some might actually be (due to excludes etc)
     if len(paths) == 0 and any(lambda x: isglob(x) or DOT in x, poss + negs):
       warn("No folder match; cannot filter on folder names. Checking entire folder tree")  # the logic is wrong: we ignore lots of tags while finding folders, and the continue filtering. better first filter on exts or all, then continue??
-    paths = idx.findFolders([], [], True)  # return all folders names unfiltered
+      paths = idx.findFolders([], [], True)  # return all folders names unfiltered
     if _.options.onlyfolders:
       for p in poss: paths[:] = [x for x in paths if normalizer.globmatch(safeRSplit(x, SLASH), p)]
       for n in negs: paths[:] = [x for x in paths if not normalizer.globmatch(safeRSplit(x, SLASH), n)]
