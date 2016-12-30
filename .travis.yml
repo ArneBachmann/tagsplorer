@@ -1,8 +1,6 @@
 language: python
-os: linux
-dist:
-  - trusty
-  - precise
+os:
+  - linux
 python:
   - "2.7"
   - "3.5"
@@ -10,5 +8,7 @@ python:
   - "pypy3" # Pypy3 2.4.0
 install: "pip install coverage"
 script: coverage run tests.py
-cache: pip
+cache:
+  directories:
+    - $HOME/.cache/pip
   timeout: 100000
