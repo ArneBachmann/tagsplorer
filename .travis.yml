@@ -13,14 +13,15 @@ matrix:
     - os: linux
       dist: precise
       python: 3.5
-#python:
-#  - "2.7"
-#  - "3.5"
-#  - "pypy"  # PyPy2 2.5.0
-#  - "pypy3" # Pypy3 2.4.0
+#    - os: linux
+#      dist: precise
+#      python: pypy
+#    - os: linux
+#      dist: precise
+#      python: pypy3
 install: "pip install coverage"
 script: coverage run tests.py
 cache:
   directories:
     - $HOME/.cache/pip
-  timeout: 100000
+  timeout: 300000
