@@ -3,13 +3,21 @@ matrix:
   include:
     - os: linux
       dist: trusty
+      python: 2.7
+    - os: linux
+      dist: trusty
+      python: 3.5
     - os: linux
       dist: precise
-python:
-  - "2.7"
-  - "3.5"
-  - "pypy"  # PyPy2 2.5.0
-  - "pypy3" # Pypy3 2.4.0
+      python: 2.7
+    - os: linux
+      dist: precise
+      python: 3.5
+#python:
+#  - "2.7"
+#  - "3.5"
+#  - "pypy"  # PyPy2 2.5.0
+#  - "pypy3" # Pypy3 2.4.0
 install: "pip install coverage"
 script: coverage run tests.py
 cache:
