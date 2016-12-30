@@ -1,6 +1,9 @@
 language: python
 os:
   - linux
+dist:
+  - trusty
+  - precise
 python:
   - "2.7"
   - "3.5"
