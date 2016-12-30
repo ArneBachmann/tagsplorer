@@ -3,7 +3,7 @@
 # tagsplorer
 A quick and resource-efficient OS-independent tagging filetree extension tool and library written in Python, working with both Python versions 2 and 3.
 
-Each folder name of the indexed file tree is implicitly treated as a tag name, and additional tags can be set or excluded on singular files or file globs. Contents of other folders in the file tree can virtually be mapped. TODO check if globs operate only on files or accidentally also on folders.
+Each folder name of the indexed file tree is implicitly treated as a tag name, and additional tags can be set or excluded on singular files or file globs. Contents of other folders in the file tree can virtually be mapped into others.
 The entire system is fully backwards-compatible with the common file tree metaphor present in most file systems.
 
 ## Problem statement
