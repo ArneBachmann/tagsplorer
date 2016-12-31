@@ -1,0 +1,36 @@
+version: '{build}.{branch}'
+platform:
+  -x86
+  -x64
+branches:
+  only:
+  - master
+skip_branch_with_pr: true
+install:
+  - ps: if ($env:APPVEYOR_PULL_REQUEST_NUMBER -and $env:APPVEYOR_BUILD_NUMBER -ne ((Invoke-RestMethod `
+        https://ci.appveyor.com/api/projects/$env:APPVEYOR_ACCOUNT_NAME/$env:APPVEYOR_PROJECT_SLUG/history?recordsNumber=50).builds | `
+        Where-Object pullRequestId -eq $env:APPVEYOR_PULL_REQUEST_NUMBER)[0].buildNumber) { `
+          throw "There are newer queued builds for this pull request, failing early." }
+  - ps: if (-not(Test-Path($env:PYTHON))) { & appveyor\install.ps1 }
+  - "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
+  - "python --version"
+  - "python -c \"import struct; print(struct.calcsize('P') * 8)\""
+  - "pip install --disable-pip-version-check --user --upgrade pip"
+  - "%CMD_IN_ENV% pip install coverage"
+clone_script:
+- cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
+environment:
+  SKIP: true
+  matrix:
+    - PYTHON: "C:\\Python27"
+    - PYTHON: "C:\\Python35"
+cache: '%HOME%\.cache\pip'
+build: off
+test_script:
+- cmd: coverage run tests.py
+after_test:
+- cmd: coverage annotate tests.py
+artifacts:
+- path: htmlcov/
+  name: Coverage Report
+deploy: off
