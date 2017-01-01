@@ -1,7 +1,4 @@
 version: '{build}.{branch}'
-platform:
-  -x86
-  -x64
 branches:
   only:
   - master
@@ -20,17 +17,34 @@ install:
 clone_script:
 - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
 environment:
-  SKIP: true
+#  SKIP: true
   matrix:
     - PYTHON: "C:\\Python27"
+      platform: x86
+    - PYTHON: "C:\\Python27-x64"
+      platform: x64
     - PYTHON: "C:\\Python35"
-cache: '%HOME%\.cache\pip'
+      platform: x86
+    - PYTHON: "C:\\Python35-x64"
+      platform: x64
+    - PYTHON: "C:\\Python36"
+      platform: x86
+    - PYTHON: "C:\\Python36-x64"
+      platform: x64
+    - PYTHON: "C:\\Miniconda"
+      platform: x86
+    - PYTHON: "C:\\Miniconda-x64"
+      platform: x64
+    - PYTHON: "C:\\Miniconda35"
+      platform: x86
+    - PYTHON: "C:\\Miniconda35-x64"
+      platform: x64
 build: off
 test_script:
 - cmd: coverage run tests.py
 after_test:
 - cmd: coverage annotate tests.py
 artifacts:
-- path: htmlcov/
+- path: htmlcov\*
   name: Coverage Report
 deploy: off
