@@ -294,7 +294,7 @@ class Indexer(object):
     if SKIP in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' else '') in dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])):
       if _.log >= 1: info("  Skip %s%s" % (aDir, '' if SKIP in marks else ' due to global skip setting'))
       return  # completely ignore sub-tree
-    elif IGNORE in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' else '') in dictget(dictget(_.cfg.paths, '', {}), IGNORED, [])):
+    elif IGNORE in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' else '') in dictget(dictget(_.cfg.paths, '', {}), IGNORED, [])):  # former checks path cfg, latter checks global ignore TODO allow glob check? TODO add marker file check
       ignore = True  # ignore this directory as tag, don't index contents
       if _.log >= 1: info("  Ignore %s%s" % (aDir, '' if IGNORE in marks else ' due to global ignore setting'))
     else:
@@ -322,7 +322,7 @@ class Indexer(object):
       return
     ignore = ignore or (IGNFILE in files)
     if ignore:
-      if _.log >= 1: info("  Skip %s due to local ignore file" % aDir)
+      if _.log >= 1: info("  Ignore %s due to local ignore file" % aDir)
       _.tagdir2paths[tags[-1]].remove(parent)  # remove from index and children markers
 
     for file in (f for f in files if DOT in f[1:]):  # index file extensions
@@ -409,7 +409,7 @@ class Indexer(object):
         returnAll: shortcut flag that simply returns all paths from index
     '''
     idirs, sdirs = dictget(dictget(_.cfg.paths, '', {}), IGNORED, []), dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored or skipped paths
-    if returnAll: return list([path for path in _.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))if not (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs and not any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])])  # all existing paths
+    if returnAll: return list([path for path in set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))) if not (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs and not any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs]) and IGNORE not in dictget(_.cfg.paths, path, {}) and not any([IGNORE in dictget(_.cfg.paths, SLASH.join(path.split(SLASH)[:p + 1]), {}) for p in range(path.count(SLASH))])])  # all existing paths except globally ignored/skipped paths TODO add marker file logic below. using set(paths) because of tags different ids can return the same paths
     paths, first, cache = set(), True, {}
     for tag in include:  # positive restrictive matching
       if _.log >= 2: info("Filtering paths by inclusive tag %s" % tag)
@@ -434,12 +434,11 @@ class Indexer(object):
       potentialRemove = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # can only be removed, if no manual tag/file extension/glob in config or "from"
       new = _.removeIncluded(include, potentialRemove)  # remove paths with includes from "remove" list (adding back...)
       if first:  # start with all all paths, except determined excluded paths
-        allPaths = list(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set()))))  # get paths from index data structure
-        paths = allPaths - new
+        paths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))) - new  # get paths from index data structure
       else:
         paths -= new  # reduce found paths
       first = False
-    return list([path for path in paths if not (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs and not any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])])  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well
+    return list([path for path in paths if not (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs and not any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])])  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
 
   def findFiles(_, aFolder, poss, excludes = [], strict = True):
     ''' Determine files for the given folder.
@@ -447,7 +446,7 @@ class Indexer(object):
         remainder: positive tags, extension, or file/glob to consider
         excludes: negative assertions
         strict: perform real file existence checks
-        returns: returns list of filenames for given folder
+        returns: (list of filenames for given folder, has a skip marker file)
     '''
     remainder = set(poss) - set(aFolder.split(SLASH)[1:])  # split folder path into tags and remove from remaining criteria
     if _.log >= 1: info("Filtering folder %s%s" % (aFolder, (" by remaining tags: " + (", ".join(remainder)) if len(remainder) > 0 else DOT)))
@@ -455,10 +454,12 @@ class Indexer(object):
     folders = [aFolder] + [pathnorm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])]  # all mapped folders
     if _.log >= 1 and len(folders) > 1: info("Considering (mapped) folders: %s" % str(folders[1:]))
 
-    allfiles = set()  # contains files from current or mapped folders (without path, since "mapped", but could have local symlink - TODO
+    allfiles, willskip = set(), False  # contains files from current or mapped folders (without path, since "mapped", but could have local symlink - TODO
     for folder in folders:
       if _.log >= 1: debug("Checking folder %s" % folder)
       files = set(wrapExc(lambda: [f for f in os.listdir(_.root + folder) if isfile(_.root + folder + SLASH + f)], lambda: []))  # all from current folder, exc: folder name (unicode etc.)
+      if IGNFILE in files: continue  # TODO skip is more difficult, as we only consider one folder here
+      if folder == aFolder and SKPFILE in files: willskip = True
       conf = _.cfg.paths.get(folder, {})  # if empty, files remains unchanged, we return all of them regularly
       if _.log >= 2: debug("Conf found for %s: %s" % (folder, str(conf)))
       tags = conf.get(TAG, [None])
@@ -505,7 +506,7 @@ class Indexer(object):
         if not found: keep = set(files)
       files = (files & keep) - remo
       allfiles |= files
-    return list(allfiles)
+    return (list(allfiles), willskip)
 
 
 if __name__ == '__main__':

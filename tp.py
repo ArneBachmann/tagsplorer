@@ -22,8 +22,8 @@ else:
 
 
 # Little helper functions
-def any(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if type(lizt) == list else list(lizt), False)  # short-circuit cross-2/3 implementation
-def all(pred, lizt): return reduce(lambda a, b: a and pred(b), lizt if type(lizt) == list else list(lizt), True)
+def xany(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if type(lizt) == list else list(lizt), False)  # short-circuit cross-2/3 implementation
+def xall(pred, lizt): return reduce(lambda a, b: a and pred(b), lizt if type(lizt) == list else list(lizt), True)
 
 def commaArgsIntoList(lizt):
   '''
@@ -150,20 +150,22 @@ class Main(object):
     paths = idx.findFolders([p for p in poss if not isglob(p) and DOT not in p[1:]], [n for n in negs if not isglob(n) and DOT not in n[1:]])
     if _.options.log >= 1: info("Potential matches found in %d folders" % (len(paths)))
     if _.options.log >= 2: [debug(path) for path in paths]  # optimistic: all folders "seem" to match all tags, but only some might actually be (due to excludes etc)
-    if len(paths) == 0 and any(lambda x: isglob(x) or DOT in x, poss + negs):
+    if len(paths) == 0 and xany(lambda x: isglob(x) or DOT in x, poss + negs):
       warn("No folder match; cannot filter on folder names. Checking entire folder tree")  # the logic is wrong: we ignore lots of tags while finding folders, and the continue filtering. better first filter on exts or all, then continue??
-      paths = idx.findFolders([], [], True)  # return all folders names unfiltered
+      paths = idx.findFolders([], [], True)  # return all folders names unfiltered (except ignore/skip without marker files)
     if _.options.onlyfolders:
       for p in poss: paths[:] = [x for x in paths if normalizer.globmatch(safeRSplit(x, SLASH), p)]
       for n in negs: paths[:] = [x for x in paths if not normalizer.globmatch(safeRSplit(x, SLASH), n)]
       if _.options.log >= 1: info("Found %d paths for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
-      info("%d directories found for +%s / -%s." % (len(paths), ",".join(poss), ".".join(negs)))
+      info("%d directories found for +<%s> -<%s>." % (len(paths), ",".join(poss), ".".join(negs)))
       return
-    dcount, counter = 0, 0  # if not only folders, but also files
-    for path, files in ((path, idx.findFiles(path, poss, negs)) for path in paths):
+    dcount, counter, skipped = 0, 0, []  # if not only folders, but also files
+    for path, (files, skip) in ((path, idx.findFiles(path, poss, negs)) for path in paths):
+      if skip: skipped.append(path); continue  # memorize to skip all folders with this prefix TODO is this always ordered correctly (breadth first)?
+      if any([path.startswith(skp) if skp != '' else (path == '') for skp in skipped]): continue  # is in skipped folder tree
       dcount += 1
       if len(files) > 0: printo("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
-    if _.options.log >= 1: info("%d files found in %d checked paths for +%s / -%s." % (counter, dcount, ",".join(poss), ".".join(negs)))
+    if _.options.log >= 1: info("%d files found in %d checked paths for +<%s> -<%s>." % (counter, dcount, ",".join(poss), ".".join(negs)))
 
   def add(_):
     ''' Add one or more (inclusive adn/or exclusive) tag(s) to the appended file and glob argument(s).
@@ -186,11 +188,11 @@ class Main(object):
     normalizer.setupCasematching(cfg.case_sensitive)
     poss, negs = map(normalizer.filenorm, (poss, negs))
     if (len(poss) + len(negs)) == 0: error("No tag(s) given for %s" % ", ".join(file)); return
-    if any(lambda p: p in negs, poss): error("Won't allow same tag in both inclusive and exclusiv file assignment: %s" % ', '.join(["'%s'" % p for p in poss if p in negs])); return
+    if xany(lambda p: p in negs, poss): error("Won't allow same tag in both inclusive and exclusiv file assignment: %s" % ', '.join(["'%s'" % p for p in poss if p in negs])); return
 
     modified = False
     for file in filez:
-      if _.options.strict and not (os.path.exists(file) or any(fnmatch.filter(os.listdir("."), file))): warn("File or glob not found, skipping %s" % file)  # TODO allow other relative/absolute paths than CWD
+      if _.options.strict and not (os.path.exists(file) or xany(fnmatch.filter(os.listdir("."), file))): warn("File or glob not found, skipping %s" % file)  # TODO allow other relative/absolute paths than CWD
       parent, file = os.path.split(file)
       parent = pathnorm(os.path.abspath(parent))  # check if this is a relative path
       if not isunderroot(root, parent):  # if outside folder tree
