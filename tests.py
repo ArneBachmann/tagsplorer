@@ -78,15 +78,13 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertNotIn("filec.extb", runP("-r %s -s filec.extb" % REPO))
 
   def testLocalIgnoreDir(_):
-    _.assertIn(" 0 files found", runP("-r %s -s 3.3 -l1" % REPO)) # not filtering on folder tags
-    _.assertIn("No folder match", runP("-r %s -s a,1.2 -l1" % REPO)) # not filtering on folder tags
-    _.assertIn("No folder match", runP("-r %s -s a,2.1 -l1" % REPO))
+    _.assertIn("0 files found", runP("-r %s -s 3.3 -l1" % REPO)) # not filtering on folder tags
     _.assertIn("1.2", runP("-r %s -s 1.2 -l1" % REPO)) #
     _.assertIn("2.1", runP("-r %s -s 2.1 -l1" % REPO))
 
   def testLocalSkipDir(_):
     _.assertIn("0 files found", runP("-r %s -s b,1.1 -l1" % REPO))
-    _.assertIn("No folder match", runP("-r %s -s b,1 -l1" % REPO))
+    _.assertIn("1 files found", runP("-r %s -s b,2.2 -l1" % REPO))
 
   def testLocalTag(_):
     _.assertIn("1 files found", runP("-r %s -s b1,tag1 -l1" % REPO)) # The other file is excluded manually TODO separate testswith inc/exc and file/glob
