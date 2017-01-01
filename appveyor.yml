@@ -1,7 +1,4 @@
 version: '{build}.{branch}'
-branches:
-  only:
-  - master
 skip_branch_with_pr: true
 install:
   - ps: if ($env:APPVEYOR_PULL_REQUEST_NUMBER -and $env:APPVEYOR_BUILD_NUMBER -ne ((Invoke-RestMethod `
@@ -13,13 +10,11 @@ install:
   - ps: If(-not(Test-Path($env:PYTHON))) { & appveyor\install.ps1 }
   - "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
   - "python --version"
-  - "python -c \"import struct; print(struct.calcsize('P') * 8)\""
   - "pip install --disable-pip-version-check --user --upgrade pip"
   - "%CMD_IN_ENV% pip install coverage"
 clone_script:
-- cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
+  - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
 environment:
-#  SKIP: true
   matrix:
     - PYTHON: "C:\\Python27"
       platform: x86
@@ -43,10 +38,10 @@ environment:
       platform: x64
 build: off
 test_script:
-- cmd: coverage run tests.py
+  - cmd: coverage run tests.py
 after_test:
-- cmd: coverage annotate tests.py
+  - cmd: coverage annotate tests.py
 artifacts:
-- path: htmlcov\*
-  name: Coverage Report
+  - path: htmlcov\*
+    name: Coverage Report
 deploy: off
