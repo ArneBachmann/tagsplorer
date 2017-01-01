@@ -36,6 +36,10 @@ environment:
       platform: x86
     - PYTHON: "C:\\Miniconda35-x64"
       platform: x64
+    - PYTHON: "C:\\pypy2"
+      platform: x86
+    - PYTHON: "C:\\pypy3"
+      platform: x86
 build: off
 test_script:
   - cmd: coverage run tests.py
