@@ -40,7 +40,8 @@ environment:
       platform: x86
     - PYTHON: "C:\\pypy3"
       platform: x86
-build: off
+build:
+  - cmd: python setup.py build
 test_script:
   - cmd: coverage run tests.py
 after_test:
