@@ -6,10 +6,9 @@
 # TODO separate timestamp from conf once more - better to exclude from vcs (?) or use modtim?
 # TODO simplify find, add from, add map option (?)
 
-VERSION = "2016.Q4"
-
 import optparse
 from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports
+from version import __version_info__, __version__  # used by setup.py
 
 # Version-dependent imports
 if sys.version_info.major == 3:
@@ -88,7 +87,7 @@ def getRoot(options, args):
 
 class CatchExclusionsParser(optparse.OptionParser):
   def __init__(_):
-    optparse.OptionParser.__init__(_, prog = "TagsPlorer", usage = "python tp.py <tags or options>", version = "Tagsplorer Release " + VERSION)  # , formatter = optparse.TitledHelpFormatter(),
+    optparse.OptionParser.__init__(_, prog = "TagsPlorer", usage = "python tp.py <tags or options>", version = "Tagsplorer Release " + __version__)  # , formatter = optparse.TitledHelpFormatter(),
   def _process_args(_, largs, rargs, values):
     while rargs:
       try: optparse.OptionParser._process_args(_, largs, rargs, values)
@@ -248,14 +247,15 @@ class Main(object):
     op.add_option('-n', '--simulate', action = "store_true", dest = "simulate", help = "Don't write anything")
     op.add_option('--dirs', action = "store_true", dest = "onlyfolders", help = "Only find directories that contain matches")
     op.add_option('-f', '--force', action = "store_true", dest = "force", help = "Override safety warnings")
-    op.add_option('--test', action = "store_true", help = "Perform self-tests")
-    # --no-reindex?
+    op.add_option('--test', action = "store_true", dest = "test", help = "Perform self-tests")
     op.add_option('-v', action = "store_true", dest = "verbose", help = "Switch only for unit test")
+    # --no-reindex?
     _.options, _.args = op.parse_args()
     _.args, excludes = splitCrit(_.args, lambda e: e[0] != '-')
     _.options.excludes.extend([e[e.rindex('-') + 1:] for e in excludes])  # remove "--" from "--tag"
     _.options.log = max(1 if _.options.verbose else 0, _.options.log)
     if _.options.log >= 1: info("Started at %s" % (time.strftime("%H:%M:%S")))
+    if LOG >= DEBUG: debug("Running in debug mode.")
     if _.options.init: _.initIndex()
     elif _.options.update: _.updateIndex()
     elif _.options.tag: _.add()

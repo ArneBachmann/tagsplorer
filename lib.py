@@ -69,7 +69,7 @@ def lindex(list, value, otherwise = lambda list, value: None):
 
 def isdir(f): return os.path.isdir(f) and not os.path.islink(f) and not os.path.ismount(f)
 def isfile(f): return wrapExc(lambda: os.path.isfile(f) and not os.path.ismount(f) and not os.path.isdir(f), lambda: False)  # on error "no file"
-pathnorm = (lambda s: s.replace("\\", SLASH)) if sys.platform == 'win32' else (lambda s: s)
+pathnorm = (lambda s: s.replace("\\", SLASH)) if sys.platform == 'win32' else (lambda s: s)  # as lambda to allow dynamic definition
 def lappend(lizt, elem): lizt.append(elem); return lizt   # functional list.append that returns self afterwards to avoid new array creation (lizt + [elem])
 def appendandreturnindex(lizt, elem): return len(lappend(lizt, elem)) - 1
 def isunderroot(root, folder): return os.path.commonprefix([root, folder]).startswith(root)
@@ -409,7 +409,11 @@ class Indexer(object):
         returnAll: shortcut flag that simply returns all paths from index
     '''
     idirs, sdirs = dictget(dictget(_.cfg.paths, '', {}), IGNORED, []), dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored or skipped paths
-    if returnAll: return list([path for path in set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))) if not (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs and not any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs]) and IGNORE not in dictget(_.cfg.paths, path, {}) and not any([IGNORE in dictget(_.cfg.paths, SLASH.join(path.split(SLASH)[:p + 1]), {}) for p in range(path.count(SLASH))])])  # all existing paths except globally ignored/skipped paths TODO add marker file logic below. using set(paths) because of tags different ids can return the same paths
+    currentPathInGlobalIgnores = lambda path: (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs
+    partOfAnyGlobalSkipPath = lambda path: any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])
+    anyParentIsSkipped = lambda path: any([SKIP in dictget(_.cfg.paths, SLASH.join(path.split(SLASH)[:p + 1]), {}) for p in range(path.count(SLASH))])
+    allPaths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set()))))
+    if returnAll: return list([path for path in allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})])  # all existing paths except globally ignored/skipped paths TODO add marker file logic below. using set(paths) because of tags different ids can return the same paths
     paths, first, cache = set(), True, {}
     for tag in include:  # positive restrictive matching
       if _.log >= 2: info("Filtering paths by inclusive tag %s" % tag)
@@ -438,7 +442,7 @@ class Indexer(object):
       else:
         paths -= new  # reduce found paths
       first = False
-    return list([path for path in paths if not (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs and not any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])])  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
+    return list([path for path in paths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path)])  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
 
   def findFiles(_, aFolder, poss, excludes = [], strict = True):
     ''' Determine files for the given folder.
@@ -452,14 +456,14 @@ class Indexer(object):
     if _.log >= 1: info("Filtering folder %s%s" % (aFolder, (" by remaining tags: " + (", ".join(remainder)) if len(remainder) > 0 else DOT)))
     conf = _.cfg.paths.get(aFolder, {})  # if empty, files remains unchanged, we return all
     folders = [aFolder] + [pathnorm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])]  # all mapped folders
-    if _.log >= 1 and len(folders) > 1: info("Considering (mapped) folders: %s" % str(folders[1:]))
+    if _.log >= 1 and len(folders) > 1: info("Considering (mapped) folders: %s" % os.pathsep.join(folders[1:]))
 
     allfiles, willskip = set(), False  # contains files from current or mapped folders (without path, since "mapped", but could have local symlink - TODO
     for folder in folders:
-      if _.log >= 1: debug("Checking folder %s" % folder)
+      if _.log >= 1: debug("Checking %sfolder %s" % ("root " if folder == "" else '', folder))
       files = set(wrapExc(lambda: [f for f in os.listdir(_.root + folder) if isfile(_.root + folder + SLASH + f)], lambda: []))  # all from current folder, exc: folder name (unicode etc.)
-      if IGNFILE in files: continue  # TODO skip is more difficult, as we only consider one folder here
-      if folder == aFolder and SKPFILE in files: willskip = True
+      if IGNFILE in files: continue  # skip is more difficult to handle than ignore, cf. return tuple here and code in tp.find() with return
+      if folder == aFolder and SKPFILE in files: willskip = True; info("Skip %s due to local marker file" % folder); continue  # return ([], True)  # TODO semantics: handle mapped folder even for skip local marker?
       conf = _.cfg.paths.get(folder, {})  # if empty, files remains unchanged, we return all of them regularly
       if _.log >= 2: debug("Conf found for %s: %s" % (folder, str(conf)))
       tags = conf.get(TAG, [None])
@@ -470,15 +474,15 @@ class Indexer(object):
         elif isglob(tag) or tag in files: keep &= set([f for f in files if normalizer.globmatch(f, tag)]); continue  # this branch for glob and direct file name
         found = False  # marker for the case that not even a manual tag matched
         for value in tags:
-          if value is None: keep = set(); found = True; break
+          if value is None: keep = set(); found = True; break  # None means no config found
           tg, inc, exc = value.split(SEPA)  # tag name, includes, excludes
           if tg == tag:  # mark that matches the find criterion: we can remove all others!
             found = True
             news = set(files)  # collect all files subsumed under the tag that should remain. hint: this is not a tag ^ tag match!
-            for i in inc.split(","):  # if tag manually specified, only keep those included files
+            for i in safeSplit(inc, ","):  # if tag manually specified, only keep those included files
               if isglob(i): news &= set([f for f in files if normalizer.globmatch(f, i)])  # is glob
               else: news &= set([i] if normalizer.filenorm(i) in files and (not strict or isfile(_.root + folder + SLASH + i)) else [])  # is no glob: add only if file exists
-            for e in exc.split(","):  # if tag is manually specified, exempt these files (add back)
+            for e in safeSplit(exc, ","):  # if tag is manually specified, exempt these files (add back)
               if isglob(e): news |= set([n for n in news if normalizer.globmatch(n, e)])
               else: news.discard(e)  # add file to keep TODO why not remove?
             keep = keep & news
@@ -491,20 +495,22 @@ class Indexer(object):
         elif isglob(tag) or tag in files: remo |= set([f for f in files if normalizer.globmatch(f, tag)]); continue
         found = False  # marker for case not even a manual tag matched
         for value in tags:
-          if value is None: keep = set(files); found = True; break
+          if value is None: remo = set(files); found = True; break  # None means no config found
           tg, inc, exc = value.split(SEPA)
           if tg == tag:
+            found = True
             news = set()  # collect all file that should be excluded
-            for i in inc.split(","):
+            for i in safeSplit(inc, ","):
               if isglob(i): news |= set([f for f in files if normalizer.globmatch(f, i)])  # is glob
               else: news |= set([i] if i in files and (not strict or isfile(_.root + folder + SLASH + i)) else [])  # is no glob: add, only if exists
-            for e in exc.split(","):
+            for e in safeSplit(exc, ","):
               if isglob(e): news -= set([n for n in news if normalizer.globmatch(n, e)])
               else: news.add(e)
             remo |= news
             break
-        if not found: keep = set(files)
+        if not found: remo = set(files)
       files = (files & keep) - remo
+      if _.log >= 2: debug("Files for folder %s: %s (Keep/Remove: %s/%s)" % (folder, ",".join(files), ",".join(keep), ",".join(remo)))
       allfiles |= files
     return (list(allfiles), willskip)
 
