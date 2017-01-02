@@ -10,9 +10,9 @@ install:
   - ps: If(-not(Test-Path($env:PYTHON))) { & appveyor\install.ps1 }
   - cmd: "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
   - cmd: "python --version"
+  - ps: If(($env:PYTHON).Contains("pypy")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
   - cmd: "pip install --disable-pip-version-check --user --upgrade pip"
   - cmd: "%CMD_IN_ENV% pip install coverage"
-  - ps: If(($env:PYTHON).Contains("pypy")) { pip install setuptools }
 clone_script:
   - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
 environment:
