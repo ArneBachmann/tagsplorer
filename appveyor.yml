@@ -10,8 +10,11 @@ install:
   - ps: If(-not(Test-Path($env:PYTHON))) { & appveyor\install.ps1 }
   - cmd: "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
   - cmd: "python --version"
-  - ps: If(($env:PYTHON).Contains("pypy2")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
+  - cmd: "pip --version"
+  - ps: If(($env:PYTHON).Contains("pypy2")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py',     "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
   - ps: If(($env:PYTHON).Contains("pypy3")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/3.2/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
+  - cmd: "pip --version"
+  - cmd: "python -m pip --version"
   - ps: If(($env:PYTHON).Contains("pypy3")) { pip install --disable-pip-version-check --user --upgrade "pip<8.0.0" } Else { pip install --disable-pip-version-check --user --upgrade pip }
   - cmd: "%CMD_IN_ENV% pip install coverage"
 clone_script:
@@ -50,7 +53,9 @@ test_script:
 after_test:
   - cmd: coverage html
   - cmd: coverage annotate tests.py
+  - cmd: 7z a coverage.zip htmlcov\*
 artifacts:
-  - path: htmlcov\*
+  - path: htmlcov.zip
     name: Coverage Report
+    type: Zip
 deploy: off
