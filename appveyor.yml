@@ -12,7 +12,7 @@ install:
   - cmd: "python --version"
   - cmd: "pip install --disable-pip-version-check --user --upgrade pip"
   - cmd: "%CMD_IN_ENV% pip install coverage"
-  - ps: If(($env:PYTHON).Contains("pypy") { pip install setuptools }
+  - ps: If(($env:PYTHON).Contains("pypy")) { pip install setuptools }
 clone_script:
   - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
 environment:
