@@ -11,7 +11,7 @@ install:
   - cmd: "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
   - cmd: "python --version"
   - ps: If(($env:PYTHON).Contains("pypy")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
-  - cmd: "pip install --disable-pip-version-check --user --upgrade pip"
+  - cmd: 'pip install --disable-pip-version-check --user --upgrade "pip<8.0.0"'
   - cmd: "%CMD_IN_ENV% pip install coverage"
 clone_script:
   - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
