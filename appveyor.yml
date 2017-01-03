@@ -50,7 +50,7 @@ environment:
 build_script:
   - cmd: python -B setup.py build
 test_script:
-  - cmd: coverage run tests.py
+  - cmd: "%PYTHON%\Scripts\coverage" run tests.py
 after_test:
   - cmd: coverage html
   - cmd: coverage annotate tests.py
