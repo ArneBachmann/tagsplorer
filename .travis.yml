@@ -20,7 +20,7 @@ matrix:
 #      dist: precise
 #      python: pypy3
 install: "pip install coverage"
-script: python setup.py build && coverage run tests.py && coverage annotate tests.py
+script: python setup.py build && coverage run tests.py && coverage html && coverage annotate tests.py
 cache:
   directories:
     - $HOME/.cache/pip
