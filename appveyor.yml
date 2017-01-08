@@ -15,12 +15,13 @@ install:
   - ps: If(($env:PYTHON).Contains("pypy3")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/3.2/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
   - cmd: "pip --version"
   - cmd: "python -m pip --version"
-  - ps: If(($env:PYTHON).Contains("pypy3")) { pip install --disable-pip-version-check --user --upgrade "pip<8.0.0" } Else { pip install --disable-pip-version-check --user --upgrade pip }
-  - cmd: "%CMD_IN_ENV% pip install coverage"
+  - ps: If(($env:PYTHON).Contains("pypy3")) { python -m pip install --disable-pip-version-check --user --upgrade "pip<8.0.0" } Else { python -m pip install --disable-pip-version-check --user --upgrade pip }
+#  - cmd: python -m pip install --upgrade pip
+  - cmd: "%CMD_IN_ENV% python -m pip install coverage"
 clone_script:
   - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
 environment:
-  PYTHONDONTWRITEBYTECODE: True
+  PYTHONDONTWRITEBYTECODE: True  # avoid writing __pycache__ dirs for Python 3
   matrix:
     - PYTHON: "C:\\pypy2"
       platform: x86
@@ -49,7 +50,7 @@ environment:
 build_script:
   - cmd: python -B setup.py build
 test_script:
-  - cmd: coverage run tests.py
+  - cmd: "%PYTHON%\Scripts\coverage" run tests.py
 after_test:
   - cmd: coverage html
   - cmd: coverage annotate tests.py
