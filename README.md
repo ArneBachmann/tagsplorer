@@ -108,7 +108,7 @@ After determination of potential folders in a first search step, the found folde
 Using the tagsplorer's `-i` option, we can create an empty configuration file which also serves as the marker for the file tree's root (just like the `.svn` or `.git` folders).
 Usually, all access to the configuration file should be performed through the `tp.py` command line interface or the `lib.py` library functions. For quick initialization, however, it may be benefitial to add some options manually.
 The file generally follows the Windows ini-file structure, but without any higher substitution logic.
-The first line contains a timestamp to ensure that the index's `*.dmp` file is not outdated.
+The first line contains a timestamp to ensure that the index's `*.idx` file is not outdated.
 
 For each section, including the root section `[]`, any number of occurencens of the following options may be added.
 The following list describes all potential settings:
@@ -168,7 +168,7 @@ If files are hard-linked between different locations in the file tree and are su
 
 1. Option: tagsplorer has to intercept update/checkout and re-establish file links according to its metadata (configuration). This is hard to guarantee.
 2. Option: Add ignore details to the used VCS (.gitignore or SVN ignore list) for all linked (or rather mapped) files. The danger here is of course to ignore files that later could be added manually, and not being able to distinguish between automatically ignored files, and those that the user wants to ignore on purpose.
-3. Option: As by the current design the snapshot `*.dmp` file is not persisted in VCS (TODO add ignore automatically), all links can be recreated on first file tree walk (as option 1), even if linked files were earlier submitted as separate files, the folder walk would re-establish the link (potentially asking the user to confirm linking forcing to choose one master version, of issueing a warning for diverging file contents).
+3. Option: As by the current design the snapshot `*.idx` file is not persisted in VCS (TODO add ignore automatically), all links can be recreated on first file tree walk (as option 1), even if linked files were earlier submitted as separate files, the folder walk would re-establish the link (potentially asking the user to confirm linking forcing to choose one master version, of issueing a warning for diverging file contents).
 
 ## Other design decisions
 * The implementation of the simple switch for `case_sensitive` raised quite a lot of semantic questions. For one, should file extensions be treated differently from file names? Is there a benefit of ignoring case for extensions, but not for the actual names? Probably not. Secondly, if we store data case-normalized in the index, we lose the relationship to the actual writings of the indexed folder names, which might cause problems. This would only occur on a case_sensitive file system with `case_sensitive` set to `false`. As a conclusion, we might need to separate storage of tag dirs from other tags or file extensions, or modify search operation to case-normalize instead of doing this in the index, which would slow down the program. Current conclusion: Tough, would need mapping from case-normalized to actual naming on filesystem, or lower() comparisons all over the place :-( to be delayed
@@ -188,7 +188,7 @@ If files are hard-linked between different locations in the file tree and are su
 # Development
 
 ## Git and Github workflows
-The master branch should always run fine and contain the latest stable version (release). Currently we are pre-V1.0 therefore everything is still happening on master.
+The master branch should always run fine and contain the latest stable version (release). Currently we are pre-V1.0 therefore everything is still happening either on master or on other branches without announcement.
 Development activities are merged on the develop branch, and only merged to master for a release.
 
 # Known issues
