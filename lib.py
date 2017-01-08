@@ -31,7 +31,7 @@ else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
     def warn(s): print >> sys.stderr, "Warning: ", s
   if LOG >= ERROR:
     def error(s): print >> sys.stderr, "Error:   ", s
-# OS-dependent definitions
+# OS-dependent definitions can be put hereafter
 
 
 # Constants
@@ -444,12 +444,12 @@ class Indexer(object):
       first = False
     return list([path for path in paths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path)])  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
 
-  def findFiles(_, aFolder, poss, excludes = [], strict = True):
+  def findFiles(_, aFolder, poss, negs = [], strict = True):
     ''' Determine files for the given folder.
-        aFolder: folder to filter
-        remainder: positive tags, extension, or file/glob to consider
-        excludes: negative assertions
-        strict: perform real file existence checks
+        aFolder: folder to filter files in
+        poss: positive tags, extension, or file/glob to consider
+        negs: negative assertions
+        strict: perform file existence checks
         returns: (list of filenames for given folder, has a skip marker file)
     '''
     remainder = set(poss) - set(aFolder.split(SLASH)[1:])  # split folder path into tags and remove from remaining criteria
@@ -490,7 +490,7 @@ class Indexer(object):
         if not found: keep = set()  # if no inclusive tag
 
       remo = set()  # start with none to remove, than enlarge set
-      for tag in excludes:
+      for tag in negs:
         if tag.startswith(DOT): remo |= set([f for f in files if normalizer.filenorm(f[-len(tag):]) == tag]); continue
         elif isglob(tag) or tag in files: remo |= set([f for f in files if normalizer.globmatch(f, tag)]); continue
         found = False  # marker for case not even a manual tag matched
