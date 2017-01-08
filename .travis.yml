@@ -19,9 +19,7 @@ matrix:
 #    - os: linux
 #      dist: precise
 #      python: pypy3
-install: "pip install coverage"
-script: python setup.py build && coverage run tests.py && coverage annotate tests.py
-cache:
-  directories:
-    - $HOME/.cache/pip
-  timeout: 300000
+install: "pip install --user coverage python-coveralls"  # or "coveralls" instead (alternative package)
+script: python setup.py build && coverage run tests.py && coverage html && coverage annotate tests.py
+after_success:
+  - coveralls

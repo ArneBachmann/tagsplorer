@@ -10,13 +10,23 @@ install:
   - ps: If(-not(Test-Path($env:PYTHON))) { & appveyor\install.ps1 }
   - cmd: "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
   - cmd: "python --version"
-  - ps: If(($env:PYTHON).Contains("pypy")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
-  - cmd: "pip install --disable-pip-version-check --user --upgrade pip"
-  - cmd: "%CMD_IN_ENV% pip install coverage"
+  - cmd: "pip --version"
+  - ps: If(($env:PYTHON).Contains("pypy2")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py',     "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
+  - ps: If(($env:PYTHON).Contains("pypy3")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/3.2/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
+  - cmd: "pip --version"
+  - cmd: "python -m pip --version"
+  - ps: If(($env:PYTHON).Contains("pypy3")) { python -m pip install --disable-pip-version-check --user --upgrade "pip<8.0.0" } Else { python -m pip install --disable-pip-version-check --user --upgrade pip }
+#  - cmd: python -m pip install --upgrade pip
+  - cmd: "%CMD_IN_ENV% python -m pip install coverage"
 clone_script:
   - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
 environment:
+  PYTHONDONTWRITEBYTECODE: True  # avoid writing __pycache__ dirs for Python 3
   matrix:
+    - PYTHON: "C:\\pypy2"
+      platform: x86
+    - PYTHON: "C:\\pypy3"
+      platform: x86
     - PYTHON: "C:\\Python27"
       platform: x86
     - PYTHON: "C:\\Python27-x64"
@@ -37,17 +47,16 @@ environment:
       platform: x86
     - PYTHON: "C:\\Miniconda35-x64"
       platform: x64
-    - PYTHON: "C:\\pypy2"
-      platform: x86
-    - PYTHON: "C:\\pypy3"
-      platform: x86
 build_script:
-  - cmd: python setup.py build
+  - cmd: python -B setup.py build
 test_script:
-  - cmd: coverage run tests.py
+  - cmd: "%PYTHON%\Scripts\coverage" run tests.py
 after_test:
+  - cmd: coverage html
   - cmd: coverage annotate tests.py
+  - cmd: 7z a coverage.zip htmlcov\*
 artifacts:
-  - path: htmlcov\*
+  - path: htmlcov.zip
     name: Coverage Report
+    type: Zip
 deploy: off

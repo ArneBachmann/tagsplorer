@@ -13,35 +13,33 @@ PYTHON = os.path.realpath(sys.executable)
 REPO = '_test-data'
 CFG = '.tagsplorer.cfg'
 IDX = '.tagsplorer.idx'
+SVN = os.path.exists('.svn')
 
 def call(argstr): return subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE).communicate()[0]
 
-def runP(argstr):  # replaces old implementation to allow for coverage stats
+def runP(argstr):  # instead of script call via Popen, to allow for full coverage stats
+  oldv, oldo, olde = sys.argv, sys.stdout, sys.stderr
   sys.argv = ["tp.py"] + argstr.split(" ")
-  oldo, olde = sys.stdout, sys.stderr
   buf = StringIO()
   sys.stdout = sys.stderr = buf
   tp.Main().parse()  # initiates script run due to overriding sys.path above
-  sys.stdout, sys.stderr = oldo, olde
+  sys.argv, sys.stdout, sys.stderr = oldv, oldo, olde
   return buf.getvalue()
 
 def setUpModule():
+  ''' Test suite setup: missing SKIP removes index and reverts config '''
   if not os.environ.get("SKIP", False):
     try: os.unlink(REPO + os.sep + IDX)
     except: pass  # if earlier tests finished without errors
-    try:
-      call("svn revert %s" % (REPO + os.sep + CFG))  # for subversion
-   #    call("git checkout %s/%s" % (REPO, CFG))  # for git
-    except: pass
+    if SVN:  call("svn revert %s" % (REPO + os.sep + CFG))  # for subversion
+    else:    call("git checkout %s/%s" % (REPO, CFG))  # for git
   runP("-r %s -u -l1" % REPO)  # initial indexing, invisible
 
 def tearDownModule():
   if not os.environ.get("SKIP", False):
     os.unlink(REPO + os.sep + IDX)
-    try:
-      call("svn revert %s" % (REPO + os.sep + CFG))  # for subversion
-      #    call("git checkout %s/%s" % (REPO, CFG))  # for git
-    except: pass
+    if SVN: call("svn revert %s" % (REPO + os.sep + CFG))  # for subversion
+    else:   call("git checkout %s/%s" % (REPO, CFG))  # for git
 
 
 class TestRepoTestCase(unittest.TestCase):
@@ -97,6 +95,11 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("2 files found", runP("-r %s -s one,test -l1" % REPO))  # one direct match and one mapped
     _.assertIn("/2.2", runP("-r %s -s two,test -l1" % REPO))  # direct match for test in /one
     _.assertIn("/a.a", runP("-r %s -s two,test -l1" % REPO))  # mapped match for test from /two
+
+  def testMappedOnlyFilename(_):
+    ''' Find a certain filename, crawling entire tree. '''
+    _.assertIn("No folder match", runP("-r %s -s 2.2 -l1" % REPO))
+    _.assertIn("3 files found", runP("-r %s -s 2.2 -l1" % REPO))
 
   def testMappedGlobExclude(_):
     pass
