@@ -10,14 +10,11 @@ install:
   - ps: If(-not(Test-Path($env:PYTHON))) { & appveyor\install.ps1 }
   - cmd: "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
   - cmd: "python --version"
-  - cmd: "pip --version"
   - ps: If(($env:PYTHON).Contains("pypy2")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py',     "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
   - ps: If(($env:PYTHON).Contains("pypy3")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/3.2/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
-  - cmd: "pip --version"
-  - cmd: "python -m pip --version"
-  - ps: If(($env:PYTHON).Contains("pypy3")) { python -m pip install --disable-pip-version-check --user --upgrade "pip<8.0.0" } Else { python -m pip install --disable-pip-version-check --user --upgrade pip }
-#  - cmd: python -m pip install --upgrade pip
-  - cmd: "%CMD_IN_ENV% python -m pip install coverage"
+  - ps: If(($env:PYTHON).Contains("pypy3")) { python -m pip install --disable-pip-version-check --upgrade "pip<8.0.0" } Else { python -m pip install --disable-pip-version-check --upgrade pip } # downgrade pip
+  - ps: If(($env:PYTHON).Contains("pypy") { pip -m pip --version } else { pip --version }  # points to CPython, even when running Pypy (because pypy has no \Scripts folder)
+  - cmd: "python -m pip install coverage"
 clone_script:
   - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
 environment:
@@ -50,10 +47,9 @@ environment:
 build_script:
   - cmd: python -B setup.py build
 test_script:
-  - ps: ($env.PYTHON)/Scripts/coverage run tests.py
+  - ps: If(($env:PYTHON).Contains("pypy") { ($env.PYTHON)/bin/coverage run tests.py } Else { coverage run tests.py }
 after_test:
-  - ps: ($env.PYTHON)/Scripts/coverage html
-  - ps: ($env.PYTHON)/Scripts/coverage annotate tests.py
+  - ps: If(($env:PYTHON).Contains("pypy") { ($env.PYTHON)/bin/coverage coverage html; ($env.PYTHON)/bin/coverage annotate tests.py } Else { coverage html; coverage annotate tests.py }
   - cmd: 7z a coverage.zip htmlcov\*
 artifacts:
   - path: htmlcov.zip
