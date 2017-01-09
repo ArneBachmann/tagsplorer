@@ -50,10 +50,10 @@ environment:
 build_script:
   - cmd: python -B setup.py build
 test_script:
-  - cmd: "%PYTHON%\Scripts\coverage" run tests.py
+  - ps: ($env.PYTHON)/Scripts/coverage run tests.py
 after_test:
-  - cmd: coverage html
-  - cmd: coverage annotate tests.py
+  - ps: ($env.PYTHON)/Scripts/coverage html
+  - ps: ($env.PYTHON)/Scripts/coverage annotate tests.py
   - cmd: 7z a coverage.zip htmlcov\*
 artifacts:
   - path: htmlcov.zip
