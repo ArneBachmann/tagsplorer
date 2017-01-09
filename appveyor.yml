@@ -13,7 +13,7 @@ install:
   - ps: If(($env:PYTHON).Contains("pypy2")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py',     "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
   - ps: If(($env:PYTHON).Contains("pypy3")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/3.2/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
   - ps: If(($env:PYTHON).Contains("pypy3")) { python -m pip install --disable-pip-version-check --upgrade "pip<8.0.0" } Else { python -m pip install --disable-pip-version-check --upgrade pip } # downgrade pip
-  - ps: If(($env:PYTHON).Contains("pypy") { pip -m pip --version } else { pip --version }  # points to CPython, even when running Pypy (because pypy has no \Scripts folder)
+  - ps: If(($env:PYTHON).Contains("pypy")) { pip -m pip --version } else { pip --version }  # points to CPython, even when running Pypy (because pypy has no \Scripts folder)
   - cmd: "python -m pip install coverage"
 clone_script:
   - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
@@ -47,9 +47,9 @@ environment:
 build_script:
   - cmd: python -B setup.py build
 test_script:
-  - ps: If(($env:PYTHON).Contains("pypy") { ($env.PYTHON)/bin/coverage run tests.py } Else { coverage run tests.py }
+  - ps: If(($env:PYTHON).Contains("pypy")) { ($env.PYTHON)/bin/coverage run tests.py } Else { coverage run tests.py }
 after_test:
-  - ps: If(($env:PYTHON).Contains("pypy") { ($env.PYTHON)/bin/coverage coverage html; ($env.PYTHON)/bin/coverage annotate tests.py } Else { coverage html; coverage annotate tests.py }
+  - ps: If(($env:PYTHON).Contains("pypy")) { ($env.PYTHON)/bin/coverage coverage html; ($env.PYTHON)/bin/coverage annotate tests.py } Else { coverage html; coverage annotate tests.py }
   - cmd: 7z a coverage.zip htmlcov\*
 artifacts:
   - path: htmlcov.zip
