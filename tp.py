@@ -2,8 +2,6 @@
 # This script is written for easiest command-line access
 #
 # Globbing on tags not supported by design
-# TODO check if globs operate only on files or accidentally also on folders.
-# TODO separate timestamp from conf once more - better to exclude from vcs (?) or use modtim?
 # TODO simplify find, add from, add map option (?)
 
 import optparse
@@ -156,7 +154,7 @@ class Main(object):
       for p in poss: paths[:] = [x for x in paths if normalizer.globmatch(safeRSplit(x, SLASH), p)] # successively reduce paths down to matching positive tags TODO matches t?st but not tes*
       for n in negs: paths[:] = [x for x in paths if not normalizer.globmatch(safeRSplit(x, SLASH), n)]
       if _.options.log >= 1: info("Found %d paths for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
-      info("%d directories found for +<%s> -<%s>." % (len(paths), ",".join(poss), ".".join(negs)))
+      info("%d folders found for +<%s> -<%s>." % (len(paths), ",".join(poss), ".".join(negs)))
       if len(paths) > 0: printo("\n".join(paths))#idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
       return
     dcount, counter, skipped = 0, 0, []  # if not only folders, but also files
@@ -200,7 +198,7 @@ class Main(object):
       if cfg.addTag(parent[len(root):], file, poss, negs, options.force): modified = True
     if modified and not options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
 
-  def setConfig(_, unset = False, get = False):
+  def config(_, unset = False, get = False):
     ''' Define, retrieve or remove a global configuration parameter. '''
     value = ((_.options.setconfig if not get else _.options.getconfig) if not unset else _.options.unsetconfig)
     if value is None: warn("Missing global configuration key argument"); return
@@ -260,9 +258,9 @@ class Main(object):
     if _.options.init: _.initIndex()
     elif _.options.update: _.updateIndex()
     elif _.options.tag: _.add()
-    elif _.options.getconfig: _.setConfig(get = True)
-    elif _.options.setconfig: _.setConfig()
-    elif _.options.unsetconfig: _.setConfig(unset = True)
+    elif _.options.getconfig: _.config(get = True)
+    elif _.options.setconfig: _.config()
+    elif _.options.unsetconfig: _.config(unset = True)
     elif len(_.args) > 0: _.find()  # default action is always find
     elif _.options.test: import doctest; doctest.testmod(verbose = _.options.verbose); sys.exit(0)
     else: error("No option given.")

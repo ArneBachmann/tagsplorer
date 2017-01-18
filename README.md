@@ -98,6 +98,10 @@ Here is a short description of valid programoptions and arguments:
 
   Do things even against warning or in a potentially dangerous situations: Creating a new index root file, adding tag file patterns already covered by globs for that tag.
 
+* `--dirs`
+
+  List only folders, plus allows glob matching on folder names (but only for the already reduced set of paths of by remaining non-glob tags, or from all paths if none found at all).
+
 # Architecture and program semantics
 ## Search algorithm
 In general, simple boolean set operations. The index maps tags to folders, with the risk of false positives (it's an over-specified, optimistic index, linking folders with both inclusive or exclusive manual tag settings and tags mapped from other folders, plus file extension information).
@@ -176,6 +180,8 @@ If files are hard-linked between different locations in the file tree and are su
 * Although semantically better suited, in many places we don't use `not a.startswith(b)`, rather the shorter (and faster) `a[0] != b`, but we must ensure a length > 0 of course.
 
 * Program output is written to stdout for further processing by other tools, all logging on stderr.
+
+* Globbing on folders is not intended to work, because the index is made for quick checks. It does nevertheless work when no matching folders were found (due to glob patterns) and traversing the entire folder tree. A second option is to use the `--dirs` option. TODO add tests, because it seems not all to work
 
 * For the "skip folder" logic, we *could* have used a semantics of "index the folder, but don't recurse into its sub-folders". However, we prefer marking and skipping each sub-folder, because it's more flexible; implementation complexity may be similar.
 
