@@ -100,7 +100,7 @@ Here is a short description of valid programoptions and arguments:
 
 * `--dirs`
 
-  List only folders, plus allows glob matching on folder names (but only for the already reduced set of paths of by remaining non-glob tags, or from all paths if none found at all).
+  List only matching folders instead matchng files in matching folders, plus allows glob matching on folder names (but only for the already reduced set of paths of by remaining non-glob tags, or from all paths if none found at all).
 
 # Architecture and program semantics
 ## Search algorithm
