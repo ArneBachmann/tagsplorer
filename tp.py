@@ -153,10 +153,11 @@ class Main(object):
       warn("No folder match; cannot filter on folder names. Checking entire folder tree")  # the logic is wrong: we ignore lots of tags while finding folders, and the continue filtering. better first filter on exts or all, then continue??
       paths = idx.findFolders([], [], True)  # return all folders names unfiltered (except ignore/skip without marker files)
     if _.options.onlyfolders:
-      for p in poss: paths[:] = [x for x in paths if normalizer.globmatch(safeRSplit(x, SLASH), p)]
+      for p in poss: paths[:] = [x for x in paths if normalizer.globmatch(safeRSplit(x, SLASH), p)] # successively reduce paths down to matching positive tags TODO matches t?st but not tes*
       for n in negs: paths[:] = [x for x in paths if not normalizer.globmatch(safeRSplit(x, SLASH), n)]
       if _.options.log >= 1: info("Found %d paths for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
       info("%d directories found for +<%s> -<%s>." % (len(paths), ",".join(poss), ".".join(negs)))
+      if len(paths) > 0: printo("\n".join(paths))#idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
       return
     dcount, counter, skipped = 0, 0, []  # if not only folders, but also files
     for path, (files, skip) in ((path, idx.findFiles(path, poss, negs)) for path in paths):
