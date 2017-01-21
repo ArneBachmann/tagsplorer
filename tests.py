@@ -132,7 +132,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn('/folders/folder2', wrapChannels(tmp))
 
   def testAddRemove(_):
-    ''' Add a tag, check and remove. '''
+    ''' Add a tag, check and remove. TODO add direct check to index file. '''
     _.assertIn("0 files found", runP("-s missing -l1"))
     _.assertIn("", runP("--add missing,-exclusive tagging/anyfile1"))
     _.assertIn("1 files found", runP("-s missing -l1"))

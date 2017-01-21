@@ -209,7 +209,7 @@ class Main(object):
     poss, negs = splitCrit(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
     normalizer.setupCasematching(cfg.case_sensitive)
-    poss, negs = map(normalizer.filenorm, (poss, negs))
+    poss, negs = map(lambda l: map(normalizer.filenorm, l), (poss, negs))
     if (len(poss) + len(negs)) == 0: error("No tag(s) given to assign for %s" % ", ".join(file)); return
     if xany(lambda p: p in negs, poss): error("Won't allow same tag in both inclusive and exclusiv file assignment: %s" % ', '.join(["'%s'" % p for p in poss if p in negs])); return
 
@@ -220,8 +220,9 @@ class Main(object):
       parent = pathnorm(os.path.abspath(parent))  # check if this is a relative path
       if not isunderroot(root, parent):  # if outside folder tree
         warn("Relative file path outside indexed folder tree; skipping %s" % file); continue
-      if cfg.addTag(parent[len(root):], file, poss, negs, options.force): modified = True
-    if modified and not options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
+      info(repr((poss, negs)))
+      if cfg.addTag(parent[len(root):], file, poss, negs, _.options.force): modified = True
+    if modified and not _.options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
 
   def rem(_):
     ''' Remove previously defined file or glob taggings. '''
@@ -236,7 +237,7 @@ class Main(object):
     poss, negs = splitCrit(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
     normalizer.setupCasematching(cfg.case_sensitive)
-    poss, negs = map(normalizer.filenorm, (poss, negs))
+    poss, negs = map(lambda l: map(normalizer.filenorm, l), (poss, negs))
     if (len(poss) + len(negs)) == 0: error("No tag(s) given to remove for %s" % ", ".join(file)); return
 
     modified = False
@@ -245,8 +246,8 @@ class Main(object):
       parent = pathnorm(os.path.abspath(parent))  # check if this is a relative path
       if not isunderroot(root, parent):  # if outside folder tree
         warn("Relative file path outside indexed folder tree; skipping %s" % file); continue
-      if cfg.delTag(parent[len(root):], file, poss, negs, options.force): modified = True
-    if not _.options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
+      if cfg.delTag(parent[len(root):], file, poss, negs, _.options.force): modified = True
+    if modified and not _.options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
 
   def parse(_):
     ''' Main logic that analyses the command line arguments and starts an opteration. '''
@@ -256,7 +257,7 @@ class Main(object):
     op.add_option('-u', '--update', action = "store_true", dest = "update", help = "Update index, crawling files in folder tree")
     op.add_option('-s', '--search', action = "store_true", dest = "find", help = "Find files by tags (default action if no option given)")
     op.add_option('-t', '--tag', action = "store", dest = "tag", help = "Set tag(s) for given file(s) or glob(s): tp.py -t tag,tag2,-tag3... file,glob...")
-    op.add_option('-d', '--untag', action = "untag", dest = "untag", help = "Unset tag(s) for given file(s) or glob(s): tp.py -d tag,tag2,-tag3... file,glob...")
+    op.add_option('-d', '--untag', action = "store", dest = "untag", help = "Unset tag(s) for given file(s) or glob(s): tp.py -d tag,tag2,-tag3... file,glob...")
     op.add_option('-r', '--root', action = "store", dest = "root", type = str, help = "Specify root folder for index and configuration")
     op.add_option('-l', '--log', action = "store", dest = "log", type = int, default = 0, help = "Set log level (0=none, 1=debug, 2=trace)")
     op.add_option('-x', '--exclude', action = "append", dest = "excludes", default = [], help = "Tags to ignore")  # allow multiple args

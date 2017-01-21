@@ -107,12 +107,14 @@ normalizer = Normalizer()  # to keep a static module-reference
 
 class ConfigParser(object):
   ''' Much simplified config file (ini file) reader. No line continuation, no colon separation, no symbolic replacement, no comments, no empty lines. '''
+
   def __init__(_): _.sections = collections.OrderedDict()  # to assure same order on every load/write operation
+
   def load(_, fd):
     ''' Read from file object to enable reading from arbitrary data source and position.
         returns global config
     '''
-    title = None; section = dd()  # this dict initializes any missing value with an empty list
+    title = None; section = dd()  # this dict initializes any missing value with an empty list TODO make ordered default dict, but couldn't find any compatible solution
     for line in xreadlines(fd):
       line = line.strip()  # just in case of incorrect formatting
       if line.startswith('['):  # new section detected: first store last section
@@ -133,6 +135,7 @@ class ConfigParser(object):
       else: break  # an empty line terminates file
     if len(section) > 0: _.sections[title] = section  # last store OLD:  and title is not None
     return { k.lower(): v if v.lower() not in ("true", "false") else v.lower().strip() == "true" for k, v in (wrapExc(lambda: kv.split("=")[:2], lambda: (kv, None)) for kv in _.sections.get("", {}).get(GLOBAL, [])) }  # return global config map for convenience
+
   def store(_, fd, parent = None):  # write to file object to alloyw for additional contents
     if parent is not None:  # store parent's properties
       if "" not in _.sections: _.sections[intern("")] = dd()
