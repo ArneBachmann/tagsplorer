@@ -11,35 +11,38 @@ else:
 
 PYTHON = os.path.realpath(sys.executable)
 REPO = '_test-data'
-CFG = '.tagsplorer.cfg'
-IDX = '.tagsplorer.idx'
 SVN = os.path.exists('.svn')
 
 def call(argstr): return subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE).communicate()[0]
 
 def runP(argstr):  # instead of script call via Popen, to allow for full coverage stats
+  def tmp():
+    sys.argv = ["tp.py", "-r", REPO] + argstr.split(" ")
+    tp.Main().parse()  # initiates script run due to overriding sys.path above
+  return wrapChannels(tmp)
+
+def wrapChannels(func):
   oldv, oldo, olde = sys.argv, sys.stdout, sys.stderr
-  sys.argv = ["tp.py", "-r", REPO] + argstr.split(" ")
   buf = StringIO()
   sys.stdout = sys.stderr = buf
-  tp.Main().parse()  # initiates script run due to overriding sys.path above
+  func()
   sys.argv, sys.stdout, sys.stderr = oldv, oldo, olde
   return buf.getvalue()
 
 def setUpModule():
   ''' Test suite setup: missing SKIP removes index and reverts config '''
   if not os.environ.get("SKIP", False):
-    try: os.unlink(REPO + os.sep + IDX)
+    try: os.unlink(REPO + os.sep + lib.INDEX)
     except: pass  # if earlier tests finished without errors
-    if SVN:  call("svn revert %s" % (REPO + os.sep + CFG))  # for subversion
-    else:    call("git checkout %s/%s" % (REPO, CFG))  # for git
+    if SVN:  call("svn revert %s" % (REPO + os.sep + lib.CONFIG))  # for subversion
+    else:    call("git checkout %s/%s" % (REPO, lib.CONFIG))  # for git
   runP("-u -l1")  # initial indexing, invisible
 
 def tearDownModule():
   if not os.environ.get("SKIP", False):
-    os.unlink(REPO + os.sep + IDX)
-    if SVN: call("svn revert %s" % (REPO + os.sep + CFG))  # for subversion
-    else:   call("git checkout %s/%s" % (REPO, CFG))  # for git
+    os.unlink(REPO + os.sep + lib.INDEX)
+    if SVN: call("svn revert %s" % (REPO + os.sep + lib.CONFIG))  # for subversion
+    else:   call("git checkout %s/%s" % (REPO, lib.CONFIG))  # for git
 
 
 class TestRepoTestCase(unittest.TestCase):
@@ -120,32 +123,34 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Cannot have multiple", runP("-s .ext1 .ext2 -l1"))
     _.assertIn("1 files found", runP("-s .ext1,extension -l1"))
 
-@unittest.SkipTest
-def findTest_():
-  cfg = lib.Config(); cfg.log = 1
-  cfg.load(os.path.join("..", "..", lib.CONFIG))
-  i = lib.Indexer("../..")
-  i.log = 1  # set log level
-  i.walk(cfg)  # index files
-  print(i.findFolders(["docman", "recrawl"]))  # ['/projects/ADocManB/target/classes/de/arnebachmann/docman/recrawl', '/projects/ADocManB/src/de/arnebachmann/docman/recrawl']
-  print(i.findFolders(["owncloud", "pascal"]))  # ['/projects/owncloud']
-  print(i.findFolders(["docman", "recrawl"], ["target"]))  # ['/projects/ADocManB/src/de/arnebachmann/docman/recrawl']
-  print([i.findFiles(x, ["owncloud", "pascal"], []) for x in i.findFolders(["owncloud", "pascal"])])
-  print(i.findFolders(sys.argv[1:]))
+  def testFindFolder(_):
+    def tmp():
+      i = lib.Indexer(REPO)
+      i.log = 1  # set log level
+      i.load(os.path.join(REPO, lib.INDEX), True, False)
+      print i.findFolders(["folders", "folder2"])[0]
+    _.assertIn('/folders/folder2', wrapChannels(tmp))
 
-@unittest.SkipTest
-def unwalkTest_():
-  i = lib.Indexer("../..")
-  i.store(os.path.join("..", "..", lib.INDEX), config_too = False)
-  i.load(os.path.join("..", "..", lib.INDEX))  # try to reload index - has mismatching timestamp and will recreate index
-  i.unwalk()
-  print(i.tagdir2paths)
-  for x, v in lib.dictviewitems(i.tagdir2paths):
-    print(i.tagdirs[x], list(i.getPaths(v)))
-  print(i.find(["Toolsold", "de"]))
+  def testAddRemove(_):
+    ''' Add a tag, check and remove. '''
+    _.assertIn("0 files found", runP("-s missing -l1"))
+    _.assertIn("", runP("--add missing,-exclusive tagging/anyfile1"))
+    _.assertIn("1 files found", runP("-s missing -l1"))
+    _.assertIn("", runP("--untag missing,-exclusive tagging/anyfile1"))
+    _.assertIn("0 files found", runP("-s missing -l1"))
+
+
+  def testUnwalk(_):
+    def tmp():
+      i = lib.Indexer(REPO)
+      i.log = 1  # set log level
+      i.load(os.path.join(REPO, lib.INDEX), True, False)
+      i.unwalk()
+    _.assertEqual(len(wrapChannels(tmp).split("\n")), 31)
 
 @unittest.SkipTest
 def compressionTest_():
+  ''' This is not a unit test, rather a benchmark test code. '''
   i = lib.Indexer("../..")
   import timeit
   for j in range(10):
@@ -160,6 +165,7 @@ def load_tests(loader, tests, ignore):
   tests.addTests(doctest.DocTestSuite(lib))
   tests.addTests(doctest.DocTestSuite(tp))
   return tests
+
 
 if __name__ == '__main__':
   import unittest

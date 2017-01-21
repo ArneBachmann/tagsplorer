@@ -56,17 +56,23 @@ Here is a short description of valid programoptions and arguments:
   There can be any number of arguments, which optionally can also be specified in a comma-separated way (after positives tags), or using the `-x` option.
   Note, however, as the command line interface cannot distinguish between valid options and negative tag arguments well, negative (exclusive) tag arguments must be specified after either after a double-dash `--` or after a comma. TODO this is error-prone if using wrong options we'd get wrong results (e.g. --verbose would search for exclusive tag -verbose).
 
-* `--exclude tag1[,tag2[,tags...]]` or `-x`
+* `--exclude tag[,tag2[,tags...]]` or `-x`
 
-  Specify exclusive tags when searching.
+  Specify tags to exclude explicity when searching (not listing any folders that match these tags).
   TODO check if not accidentally still accepting +/-.
   TODO check if we can remove this option? only when -tag coincides with an option.
   We don't employ a --yes --no (-y -n) syntax, as it would collide with -n (--simulate)
 
-* `--tag [+][-]tag1[,[+][-]tag2[,tags...]] file[,file2[,files...]]` or `-t`
+* `--tag [+][-]tag[,[+][-]tag2[,tags...]] file[,file2[,files...]]` or `-t`
 
-  Specifies a (set of) (inclusive or exlusive) tag(s) for the following file names, or glob patterns.
+  Specifies a (set of) (inclusive or exlusive) tag(s) for the following file name(s) or glob patterns.
   This information is stored in the configuration file and is respected in the index upon next search and file tree walk.
+
+* `--untag` [+][-]tag[,tag2[,tags...]] file[,file2[,files...]] or `--del`
+
+  Specifies a (set of) (inclusive or exclusive) tag(s) to be removed for the following file name(s) or glob patterns.
+  The tagging information stored in the configuration file is updated accordingly.
+  Removing a positive yet unset tag does not automatically invert it into an exclusive mark. Removal works solely on a pattern-basis, never on actual files currently found or matched by existing glob patterns.
 
 * `--log level` or `-l`
 

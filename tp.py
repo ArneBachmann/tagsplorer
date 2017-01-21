@@ -2,7 +2,6 @@
 # This script is written for easiest command-line access
 #
 # Globbing on tags not supported by design
-# TODO simplify find, add from, add map option (?)
 
 import optparse
 from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports
@@ -151,7 +150,7 @@ class Main(object):
       warn("No folder match; cannot filter on folder names. Checking entire folder tree")  # the logic is wrong: we ignore lots of tags while finding folders, and the continue filtering. better first filter on exts or all, then continue??
       paths = idx.findFolders([], [], True)  # return all folders names unfiltered (except ignore/skip without marker files)
     if _.options.onlyfolders:
-      for p in poss: paths[:] = [x for x in paths if normalizer.globmatch(safeRSplit(x, SLASH), p)] # successively reduce paths down to matching positive tags TODO matches t?st but not tes*
+      for p in poss: paths[:] = [x for x in paths if normalizer.globmatch(safeRSplit(x, SLASH), p)] # successively reduce paths down to matching positive tags
       for n in negs: paths[:] = [x for x in paths if not normalizer.globmatch(safeRSplit(x, SLASH), n)]
       if _.options.log >= 1: info("Found %d paths for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
       info("%d folders found for +<%s> -<%s>." % (len(paths), ",".join(poss), ".".join(negs)))
@@ -164,39 +163,6 @@ class Main(object):
       dcount += 1
       if len(files) > 0: printo("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
     if _.options.log >= 1: info("%d files found in %d checked paths for +<%s> -<%s>." % (counter, dcount, ",".join(poss), ".".join(negs)))
-
-  def add(_):
-    ''' Add one or more (inclusive adn/or exclusive) tag(s) to the appended file and glob argument(s).
-        We don't detect glob specifications that are subsets of or contradict existing tag globs.
-        But we can detect files as subsets of existing globs, and vice versa, to issue warnings (inc/exc).
-        _.options: options structure from optparse, using root, log, tag, strict, simulate
-        filez: list of files or glob patterns
-        returns: None
-    '''
-    folder = getRoot(_.options, _.args)
-    root = pathnorm(os.path.abspath(folder))
-    if _.options.log >= 1: info("Using configuration from %s" % folder)
-    cfg = Config(); cfg.log = _.options.log  # need to load config early for case_sensitive flag
-    cfg.load(os.path.join(folder, CONFIG))
-
-    filez = _.tags  # process function arguments
-    tags = safeSplit(_.options.tag, ",")
-    poss, negs = splitCrit(tags, lambda e: e[0] != '-')
-    poss, negs = removeTagPrefixes(poss, negs)
-    normalizer.setupCasematching(cfg.case_sensitive)
-    poss, negs = map(normalizer.filenorm, (poss, negs))
-    if (len(poss) + len(negs)) == 0: error("No tag(s) given for %s" % ", ".join(file)); return
-    if xany(lambda p: p in negs, poss): error("Won't allow same tag in both inclusive and exclusiv file assignment: %s" % ', '.join(["'%s'" % p for p in poss if p in negs])); return
-
-    modified = False
-    for file in filez:
-      if _.options.strict and not (os.path.exists(file) or xany(fnmatch.filter(os.listdir("."), file))): warn("File or glob not found, skipping %s" % file)  # TODO allow other relative/absolute paths than CWD
-      parent, file = os.path.split(file)
-      parent = pathnorm(os.path.abspath(parent))  # check if this is a relative path
-      if not isunderroot(root, parent):  # if outside folder tree
-        warn("Relative file path outside indexed folder tree; skipping %s" % file); continue
-      if cfg.addTag(parent[len(root):], file, poss, negs, options.force): modified = True
-    if modified and not options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
 
   def config(_, unset = False, get = False):
     ''' Define, retrieve or remove a global configuration parameter. '''
@@ -227,6 +193,61 @@ class Main(object):
       except: pass
     if not _.options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
 
+  def add(_):
+    ''' Add one or more (inclusive adn/or exclusive) tag(s) to the appended file and glob argument(s).
+        We don't detect glob specifications that are subsets of or contradict existing tag globs.
+        But we can detect files as subsets of existing globs, and vice versa, to issue warnings (inc/exc).
+    '''
+    folder = getRoot(_.options, _.args)
+    root = pathnorm(os.path.abspath(folder))
+    if _.options.log >= 1: info("Using configuration from %s" % folder)
+    cfg = Config(); cfg.log = _.options.log  # need to load config early for case_sensitive flag
+    cfg.load(os.path.join(folder, CONFIG))
+
+    filez = _.args  # process function arguments
+    tags = safeSplit(_.options.tag, ",")
+    poss, negs = splitCrit(tags, lambda e: e[0] != '-')
+    poss, negs = removeTagPrefixes(poss, negs)
+    normalizer.setupCasematching(cfg.case_sensitive)
+    poss, negs = map(normalizer.filenorm, (poss, negs))
+    if (len(poss) + len(negs)) == 0: error("No tag(s) given to assign for %s" % ", ".join(file)); return
+    if xany(lambda p: p in negs, poss): error("Won't allow same tag in both inclusive and exclusiv file assignment: %s" % ', '.join(["'%s'" % p for p in poss if p in negs])); return
+
+    modified = False
+    for file in filez:
+      if _.options.strict and not (os.path.exists(file) or xany(fnmatch.filter(os.listdir("."), file))): warn("File or glob not found, skipping %s" % file)  # TODO allow other relative/absolute paths than CWD
+      parent, file = os.path.split(file)
+      parent = pathnorm(os.path.abspath(parent))  # check if this is a relative path
+      if not isunderroot(root, parent):  # if outside folder tree
+        warn("Relative file path outside indexed folder tree; skipping %s" % file); continue
+      if cfg.addTag(parent[len(root):], file, poss, negs, options.force): modified = True
+    if modified and not options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
+
+  def rem(_):
+    ''' Remove previously defined file or glob taggings. '''
+    folder = getRoot(_.options, _.args)
+    root = pathnorm(os.path.abspath(folder))
+    if _.options.log >= 1: info("Using configuration from %s" % folder)
+    cfg = Config(); cfg.log = _.options.log  # need to load config early for case_sensitive flag
+    cfg.load(os.path.join(folder, CONFIG))
+
+    filez = _.args  # process function arguments
+    tags = safeSplit(_.options.untag, ",")
+    poss, negs = splitCrit(tags, lambda e: e[0] != '-')
+    poss, negs = removeTagPrefixes(poss, negs)
+    normalizer.setupCasematching(cfg.case_sensitive)
+    poss, negs = map(normalizer.filenorm, (poss, negs))
+    if (len(poss) + len(negs)) == 0: error("No tag(s) given to remove for %s" % ", ".join(file)); return
+
+    modified = False
+    for file in filez:  # TODO allow globs here! in linux use escaping in front of * or ?
+      parent, file = os.path.split(file)
+      parent = pathnorm(os.path.abspath(parent))  # check if this is a relative path
+      if not isunderroot(root, parent):  # if outside folder tree
+        warn("Relative file path outside indexed folder tree; skipping %s" % file); continue
+      if cfg.delTag(parent[len(root):], file, poss, negs, options.force): modified = True
+    if not _.options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
+
   def parse(_):
     ''' Main logic that analyses the command line arguments and starts an opteration. '''
     ts = time.time()  # https://docs.python.org/3/library/optparse.html#optparse-option-callbacks
@@ -234,7 +255,8 @@ class Main(object):
     op.add_option('--init', action = "store_true", dest = "init", help = "Create empty index (repository root)")
     op.add_option('-u', '--update', action = "store_true", dest = "update", help = "Update index, crawling files in folder tree")
     op.add_option('-s', '--search', action = "store_true", dest = "find", help = "Find files by tags (default action if no option given)")
-    op.add_option('-t', '--tag', action = "store", dest = "tag", help = "Set tag(s) for given file(s): tp.py -t tag1,tag2,-tag3... file1,glob1...")
+    op.add_option('-t', '--tag', action = "store", dest = "tag", help = "Set tag(s) for given file(s) or glob(s): tp.py -t tag,tag2,-tag3... file,glob...")
+    op.add_option('-d', '--untag', action = "untag", dest = "untag", help = "Unset tag(s) for given file(s) or glob(s): tp.py -d tag,tag2,-tag3... file,glob...")
     op.add_option('-r', '--root', action = "store", dest = "root", type = str, help = "Specify root folder for index and configuration")
     op.add_option('-l', '--log', action = "store", dest = "log", type = int, default = 0, help = "Set log level (0=none, 1=debug, 2=trace)")
     op.add_option('-x', '--exclude', action = "append", dest = "excludes", default = [], help = "Tags to ignore")  # allow multiple args
@@ -258,6 +280,7 @@ class Main(object):
     if _.options.init: _.initIndex()
     elif _.options.update: _.updateIndex()
     elif _.options.tag: _.add()
+    elif _.options.untag: _.rem()
     elif _.options.getconfig: _.config(get = True)
     elif _.options.setconfig: _.config()
     elif _.options.unsetconfig: _.config(unset = True)

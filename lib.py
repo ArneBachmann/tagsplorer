@@ -484,7 +484,7 @@ class Indexer(object):
               else: news &= set([i] if normalizer.filenorm(i) in files and (not strict or isfile(_.root + folder + SLASH + i)) else [])  # is no glob: add only if file exists
             for e in safeSplit(exc, ","):  # if tag is manually specified, exempt these files (add back)
               if isglob(e): news |= set([n for n in news if normalizer.globmatch(n, e)])
-              else: news.discard(e)  # add file to keep TODO why not remove?
+              else: news.discard(e)  # add file to keep
             keep = keep & news
             break  # TODO froms checking missing before break!
         if not found: keep = set()  # if no inclusive tag
