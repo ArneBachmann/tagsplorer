@@ -140,7 +140,7 @@ class Main(object):
       idx = Indexer(os.path.dirname(filename)); idx.log = _.options.log
       idx.load(filename)
     normalizer.setupCasematching(idx.cfg.case_sensitive)
-    poss, negs = map(lambda lizt: [normalizer.filenorm(elem) for elem in lizt], (poss, negs))
+    poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))
     if _.options.log >= 1: info("Effective filters +<%s> -<%s>" % (",".join(poss), ",".join(negs)))
     if _.options.log >= 1: info("Searching for tags +<%s> -<%s> in %s" % (','.join(poss), ','.join(negs), os.path.dirname(filename)))
     paths = idx.findFolders([p for p in poss if not isglob(p) and DOT not in p[1:]], [n for n in negs if not isglob(n) and DOT not in n[1:]])
@@ -209,7 +209,7 @@ class Main(object):
     poss, negs = splitCrit(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
     normalizer.setupCasematching(cfg.case_sensitive)
-    poss, negs = map(lambda l: map(normalizer.filenorm, l), (poss, negs))
+    poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))
     if (len(poss) + len(negs)) == 0: error("No tag(s) given to assign for %s" % ", ".join(file)); return
     if xany(lambda p: p in negs, poss): error("Won't allow same tag in both inclusive and exclusiv file assignment: %s" % ', '.join(["'%s'" % p for p in poss if p in negs])); return
 
@@ -220,7 +220,6 @@ class Main(object):
       parent = pathnorm(os.path.abspath(parent))  # check if this is a relative path
       if not isunderroot(root, parent):  # if outside folder tree
         warn("Relative file path outside indexed folder tree; skipping %s" % file); continue
-      info(repr((poss, negs)))
       if cfg.addTag(parent[len(root):], file, poss, negs, _.options.force): modified = True
     if modified and not _.options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
 
@@ -237,7 +236,7 @@ class Main(object):
     poss, negs = splitCrit(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
     normalizer.setupCasematching(cfg.case_sensitive)
-    poss, negs = map(lambda l: map(normalizer.filenorm, l), (poss, negs))
+    poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))
     if (len(poss) + len(negs)) == 0: error("No tag(s) given to remove for %s" % ", ".join(file)); return
 
     modified = False

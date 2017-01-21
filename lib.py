@@ -12,6 +12,7 @@ if sys.version_info.major >= 3:
   import pickle  # instead of cPickle
   from sys import intern
   from functools import reduce  # not built-in anymore
+  lmap = lambda pred, lizt: list(map(pred, lizt))
   dictviewkeys, dictviewvalues, dictviewitems = dict.keys, dict.values, dict.items  # returns generators operating on underlying data in Python 3
   def xreadlines(fd): return fd.readlines()
   debug = eval('lambda s: print("Debug:   " + s, file = sys.stderr)') if LOG >= DEBUG else lambda _: None
@@ -193,11 +194,11 @@ class Config(object):
     pname = "Glob" if is_glob else "File"
     keep_pos, keep_neg = dd(), dd()
 
-    for tag in poss + negs:
+    for tag in poss + negs:  # iterate over both, because sub-processing is more complex than this distinction
       keep = True  # marker
       for line in conf.get(TAG, []):
         tg, inc, exc = line.split(SEPA)
-        if tg == tag:  # if positive tag specified in configuration
+        if tg == tag:  # if tag specified in configuration
           for i in safeSplit(inc, ","):
             if isglob(i) and not is_glob and normalizer.globmatch(pattern, i):  # is file matched by inclusive glob
               keep = force
@@ -216,18 +217,17 @@ class Config(object):
       if keep: (keep_pos if tag in poss else keep_neg)[tag].append(pattern)
 
      # Now really add new patterns to config
-    modified = list(keep_pos.keys()) + list(keep_neg.keys())
-    for tag in modified:
+    for tag in (list(keep_pos.keys()) + list(keep_neg.keys())):
       entry = dictget(conf, TAG, [])
       missing = True
       for i, line in enumerate(entry):
         tg, inc, exc = line.split(SEPA)
         if tg == tag:  # found: augment existing entry
-          entry[i] = "%s;%s;%s" % (tag, ",".join(safeSplit(inc, ",") + keep_pos.get(tag, [])), ",".join(safeSplit(exc, ",") + keep_neg.get(tag, [])))
+          entry[i] = "%s;%s;%s" % (tag, ",".join(sorted(set(safeSplit(inc, ",") + keep_pos.get(tag, [])))), ",".join(sorted(set(safeSplit(exc, ",") + keep_neg.get(tag, [])))))
           missing = False  # tag already exists
           break  # line iteration
       if missing: entry.append("%s;%s;%s" % (tag, ",".join(keep_pos.get(tag, [])), ",".join(keep_neg.get(tag, []))))  # if new: create entry
-    return len(modified) > 0
+    return len(keep_pos.keys()) + len(keep_neg.keys()) > 0
 
 
 class Indexer(object):
