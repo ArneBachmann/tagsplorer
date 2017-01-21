@@ -181,7 +181,7 @@ class Config(object):
     if _.log >= 1: info("Wrote %d config bytes" % os.stat(filename)[6])
 
   def addTag(_, folder, pattern, poss, negs, force = False):
-    ''' For given  folder, add poss and negs tags to file or glob pattern.
+    ''' For given folder, add poss and negs tags to file or glob pattern.
         folder: folder to operate on (relative to root)
         pattern: the file or glob pattern to add to the configuration
         poss: inclusive tags or globs to add
@@ -228,6 +228,20 @@ class Config(object):
           break  # line iteration
       if missing: entry.append("%s;%s;%s" % (tag, ",".join(keep_pos.get(tag, [])), ",".join(keep_neg.get(tag, []))))  # if new: create entry
     return len(keep_pos.keys()) + len(keep_neg.keys()) > 0
+
+  def delTag(_, folder, pattern, poss, negs):
+    ''' For given folder, remove poss and negs tags to file or glob pattern.
+        folder: folder to operate on (relative to root)
+        pattern: the file or glob pattern to remove from the configuration
+        poss: inclusive tags or globs to remove
+        negs: exclusive tags or globs to remove
+        returns: modified?
+    '''
+    conf = dictget(_.paths, folder, {})  # creates empty config entry if it doesn't exist
+    is_glob = isglob(pattern)
+    pname = "Glob" if is_glob else "File"
+    # TODO exact string from inc/excl patterns
+    return False
 
 
 class Indexer(object):

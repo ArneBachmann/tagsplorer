@@ -223,7 +223,7 @@ class Main(object):
       if cfg.addTag(parent[len(root):], file, poss, negs, _.options.force): modified = True
     if modified and not _.options.simulate: cfg.store(os.path.join(folder, CONFIG), getTs())
 
-  def rem(_):
+  def remove(_):
     ''' Remove previously defined file or glob taggings. '''
     folder = getRoot(_.options, _.args)
     root = pathnorm(os.path.abspath(folder))
@@ -280,7 +280,7 @@ class Main(object):
     if _.options.init: _.initIndex()
     elif _.options.update: _.updateIndex()
     elif _.options.tag: _.add()
-    elif _.options.untag: _.rem()
+    elif _.options.untag: _.remove()
     elif _.options.getconfig: _.config(get = True)
     elif _.options.setconfig: _.config()
     elif _.options.unsetconfig: _.config(unset = True)
