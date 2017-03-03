@@ -25,7 +25,7 @@ def runP(argstr):  # instead of script call via Popen, to allow for full coverag
     tp.Main().parse()  # initiates script run due to overriding sys.path above
   logFile.write("TEST: " + argstr + "\n")
   try: res = wrapChannels(tmp)
-  except Exception, E: logFile.write(str(E) + "\n"); raise E
+  except Exception as E: logFile.write(str(E) + "\n"); raise E
   logFile.write(res)
   logFile.write("\n")
   return res
