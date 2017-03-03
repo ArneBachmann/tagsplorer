@@ -226,7 +226,7 @@ class Main(object):
       repoRelative = file.startswith("/")
       while file.startswith("/"): file = file[1:]  # prune repo-relative marker(s)
       if not (os.path.exists(os.path.join(folder, file) if repoRelative else file) or fnmatch.filter(os.listdir(folder if repoRelative else os.getcwd()), file)):
-        warn("File or glob not found%s %s%s" % (", skipping" if _.options.strict else ", but added anyway", "/" if repoRelative else "./", file))  # TODO allow other relative/absolute paths than CWD
+        warn("File or glob not found%s %s%s" % (", skipping" if _.options.strict else ", but added anyway", "/" if repoRelative else "./", file))
         if _.options.strict: continue
       parent, file = os.path.split(file)
       parent = pathnorm(os.path.abspath(os.path.join(_.options.root, parent)))  # check if this is a relative path
@@ -253,7 +253,7 @@ class Main(object):
     if (len(poss) + len(negs)) == 0: error("No tag(s) given to remove for %s" % ", ".join(file)); return
 
     modified = False
-    for file in filez:  # TODO allow globs here! in linux use escaping in front of * or ?
+    for file in filez:
       repoRelative = file.startswith("/")
       while file.startswith("/"): file = file[1:]  # prune repo-relative marker(s)
       parent, file = os.path.split(file)
@@ -278,7 +278,7 @@ class Main(object):
     op.add_option('-r', '--root', action = "store", dest = "root", type = str, help = "Specify root folder for index and configuration")
     op.add_option('-i', '--index', action = "store", dest = "index", type = str, default = None, help = "Specify alternative index location independent of root folder")
     op.add_option('-l', '--log', action = "store", dest = "log", type = int, default = 0, help = "Set log level (0=none, 1=debug, 2=trace)")
-    op.add_option('-x', '--exclude', action = "append", dest = "excludes", default = [], help = "Tags to ignore")  # allow multiple args
+    op.add_option('-x', '--exclude', action = "append", dest = "excludes", default = [], help = "Tags to ignore")  # TODO allow multiple args via list
     op.add_option('--no', action = "append", dest = "excludes", default = [], help = "Same as --exclude or -tag")  # same as above TODO allow multiple arguments
     op.add_option('--get', action = "store", dest = "getconfig", default = None, help = "Get global configuration parameter")
     op.add_option('--set', action = "store", dest = "setconfig", default = None, help = "Set global configuration parameter key=value")

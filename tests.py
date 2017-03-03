@@ -163,7 +163,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("anyway", runP("--untag missing,-exclusive /tagging/anyfile1 -l 2 --relax"))
     _.assertIn("0 files found", runP("-s missing -l 2"))
 
-
+  @unittest.SkipTest
   def testUnwalk(_):
     def tmp():
       i = lib.Indexer(REPO)
