@@ -5,7 +5,7 @@
 import collections, copy, fnmatch, os, re, sys, time, zlib
 
 DEBUG = 3; INFO = 2; WARN = 1; ERROR = 0
-LOG = INFO  # select maximum log level
+LOG = INFO if not bool(os.environ.get("DEBUG", "False")) else DEBUG
 
 # Version-dependent imports
 if sys.version_info.major >= 3:
@@ -21,18 +21,18 @@ if sys.version_info.major >= 3:
   error = eval('lambda s: print("Error:   " + s, file = sys.stderr)') if LOG >= ERROR else lambda _: None
 else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
   import cPickle as pickle
+  lmap = map
   dictviewkeys, dictviewvalues, dictviewitems = dict.iterkeys, dict.itervalues, dict.iteritems
   def xreadlines(fd): return fd.xreadlines()
   debug, info, warn, error = [lambda _: None] * 4
-  if LOG >= DEBUG:
-    def debug(s): print >> sys.stderr, "Debug:   ", s
-  if LOG >= INFO:
-    def info(s): print >> sys.stderr, "Info:    ", s
-  if LOG >= WARN:
-    def warn(s): print >> sys.stderr, "Warning: ", s
   if LOG >= ERROR:
     def error(s): print >> sys.stderr, "Error:   ", s
-# OS-dependent definitions can be put hereafter
+    if LOG >= WARN:
+      def warn(s): print >> sys.stderr, "Warning: ", s
+      if LOG >= INFO:
+        def info(s): print >> sys.stderr, "Info:    ", s
+        if LOG >= DEBUG:
+          def debug(s): print >> sys.stderr, "Debug:   ", s
 
 
 # Constants
@@ -75,7 +75,7 @@ def lappend(lizt, elem): lizt.append(elem); return lizt   # functional list.appe
 def appendandreturnindex(lizt, elem): return len(lappend(lizt, elem)) - 1
 def isunderroot(root, folder): return os.path.commonprefix([root, folder]).startswith(root)
 def isglob(f): return '*' in f or '?' in f
-def getTs(): return int(time.time() * 10.)
+def getTs(): return long(time.time() * 1000.)
 def safeSplit(s, d): return s.split(d) if s != '' else []
 def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s
 def dd(tipe = list): return collections.defaultdict(tipe)
@@ -163,7 +163,7 @@ class Config(object):
     with open(filename, 'r') as fd:  # HINT: don't use rb, because in Python 3 this return bytes objects
       if _.log >= 1: info("Comparing configuration timestamp for " + filename)
       timestamp = float(fd.readline().rstrip())
-      if (index_ts is not None) and round(100 * timestamp) == round(100 * index_ts):
+      if (index_ts is not None) and timestamp == index_ts:
         if _.log >= 1: info("Skip loading configuration, because index is up to date")
         return False  # no skew detected, allow using old index' interned configuration ("self" will be discarded)
       if _.log >= 1: info("Loading configuration from file system" + ("" if index_ts is None else " because index is outdated"))
@@ -172,8 +172,9 @@ class Config(object):
       normalizer.setupCasematching(_.case_sensitive)
       return True
 
-  def store(_, filename, timestamp):
-    ''' Store configuration to file, prepending data by the timestamp. '''
+  def store(_, filename, timestamp = None):
+    ''' Store configuration to file, prepending data by the timestamp, or the current time. '''
+    if timestamp is None: timestamp = getTs()  # for all cases we modify only config file (e.g. tag, untag, config)
     cp = ConfigParser(); cp.sections = _.paths
     with open(filename, "w") as fd:  # don't use wb for Python 3 compatibility
       if _.log >= 1: info("Writing configuration to " + filename)
@@ -194,15 +195,15 @@ class Config(object):
     pname = "Glob" if is_glob else "File"
     keep_pos, keep_neg = dd(), dd()
 
-    for tag in poss + negs:  # iterate over both, because sub-processing is more complex than this distinction
+    for tag in poss + negs:  # iterate over both, because sub-processing is more complex than making this distinction below
       keep = True  # marker
-      for line in conf.get(TAG, []):
+      for line in conf.get(TAG, []):  # all tag markers for the given folder
         tg, inc, exc = line.split(SEPA)
-        if tg == tag:  # if tag specified in configuration
+        if tg == tag:  # if tag specified in configuration line
           for i in safeSplit(inc, ","):
             if isglob(i) and not is_glob and normalizer.globmatch(pattern, i):  # is file matched by inclusive glob
               keep = force
-              (warn if force else error)("File '%s' already included by glob pattern '%s' for tag '%s'%s" % (pattern, i, tag, "" if force else ", skipping"), file = sys.stderr)
+              (warn if force else error)("File '%s' already included by glob pattern '%s' for tag '%s'%s" % (pattern, i, tag, "" if force else ", skipping"))
               break
             elif i == pattern:  # file/glob already contained
               keep = False; error("%s '%s' already%s specified for tag '%s'%s" % (pname, pattern, " inversely" if tag in negs else "", tag, "" if force else ", skipping")); break
@@ -225,6 +226,7 @@ class Config(object):
         if tg == tag:  # found: augment existing entry
           entry[i] = "%s;%s;%s" % (tag, ",".join(sorted(set(safeSplit(inc, ",") + keep_pos.get(tag, [])))), ",".join(sorted(set(safeSplit(exc, ",") + keep_neg.get(tag, [])))))
           missing = False  # tag already exists
+          if _.options.log > 2: debug("Adding tags <%s>/<%s>" % (",".join(keep_pos.get(tag, [])), ",".join(keep_neg.get(tag, []))))
           break  # line iteration
       if missing: entry.append("%s;%s;%s" % (tag, ",".join(keep_pos.get(tag, [])), ",".join(keep_neg.get(tag, []))))  # if new: create entry
     return len(keep_pos.keys()) + len(keep_neg.keys()) > 0
@@ -238,10 +240,23 @@ class Config(object):
         returns: modified?
     '''
     conf = dictget(_.paths, folder, {})  # creates empty config entry if it doesn't exist
-    is_glob = isglob(pattern)
-    pname = "Glob" if is_glob else "File"
-    # TODO exact string from inc/excl patterns
-    return False
+    changed = False
+    for tag in poss + negs:
+      for line in conf.get(TAG, []):  # all tag markers for the given folder
+        tg, inc, exc = line.split(SEPA)
+        if tg == tag:  # if tag specified in configuration line
+          ii = safeSplit(inc, ",")
+          ee = safeSplit(exc, ",")
+          info(str((ii, ee, pattern)))
+          if pattern in ii and tag in poss:
+            changed = True
+            ii.remove(pattern)
+            if _.log >= 1: debug("Removing positive entry '%s' for tag '%s'" % (pattern, tag))
+          elif pattern in ee and tag in negs:
+            changed = True
+            ee.remove(pattern)
+            if _.log >= 1: debug("Removing negative entry '%s' for tag '%s'" % (pattern, tag))
+    return changed
 
 
 class Indexer(object):
@@ -265,14 +280,15 @@ class Indexer(object):
       cfg = Config(); cfg.log = _.log  # partially read existing configuration to compare with unpickled version, or read fully if timestamp differs
       if (ignore_skew or cfg.load(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)) and recreate_index:
         if _.log >= 1: info("Recreating index considering configuration")
+        _.cfg = cfg  # set more recent config and update
         _.walk()  # re-create this index
-        _.cfg = cfg
         _.store(filename)
 
   def store(_, filename, config_too = True):
     ''' Persist index in a file, including currently active configuration. '''
     with open(filename, "wb") as fd:
-      _.timestamp = getTs()  # assign new date
+      nts = getTs()
+      _.timestamp = _.timestamp + 0.001 if nts <= _.timestamp else nts  # assign new date, ensure always differing from old value
       if _.log >= 1: info("Writing index to " + filename)
       fd.write(zlib.compress(pickle.dumps(_, protocol = PICKLE_VERSION), _.compressed) if _.compressed else pickle.dumps(_, protocol = PICKLE_VERSION))  # WARN: make sure not to have callables on the pickled objects!
       if config_too:
@@ -302,16 +318,16 @@ class Indexer(object):
         Adds all directories as tags unless ignored; considers manually set configuration
         aDir: path relative to root (always with preceding and no trailing forward slash)
     '''
-    if _.log >= 2: info(aDir)
+    if _.log >= 2: info("Walking " + aDir)
 
      # First part: check folder's configuration
     skip, ignore = False, False  # marks dir as "no recursion"/"no tagging" respectively
     adds = []  # additional tags for single files in this folder, not to be promoted to sub-directories
     marks = _.cfg.paths.get(aDir[len(_.root):], {})
-    if SKIP in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' else '') in dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])):
+    if SKIP in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' and SLASH in aDir else '') in dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])):
       if _.log >= 1: info("  Skip %s%s" % (aDir, '' if SKIP in marks else ' due to global skip setting'))
       return  # completely ignore sub-tree
-    elif IGNORE in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' else '') in dictget(dictget(_.cfg.paths, '', {}), IGNORED, [])):  # former checks path cfg, latter checks global ignore TODO allow glob check? TODO add marker file check
+    elif IGNORE in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' and SLASH in aDir else '') in dictget(dictget(_.cfg.paths, '', {}), IGNORED, [])):  # former checks path cfg, latter checks global ignore TODO allow glob check? TODO add marker file check
       ignore = True  # ignore this directory as tag, don't index contents
       if _.log >= 1: info("  Ignore %s%s" % (aDir, '' if IGNORE in marks else ' due to global ignore setting'))
     else:
@@ -342,12 +358,12 @@ class Indexer(object):
       if _.log >= 1: info("  Ignore %s due to local ignore file" % aDir)
       _.tagdir2paths[tags[-1]].remove(parent)  # remove from index and children markers
 
-    for file in (f for f in files if DOT in f[1:]):  # index file extensions
+    for file in (ff for ff in files if DOT in ff[1:]):  # index file extensions
       ext = normalizer.filenorm(file[file.rindex(DOT):])
       i = lindex(_.tags, ext, appendandreturnindex)  # add file extension to local dir's tags only
       adds.append(i); _.tag2paths[i].append(parent)  # add current dir to index of that extension
     tags = tags[:-1] if ignore else [t for t in tags]  # if ignore: all except current, else copy all
-    children = (f[len(aDir) + 1:] for f in filter(isdir, (os.path.join(aDir, d) for d in files)))
+    children = (f[len(aDir) + (1 if not aDir.endswith(SLASH) else 0):] for f in filter(isdir, (os.path.join(aDir, ff) for ff in files)))  # only folders. ternary condition necessary for D:\ root dir
     for child in children:
       idx = len(_.tagdirs)  # add new element at next index
       _.tagdir2parent[idx] = parent
@@ -461,12 +477,12 @@ class Indexer(object):
       first = False
     return list([path for path in paths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path)])  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
 
-  def findFiles(_, aFolder, poss, negs = [], strict = True):
+  def findFiles(_, aFolder, poss, negs = [], force = False):
     ''' Determine files for the given folder.
         aFolder: folder to filter files in
         poss: positive tags, extension, or file/glob to consider
         negs: negative assertions
-        strict: perform file existence checks
+        force: don't perform file existence checks
         returns: (list of filenames for given folder, has a skip marker file)
     '''
     remainder = set(poss) - set(aFolder.split(SLASH)[1:])  # split folder path into tags and remove from remaining criteria
@@ -482,7 +498,7 @@ class Indexer(object):
       if IGNFILE in files: continue  # skip is more difficult to handle than ignore, cf. return tuple here and code in tp.find() with return
       if folder == aFolder and SKPFILE in files: willskip = True; info("Skip %s due to local marker file" % folder); continue  # return ([], True)  # TODO semantics: handle mapped folder even for skip local marker?
       conf = _.cfg.paths.get(folder, {})  # if empty, files remains unchanged, we return all of them regularly
-      if _.log >= 2: debug("Conf found for %s: %s" % (folder, str(conf)))
+      if _.log >= 2: debug("Conf found for '%s': %s" % (folder, str(conf)))
       tags = conf.get(TAG, [None])
       keep = set(files)  # start with all to keep, then restrict set
 
@@ -498,7 +514,7 @@ class Indexer(object):
             news = set(files)  # collect all files subsumed under the tag that should remain. hint: this is not a tag ^ tag match!
             for i in safeSplit(inc, ","):  # if tag manually specified, only keep those included files
               if isglob(i): news &= set([f for f in files if normalizer.globmatch(f, i)])  # is glob
-              else: news &= set([i] if normalizer.filenorm(i) in files and (not strict or isfile(_.root + folder + SLASH + i)) else [])  # is no glob: add only if file exists
+              else: news &= set([i] if normalizer.filenorm(i) in files and (force or isfile(_.root + folder + SLASH + i)) else [])  # is no glob: add only if file exists
             for e in safeSplit(exc, ","):  # if tag is manually specified, exempt these files (add back)
               if isglob(e): news |= set([n for n in news if normalizer.globmatch(n, e)])
               else: news.discard(e)  # add file to keep
@@ -519,7 +535,7 @@ class Indexer(object):
             news = set()  # collect all file that should be excluded
             for i in safeSplit(inc, ","):
               if isglob(i): news |= set([f for f in files if normalizer.globmatch(f, i)])  # is glob
-              else: news |= set([i] if i in files and (not strict or isfile(_.root + folder + SLASH + i)) else [])  # is no glob: add, only if exists
+              else: news |= set([i] if i in files and (force or isfile(_.root + folder + SLASH + i)) else [])  # is no glob: add, only if exists
             for e in safeSplit(exc, ","):
               if isglob(e): news -= set([n for n in news if normalizer.globmatch(n, e)])
               else: news.add(e)
@@ -527,7 +543,7 @@ class Indexer(object):
             break
         if not found: remo = set(files)
       files = (files & keep) - remo
-      if _.log >= 2: debug("Files for folder %s: %s (Keep/Remove: %s/%s)" % (folder, ",".join(files), ",".join(keep), ",".join(remo)))
+      if _.log >= 2: debug("Files for folder '%s': %s (Keep/Remove: <%s>/<%s>)" % (folder, ",".join(files), ",".join(keep), ",".join(remo)))
       allfiles |= files
     return (list(allfiles), willskip)
 

@@ -11,7 +11,11 @@ else:
 
 PYTHON = os.path.realpath(sys.executable)
 REPO = '_test-data'
-SVN = os.path.exists('.svn')
+SVN = tp.findRootFolder(None, '.svn') is not None
+print("Using VCS '%s'" % "SVN" if SVN else "Git")
+
+logFile = None
+
 
 def call(argstr): return subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE).communicate()[0]
 
@@ -19,7 +23,12 @@ def runP(argstr):  # instead of script call via Popen, to allow for full coverag
   def tmp():
     sys.argv = ["tp.py", "-r", REPO] + argstr.split(" ")
     tp.Main().parse()  # initiates script run due to overriding sys.path above
-  return wrapChannels(tmp)
+  logFile.write("TEST: " + argstr + "\n")
+  try: res = wrapChannels(tmp)
+  except Exception, E: logFile.write(str(E) + "\n"); raise E
+  logFile.write(res)
+  logFile.write("\n")
+  return res
 
 def wrapChannels(func):
   oldv, oldo, olde = sys.argv, sys.stdout, sys.stderr
@@ -31,15 +40,19 @@ def wrapChannels(func):
 
 def setUpModule():
   ''' Test suite setup: missing SKIP removes index and reverts config '''
-  if not os.environ.get("SKIP", False):
+  os.environ["DEBUG"] = "True"
+  global logFile
+  logFile = open(".testRun.log", "w")
+  if not os.environ.get("SKIP", "False").lower() == "true":
     try: os.unlink(REPO + os.sep + lib.INDEX)
     except: pass  # if earlier tests finished without errors
     if SVN:  call("svn revert %s" % (REPO + os.sep + lib.CONFIG))  # for subversion
     else:    call("git checkout %s/%s" % (REPO, lib.CONFIG))  # for git
-  runP("-u -l1")  # initial indexing, invisible
+  runP("-u -v")  # initial indexing, invisible
 
 def tearDownModule():
-  if not os.environ.get("SKIP", False):
+  logFile.close()
+  if not os.environ.get("SKIP", "False").lower() == "true":
     os.unlink(REPO + os.sep + lib.INDEX)
     if SVN: call("svn revert %s" % (REPO + os.sep + lib.CONFIG))  # for subversion
     else:   call("git checkout %s/%s" % (REPO, lib.CONFIG))  # for git
@@ -56,11 +69,11 @@ class TestRepoTestCase(unittest.TestCase):
   def testFilenameCaseSetting(_):
     ''' This test confirms that case setting works (only executed on Linux). '''
     _.assertIn("Modified global configuration entry", runP("--set case_sensitive=False -l1"))
-    _.assertIn("Wrote", runP("-u -l1"))  # TODO swap order when bug has been fixed to match initial .cfg
+    _.assertIn("Wrote", runP("-u -v"))  # TODO swap order when bug has been fixed to match initial .cfg
     _.assertIn("1 files found", runP("-s x.x -l1"))
     _.assertIn("1 files found", runP("-s X.x -l1"))
     _.assertIn("Modified global configuration entry", runP("--set case_sensitive=True"))
-    _.assertIn("Wrote", runP("-u -l1"))
+    _.assertIn("Wrote", runP("-u -v"))
     _.assertIn("1 files found", runP("-s x.x -l1"))
     _.assertIn("0 files found", runP("-s X.x -l1"))
 
@@ -132,12 +145,23 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn('/folders/folder2', wrapChannels(tmp))
 
   def testAddRemove(_):
-    ''' Add a tag, check and remove. TODO add direct check to index file. '''
-    _.assertIn("0 files found", runP("-s missing -l1"))
-    _.assertIn("", runP("--add missing,-exclusive tagging/anyfile1"))
-    _.assertIn("1 files found", runP("-s missing -l1"))
-    _.assertIn("", runP("--untag missing,-exclusive tagging/anyfile1"))
-    _.assertIn("0 files found", runP("-s missing -l1"))
+    ''' Add a tag, check and remove. '''
+    try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))
+    except: pass
+    _.assertIn("0 files found", runP("-s missing -v"))
+    _.assertIn("File or glob not found", runP("--tag missing,-exclusive /tagging/anyfile1 -v"))
+    _.assertIn("0 files found", runP("-s missing -v"))  # shouldn't be modified above
+    # TODO test adding on existing file, then search
+    # test adding non-existing file, then search
+    _.assertIn("added anyway", runP("--tag missing,-exclusive /tagging/anyfile1 -v --relaxed"))
+    _.assertIn("0 files found", runP("-s missing -v"))  # because file doesn't exist, regardless of tag being defined or not
+    with open(os.path.join(REPO, "tagging", "anyfile1"), "w") as fd: fd.close()  # touch to create file
+    _.assertIn("1 files found", runP("-s missing -v"))
+    try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))
+    except: pass
+    _.assertIn("skipping", runP("--untag missing,-exclusive /tagging/anyfile1 -l 2"))
+    _.assertIn("anyway", runP("--untag missing,-exclusive /tagging/anyfile1 -l 2 --relax"))
+    _.assertIn("0 files found", runP("-s missing -l 2"))
 
 
   def testUnwalk(_):
@@ -146,7 +170,9 @@ class TestRepoTestCase(unittest.TestCase):
       i.log = 1  # set log level
       i.load(os.path.join(REPO, lib.INDEX), True, False)
       i.unwalk()
-    _.assertEqual(len(wrapChannels(tmp).split("\n")), 31)
+    res = wrapChannels(tmp).replace("\r", "")
+    logFile.write(res + "\n")
+    _.assertEqual(len(res.split("\n")), 32)
 
 @unittest.SkipTest
 def compressionTest_():
