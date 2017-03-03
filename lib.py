@@ -68,6 +68,7 @@ def lindex(list, value, otherwise = lambda list, value: None):
   '''
   return wrapExc(lambda: list.index(value), lambda: otherwise(list, value))  # ValueError
 
+ilong = eval("lambda s: int(s)") if sys.version_info.major >= 3 else eval("lambda s: long(s)")
 def isdir(f): return os.path.isdir(f) and not os.path.islink(f) and not os.path.ismount(f)
 def isfile(f): return wrapExc(lambda: os.path.isfile(f) and not os.path.ismount(f) and not os.path.isdir(f), lambda: False)  # on error "no file"
 pathnorm = (lambda s: s.replace("\\", SLASH)) if sys.platform == 'win32' else (lambda s: s)  # as lambda to allow dynamic definition
@@ -75,7 +76,7 @@ def lappend(lizt, elem): lizt.append(elem); return lizt   # functional list.appe
 def appendandreturnindex(lizt, elem): return len(lappend(lizt, elem)) - 1
 def isunderroot(root, folder): return os.path.commonprefix([root, folder]).startswith(root)
 def isglob(f): return '*' in f or '?' in f
-def getTs(): return long(time.time() * 1000.)
+def getTs(): return ilong(time.time() * 1000.)
 def safeSplit(s, d): return s.split(d) if s != '' else []
 def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s
 def dd(tipe = list): return collections.defaultdict(tipe)

@@ -141,7 +141,7 @@ class TestRepoTestCase(unittest.TestCase):
       i = lib.Indexer(REPO)
       i.log = 1  # set log level
       i.load(os.path.join(REPO, lib.INDEX), True, False)
-      print i.findFolders(["folders", "folder2"])[0]
+      print(i.findFolders(["folders", "folder2"])[0])
     _.assertIn('/folders/folder2', wrapChannels(tmp))
 
   def testAddRemove(_):
