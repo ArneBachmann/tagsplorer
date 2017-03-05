@@ -2,6 +2,7 @@ Linux: [![Build Status](https://travis-ci.org/ArneBachmann/tagsplorer.svg?branch
 
 # tagsPlorer
 A quick and resource-efficient OS-independent tagging filetree extension tool and library written in Python, working with both Python versions 2 and 3.
+tagsPlorer is licensed under the [Mozilla Public License version 2.0](https://www.mozilla.org/en-US/MPL/2.0/), which can also be found in the [`LICENSE`](LICENSE) file.
 
 Each folder name of the indexed file tree is implicitly treated as a tag name, and additional tags can be set or excluded on singular files or file glob patterns. Contents of other folders in the file tree can virtually be mapped into others.
 The entire system is fully backwards-compatible with the common file tree metaphor present in most file systems.
@@ -9,14 +10,16 @@ The entire system is fully backwards-compatible with the common file tree metaph
 ## Initial example
 If you happen to manage your data in a tree-like manner, as supported by most all currently used file systems, your data may look like that:
 
- /personal/money/tax/2016
- /personal/money/tax/2017
- /personal/money/invoice/2016
- /personal/money/invoice/2017
- /personal/travel/2011/hawaii
- /personal/travel/2011/new york
- /work/projects/archive
- /work/projects/current/communication
+----
+/personal/money/tax/2016
+/personal/money/tax/2017
+/personal/money/invoice/2016
+/personal/money/invoice/2017
+/personal/travel/2011/hawaii
+/personal/travel/2011/new york
+/work/projects/archive
+/work/projects/current/communication
+ ----
 
 This is just an example, but gives you the general idea. In each folder, you have files of varying types like office documents, media, or other.
 tagsPlorer allows you to create virtual "views" over your file by asking for "all Word documents from 2016", or "all money-related spreadsheets files from 2017" etc.:
@@ -194,11 +197,14 @@ If files are hard-linked between different locations in the file tree and are su
 
 ## Other design decisions
 * Configuration and index synchronisation
-...
 
-* The implementation of the simple switch for `case_sensitive` raised quite a lot of semantic questions. For one, should file extensions be treated differently from file names? Is there a benefit of ignoring case for extensions, but not for the actual names? Probably not. Secondly, if we store data case-normalized in the index, we lose the relationship to the actual writings of the indexed folder names, which might cause problems. This would only occur on a case_sensitive file system with `case_sensitive` set to `false`. As a conclusion, we might need to separate storage of tag dirs from other tags or file extensions, or modify search operation to case-normalize instead of doing this in the index, which would slow down the program. Current conclusion: Tough, would need mapping from case-normalized to actual naming on filesystem, or lower() comparisons all over the place :-( to be delayed
+  * Most operations only modify the configuration file, updating its integrated timestamp
 
-* Although semantically better suited, in many places we don't use `not a.startswith(b)`, rather the shorter (and faster) `a[0] != b`, but we must ensure a length > 0.
+  * Only search operations require and up-to-date index. If a time skew between the configuration file's timestamp and the interned configuration inside the index is detected, the index and all timestamps is updated by re-indexing all files.
+
+* The implementation of the simple switch for `case_sensitive` raised quite a lot of semantic questions. For one, should file extensions be treated differently from file names, and is there a benefit of ignoring case for extensions, but not for the actual names? Probably not. Secondly, if we store data case-normalized in the index, we lose the relationship to the actual writings of the indexed folder names, which might cause problems. This would only occur on a case_sensitive file system with `case_sensitive` set to `false`. As a conclusion, we might need to separate storage of tag dirs from other tags or file extensions, or modify search operation to case-normalize instead of doing this in the index, which would slow down the program. Current conclusion: Tough, would need mapping from case-normalized to actual naming on filesystem, or lower() comparisons all over the place :-( to be delayed
+
+* Although semantically better suited, in many places we don't use `not a.startswith(b)`, rather the shorter (and faster) `a[0] != b`, but we must of course ensure a length > 0.
 
 * Program output is written to stdout for further processing by other tools, all logging on stderr.
 
@@ -206,9 +212,9 @@ If files are hard-linked between different locations in the file tree and are su
 
 * For the "skip folder" logic, we *could* have used a semantics of "index the folder, but don't recurse into its sub-folders". However, we prefer marking and skipping each sub-folder to ignore individually, because it's more flexible; implementation complexity has not been compared, but could be similar.
 
-* Different implementations and replacements for the built-in configuration parser have been tested; there is, however, no version that both a) allows reading values for duplicate keys, and b) is fully interoperable between Python 2 and 3. The alternative of using JSON may be considered, but is potentially harder to edit by humans and requires profiling to make a decision.
+* Different implementations and replacements for the built-in configuration parser have been tested; there is, however, no version that both a) allows reading values for duplicate keys, and b) is fully interoperable between Python 2 and 3. The alternative of using JSON may be considered, but is potentially harder to edit by humans and requires profiling to make a decision. Since configuration files may be persisted by users, this is also a breaking change which would require a migration path.
 
-* The index itself is designed to be both low on memory consumption and fast to load from the file system. After profiling storing it compressed vs. not compressed, the level 2 zlib approach delivered optimal results on both resource restricted and modern office computers, and offers only minimally worse compacted file size compared even to bz2 compression level 9, while almost being as fast to unpickle as pure uncompressed data (which again was faster than any bz2 level).
+* The index itself is designed to be both low on memory consumption and fast to load from the file system. After profiling for storing it compressed vs. not compressed, the level `2` zlib approach delivered optimal results on both resource restricted and modern office computers, and offers only minimally larger compacted file size compared even to `bz2` compression level `9`, while almost being as fast to unpickle as pure uncompressed data (which again was faster than any `bz2` level).
 
 
 
@@ -220,6 +226,4 @@ Development activities are merged on the develop branch, and only merged to mast
 
 # Known issues
 
-* It's possible to commit file names into Subversion, that aren't allowed to checkout on Windows, e.g. `file.`. Since this is no problem that tagsPlorer can solve, we ignore this potential problem. In the code, the only difference was whether to check for the DOT from first to last character, or only from first to second last.
-
-* ...
+* It's possible to commit file names into Subversion from operating systems like Linux, that aren't allowed to checkout on Windows, e.g. `file.` with a trailing dot. Since this is no problem that tagsPlorer can solve, we ignore this potential problem. In the code, the only decision to make was whether to check for the DOT from first to last character, or only from first to second last, which can be seen as premature optimization and unnecessary.

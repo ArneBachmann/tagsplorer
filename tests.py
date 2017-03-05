@@ -1,9 +1,12 @@
+# tagsPlorer test suite  (C) Arne Bachmann https://github.com/ArneBachmann/tagsplorer
+
 import os
 import subprocess
 import sys
 import unittest
 import lib
 import tp
+import traceback
 if sys.version_info.major < 3:
   from StringIO import StringIO
 else:
@@ -21,11 +24,11 @@ def call(argstr): return subprocess.Popen(argstr, shell = True, bufsize = 100000
 
 def runP(argstr):  # instead of script call via Popen, to allow for full coverage stats
   def tmp():
-    sys.argv = ["tp.py", "-r", REPO] + argstr.split(" ")
+    sys.argv = ["tp.py", "-r", REPO] + lib.safeSplit(argstr, " ")
+    logFile.write("TEST: " + " ".join(sys.argv) + " " + repr(argstr) + "\n")
     tp.Main().parse()  # initiates script run due to overriding sys.path above
-  logFile.write("TEST: " + argstr + "\n")
   try: res = wrapChannels(tmp)
-  except Exception as E: logFile.write(str(E) + "\n"); raise E
+  except Exception as E: logFile.write(str(E) + "\n"); traceback.print_exc(file = logFile); raise E
   logFile.write(res)
   logFile.write("\n")
   return res
@@ -139,7 +142,7 @@ class TestRepoTestCase(unittest.TestCase):
   def testFindFolder(_):
     def tmp():
       i = lib.Indexer(REPO)
-      i.log = 1  # set log level
+      i.log = lib.WARN  # set log level
       i.load(os.path.join(REPO, lib.INDEX), True, False)
       print(i.findFolders(["folders", "folder2"])[0])
     _.assertIn('/folders/folder2', wrapChannels(tmp))
@@ -162,6 +165,12 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("skipping", runP("--untag missing,-exclusive /tagging/anyfile1 -l 2"))
     _.assertIn("anyway", runP("--untag missing,-exclusive /tagging/anyfile1 -l 2 --relax"))
     _.assertIn("0 files found", runP("-s missing -l 2"))
+
+  def testNegativeSearch(_):
+    _.assertIn("No option", runP(""))
+    _.assertIn("Potential matches found in 2 folders", runP("-s a -x a1 -v -l2"))  # TODO remove set is same as keep, therefore nothing returned
+    _.assertIn("3 files found", runP("-s a -x a1 -v -l2"))
+    _.assertIn("1 folders found", runP("-s a -x a1 -v -l2 --dirs"))  # TODO handles -a1 as negative on the folders contents. correct semantics?
 
   @unittest.SkipTest
   def testUnwalk(_):

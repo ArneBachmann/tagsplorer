@@ -1,13 +1,15 @@
-# Tagging library to augment OS folder structures by tags (and queries over tags)
-# This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python2 and Python3.
+# tagsPlorer main library  (C) Arne Bachmann https://github.com/ArneBachmann/tagsplorer
+# This is the tagging library to augment OS folder structures by tags (and provide virtual folder view plus queries over tags)
+# This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python 2 and Python 3.
 
 
 import collections, copy, fnmatch, os, re, sys, time, zlib
 
 DEBUG = 3; INFO = 2; WARN = 1; ERROR = 0
-LOG = INFO if not bool(os.environ.get("DEBUG", "False")) else DEBUG
+LOG = INFO if os.environ.get("DEBUG", "False").lower() != "true" else DEBUG  # maximum log level
 
 # Version-dependent imports
+debug, info, warn, error = [lambda _: None] * 4
 if sys.version_info.major >= 3:
   import pickle  # instead of cPickle
   from sys import intern
@@ -15,16 +17,17 @@ if sys.version_info.major >= 3:
   lmap = lambda pred, lizt: list(map(pred, lizt))
   dictviewkeys, dictviewvalues, dictviewitems = dict.keys, dict.values, dict.items  # returns generators operating on underlying data in Python 3
   def xreadlines(fd): return fd.readlines()
-  debug = eval('lambda s: print("Debug:   " + s, file = sys.stderr)') if LOG >= DEBUG else lambda _: None
-  info = eval('lambda s:  print("Info:    " + s, file = sys.stderr)') if LOG >= INFO else lambda _: None
-  warn = eval('lambda s:  print("Warning: " + s, file = sys.stderr)') if LOG >= WARN else lambda _: None
-  error = eval('lambda s: print("Error:   " + s, file = sys.stderr)') if LOG >= ERROR else lambda _: None
+  from functools import reduce  # not built-in
+  printo = eval("lambda s: print(s)")  # perfectly legal use of eval - supporting P2/P3
+  printe = eval("lambda s: print(s, file = sys.stderr)")
+  debug, info, warn, error = (eval("lambda s: printe(\"%s\" + str(s))" % mesg) if LOG >= levl else (lambda _: None) for mesg, levl in zip((_.ljust(8) + " " for _ in ("Debug:",  "Info:", "Warning:", "Error:")), (DEBUG, INFO, WARN, ERROR)))
 else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
   import cPickle as pickle
   lmap = map
   dictviewkeys, dictviewvalues, dictviewitems = dict.iterkeys, dict.itervalues, dict.iteritems
   def xreadlines(fd): return fd.xreadlines()
-  debug, info, warn, error = [lambda _: None] * 4
+  printo = eval("lambda s: sys.stdout.write(str(s) + '\\n') and sys.stdout.flush()")
+  printe = eval("lambda s: sys.stderr.write(str(s) + '\\n') and sys.stderr.flush()")
   if LOG >= ERROR:
     def error(s): print >> sys.stderr, "Error:   ", s
     if LOG >= WARN:
@@ -78,7 +81,7 @@ def isunderroot(root, folder): return os.path.commonprefix([root, folder]).start
 def isglob(f): return '*' in f or '?' in f
 def getTs(): return ilong(time.time() * 1000.)
 def safeSplit(s, d): return s.split(d) if s != '' else []
-def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s
+def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s  # TODO rename
 def dd(tipe = list): return collections.defaultdict(tipe)
 def step(): import pdb; pdb.set_trace()
 def dictget(dikt, key, default):
@@ -103,7 +106,7 @@ def splitCrit(lizt, pred):
 # Classes
 class Normalizer(object):
   def setupCasematching(_, case_sensitive):
-    _.filenorm = str if case_sensitive else str.lower
+    _.filenorm = (lambda s: s) if case_sensitive else (lambda s: s.lower()) # we can't use "str if case_sensitive else str.lower" because for unicode strings this fails, as the function reference comes from the str object
     _.globmatch = fnmatch.fnmatchcase if case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower())  # fnmatch behavior depends on file system, therefore fixed here
 normalizer = Normalizer()  # to keep a static module-reference
 
@@ -415,13 +418,13 @@ class Indexer(object):
       tags = conf.get(TAG, [])
       if len(tags) == 0:
         froms = conf.get(FROM, [])
-        if len(froms) == 0: retain.append(path); continue  # keep for removal, no manual tags in config or mapped config
+        if len(froms) == 0: retain.append(path); continue  # keep for removal, no manual tags in mapped config
         retainit = True
         for other in froms:
           conf2 = _.cfg.paths.get(other, {})
-          if len(conf2) == 0:  # this should not happen, but in case of missing reference
-            error("Encountered missing FROM source config in '%s': '%s'; please repair" % (path, other))
-            break
+          if len(conf2) == 0:  # the mapped folder has no manual tags specified
+#            error("Encountered missing FROM source config in '%s': '%s'; please repair" % (path, other))  # TODO can be removed? what to do here?
+            retainit = True  # TODO is this correct? we don't know anything about the mapped files?
           tags2 = conf2.get(TAG, [])
           if len(tags2) == 0: break  # found from config, but has no tags: no need to consider for removal from removes -> retain
           for value2 in tags2:

@@ -1,18 +1,12 @@
-# Tagging script to augment OS folder structures by tags
-# This script is written for easiest command-line access
+# tagsPlorer command-line application  (C) Arne Bachmann https://github.com/ArneBachmann/tagsplorer
+# This is the main entry point of the tagsPlorer utility
 
 import optparse
 from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports
 from version import __version_info__, __version__  # used by setup.py
 
 # Version-dependent imports
-if sys.version_info.major == 3:
-  from functools import reduce  # not built-in
-  printo = eval("lambda s: print(s)")  # perfectly legal use of eval - supporting P2/P3
-  printe = eval("lambda s: print(s, file = sys.stderr)")
-else:
-  printo = eval("lambda s: sys.stdout.write(str(s) + '\\n') and sys.stdout.flush()")
-  printe = eval("lambda s: sys.stderr.write(str(s) + '\\n') and sys.stderr.flush()")
+if sys.version_info.major == 3: from functools import reduce  # not built-in
 
 
 # Little helper functions
@@ -129,19 +123,17 @@ class Main(object):
         returns: None
         side-effect: print found files
     '''
-    poss = commaArgsIntoList(_.args)
-    poss, negs = splitCrit(poss, lambda e: e[0] != '-')  # potentially including +/-
+    poss, negs = splitCrit(commaArgsIntoList(_.args), lambda e: e[0] != '-')  # potentially including +/-
+    poss.extend(commaArgsIntoList(_.options.find))
     negs.extend(commaArgsIntoList(_.options.excludes))  # each argument could contain , or not
     poss, negs = removeTagPrefixes(poss, negs)
     if len([p for p in poss if p.startswith(DOT)]) > 1: error("Cannot have multiple positive extension filters (would always return empty match)"); return
     folder = getRoot(_.options, _.args)
     index = folder if not _.options.index else _.options.index
     indexFile = os.path.join(index, INDEX)
-    if indexFile is None or not os.path.exists(indexFile):
-      error("No configuration file found. Use -u to update the index."); return
     if not os.path.exists(indexFile):
       error("No index file found. Crawling file tree")
-      idx = updateIndex(_.options, [])  # crawl file tree
+      idx = _.updateIndex()  # crawl file tree
     else:
       idx = Indexer(folder); idx.log = _.options.log
       idx.load(indexFile)
@@ -149,7 +141,7 @@ class Main(object):
     poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))
     if _.options.log >= 1: info("Effective filters +<%s> -<%s>" % (",".join(poss), ",".join(negs)))
     if _.options.log >= 1: info("Searching for tags +<%s> -<%s> in %s" % (','.join(poss), ','.join(negs), os.path.abspath(idx.root)))
-    paths = idx.findFolders([p for p in poss if not isglob(p) and DOT not in p[1:]], [n for n in negs if not isglob(n) and DOT not in n[1:]])
+    paths = idx.findFolders([p for p in poss if not isglob(p) and DOT not in p[1:]], [n for n in negs if not isglob(n) and DOT not in n[1:]]) # TODO remove negs here?
     if _.options.log >= 1: info("Potential matches found in %d folders" % (len(paths)))
     if _.options.log >= 2: [debug(path) for path in paths]  # optimistic: all folders "seem" to match all tags, but only some might actually be (due to excludes etc)
     if len(paths) == 0 and xany(lambda x: isglob(x) or DOT in x, poss + negs):
@@ -175,7 +167,7 @@ class Main(object):
     value = ((_.options.setconfig if not get else _.options.getconfig) if not unset else _.options.unsetconfig)
     if value is None: warn("Missing global configuration key argument"); return
     if not unset and not get and "=" not in value: warn("Global configuration entry must be specified in the form key=value"); return
-    key, value = value.split("=")[:2] if not unset and not get else (value, None)
+    key, value = value.split("=")[:2] if not unset and not get else (value, None)  # assume safe split
     key = key.lower()  # config keys are normalized to lower case
     folder = getRoot(_.options, _.args)
     indexPath = folder if not _.options.index else _.options.index
@@ -272,10 +264,10 @@ class Main(object):
     op = CatchExclusionsParser()
     op.add_option('--init', action = "store_true", dest = "init", help = "Create empty index (repository root)")
     op.add_option('-u', '--update', action = "store_true", dest = "update", help = "Update index, crawling files in folder tree")
-    op.add_option('-s', '--search', action = "store_true", dest = "find", help = "Find files by tags (default action if no option given)")
+    op.add_option('-s', '--search', action = "append", dest = "find", default = [], help = "Find files by tags (default action if no option given)")
     op.add_option('-t', '--tag', action = "store", dest = "tag", help = "Set tag(s) for given file(s) or glob(s): tp.py -t tag,tag2,-tag3... file,glob...")
     op.add_option('-d', '--untag', action = "store", dest = "untag", help = "Unset tag(s) for given file(s) or glob(s): tp.py -d tag,tag2,-tag3... file,glob...")
-    op.add_option('-r', '--root', action = "store", dest = "root", type = str, help = "Specify root folder for index and configuration")
+    op.add_option('-r', '--root', action = "store", dest = "root", type = str, default = None, help = "Specify root folder for index and configuration")
     op.add_option('-i', '--index', action = "store", dest = "index", type = str, default = None, help = "Specify alternative index location independent of root folder")
     op.add_option('-l', '--log', action = "store", dest = "log", type = int, default = 0, help = "Set log level (0=none, 1=debug, 2=trace)")
     op.add_option('-x', '--exclude', action = "append", dest = "excludes", default = [], help = "Tags to ignore")  # TODO allow multiple args via list
@@ -288,12 +280,17 @@ class Main(object):
     op.add_option('--dirs', action = "store_true", dest = "onlyfolders", help = "Only find directories that contain matches")
     op.add_option('-v', action = "store_true", dest = "verbose", help = "Switch only for unit test")
     _.options, _.args = op.parse_args()
-    _.args, excludes = splitCrit(_.args, lambda e: e[0] != '-')
-    _.options.excludes.extend([e[e.rindex('-') + 1:] for e in excludes])  # remove "--" from "--tag", allows to use --tag to exclude this tag, unless it's an option switch
+    if _.options.log >= 2: debug("Options: " + str(_.options))
+    if _.options.log >= 2: debug("Arguments: " + str(_.args))
+    _.args, excludes = splitCrit(_.args, lambda e: e[:2] != '--')  # remove "--" from "--mark", allows to use --mark to exclude this tag (unless it's an option switch)
+    _.options.excludes.extend([e[2:] for e in excludes])
     _.options.log = max(1 if _.options.verbose else 0, _.options.log)
-    if _.options.index and not _.options.root: error("Index location specified (-i) without specifying root (-r)"); return
+    if _.options.index is not None and _.options.root is None: error("Index location specified (-i) without specifying root (-r)"); return
+    if _.options.root is None: _.options.root = os.getcwd()
     if _.options.log >= 1: info("Started at %s" % (time.strftime("%H:%M:%S")))
-    if LOG >= DEBUG: debug("Running in debug mode.")
+    debug("Running in debug mode.")
+    if _.options.log >= 2: debug("Parsed options: " + str(_.options))
+    if _.options.log >= 2: debug("Parsed arguments: " + str(_.args))
     if _.options.init: _.initIndex()
     elif _.options.update: _.updateIndex()
     elif _.options.tag: _.add()
@@ -301,7 +298,7 @@ class Main(object):
     elif _.options.setconfig: _.config()
     elif _.options.getconfig: _.config(get = True)
     elif _.options.unsetconfig: _.config(unset = True)
-    elif len(_.args) > 0: _.find()  # default action is always find
+    elif len(_.args) > 0 or _.options.find or _.options.excludes: _.find()  # default action is always find
     else: error("No option given.")
     if _.options.log >= 1: info("Finished at %s after %.1fs" % (time.strftime("%H:%M:%S"), time.time() - ts))
 
