@@ -20,7 +20,7 @@ if sys.version_info.major >= 3:
   from functools import reduce  # not built-in
   printo = eval("lambda s: print(s)")  # perfectly legal use of eval - supporting P2/P3
   printe = eval("lambda s: print(s, file = sys.stderr)")
-  debug, info, warn, error = (eval("lambda s: printe(\"%s\" + str(s))" % mesg) if LOG >= levl else (lambda _: None) for mesg, levl in zip((_.ljust(8) + " " for _ in ("Debug:",  "Info:", "Warning:", "Error:")), (DEBUG, INFO, WARN, ERROR)))
+  debug, info, warn, error = (eval("lambda *s: printe(\"%s\" + \" \".join([str(_) for _ in s]))" % mesg) if LOG >= levl else (lambda _: None) for mesg, levl in zip((_.ljust(8) + " " for _ in ("Debug:",  "Info:", "Warning:", "Error:")), (DEBUG, INFO, WARN, ERROR)))
 else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
   import cPickle as pickle
   lmap = map
@@ -29,13 +29,13 @@ else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
   printo = eval("lambda s: sys.stdout.write(str(s) + '\\n') and sys.stdout.flush()")
   printe = eval("lambda s: sys.stderr.write(str(s) + '\\n') and sys.stderr.flush()")
   if LOG >= ERROR:
-    def error(s): print >> sys.stderr, "Error:   ", s
+    def error(*s): print >> sys.stderr, "Error:   ", " ".join([str(_) for _ in s])
     if LOG >= WARN:
-      def warn(s): print >> sys.stderr, "Warning: ", s
+      def warn(*s): print >> sys.stderr, "Warning: ", " ".join([str(_) for _ in s])
       if LOG >= INFO:
-        def info(s): print >> sys.stderr, "Info:    ", s
+        def info(*s): print >> sys.stderr, "Info:    ", " ".join([str(_) for _ in s])
         if LOG >= DEBUG:
-          def debug(s): print >> sys.stderr, "Debug:   ", s
+          def debug(*s): print >> sys.stderr, "Debug:   ", " ".join([str(_) for _ in s])
 
 
 # Constants
@@ -62,25 +62,25 @@ def wrapExc(func, otherwise = None):
   try: return func()
   except: return otherwise() if callable(otherwise) else otherwise
 
-def lindex(list, value, otherwise = lambda list, value: None):
+def lindex(lizt, value, otherwise = lambda _lizt, _value: None):
   ''' List index function with lazy computation if not found.
   >>> print(lindex([1, 2], 2))
   1
   >>> print(lindex([], 1))
   None
   '''
-  return wrapExc(lambda: list.index(value), lambda: otherwise(list, value))  # ValueError
+  return wrapExc(lambda: lizt.index(value), lambda: otherwise(lizt, value))  # ValueError
 
 ilong = eval("lambda s: int(s)") if sys.version_info.major >= 3 else eval("lambda s: long(s)")
 def isdir(f): return os.path.isdir(f) and not os.path.islink(f) and not os.path.ismount(f)
 def isfile(f): return wrapExc(lambda: os.path.isfile(f) and not os.path.ismount(f) and not os.path.isdir(f), lambda: False)  # on error "no file"
 pathnorm = (lambda s: s.replace("\\", SLASH)) if sys.platform == 'win32' else (lambda s: s)  # as lambda to allow dynamic definition
-def lappend(lizt, elem): lizt.append(elem); return lizt   # functional list.append that returns self afterwards to avoid new array creation (lizt + [elem])
+def lappend(lizt, elem): (lizt.extend if type(elem) == list else lizt.append)(elem); return lizt   # functional list.append that returns self afterwards to avoid new array creation (lizt + [elem])
 def appendandreturnindex(lizt, elem): return len(lappend(lizt, elem)) - 1
 def isunderroot(root, folder): return os.path.commonprefix([root, folder]).startswith(root)
 def isglob(f): return '*' in f or '?' in f
 def getTs(): return ilong(time.time() * 1000.)
-def safeSplit(s, d): return s.split(d) if s != '' else []
+def safeSplit(s, d = ","): return s.split(d) if s != '' else []
 def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s  # TODO rename
 def dd(tipe = list): return collections.defaultdict(tipe)
 def step(): import pdb; pdb.set_trace()
@@ -204,14 +204,14 @@ class Config(object):
       for line in conf.get(TAG, []):  # all tag markers for the given folder
         tg, inc, exc = line.split(SEPA)
         if tg == tag:  # if tag specified in configuration line
-          for i in safeSplit(inc, ","):
+          for i in safeSplit(inc):
             if isglob(i) and not is_glob and normalizer.globmatch(pattern, i):  # is file matched by inclusive glob
               keep = force
               (warn if force else error)("File '%s' already included by glob pattern '%s' for tag '%s'%s" % (pattern, i, tag, "" if force else ", skipping"))
               break
             elif i == pattern:  # file/glob already contained
               keep = False; error("%s '%s' already%s specified for tag '%s'%s" % (pname, pattern, " inversely" if tag in negs else "", tag, "" if force else ", skipping")); break
-          for e in safeSplit(exc, ","):
+          for e in safeSplit(exc):
             if isglob(e) and not is_glob and normalizer.globmatch(pattern, e):  # is file matched by exclusive glob
               keep = force
               (warn if force else error)("File '%s' excluded by glob pattern '%s' for tag '%s'%s" % (pattern, e, tag, "" if force else ", skipping"))
@@ -228,7 +228,7 @@ class Config(object):
       for i, line in enumerate(entry):
         tg, inc, exc = line.split(SEPA)
         if tg == tag:  # found: augment existing entry
-          entry[i] = "%s;%s;%s" % (tag, ",".join(sorted(set(safeSplit(inc, ",") + keep_pos.get(tag, [])))), ",".join(sorted(set(safeSplit(exc, ",") + keep_neg.get(tag, [])))))
+          entry[i] = "%s;%s;%s" % (tag, ",".join(sorted(set(safeSplit(inc, ",") + keep_pos.get(tag, [])))), ",".join(sorted(set(safeSplit(exc) + keep_neg.get(tag, [])))))
           missing = False  # tag already exists
           if _.options.log > 2: debug("Adding tags <%s>/<%s>" % (",".join(keep_pos.get(tag, [])), ",".join(keep_neg.get(tag, []))))
           break  # line iteration
@@ -249,8 +249,8 @@ class Config(object):
       for line in conf.get(TAG, []):  # all tag markers for the given folder
         tg, inc, exc = line.split(SEPA)
         if tg == tag:  # if tag specified in configuration line
-          ii = safeSplit(inc, ",")
-          ee = safeSplit(exc, ",")
+          ii = safeSplit(inc)
+          ee = safeSplit(exc)
           info(str((ii, ee, pattern)))
           if pattern in ii and tag in poss:
             changed = True
@@ -308,81 +308,84 @@ class Indexer(object):
     _.tagdirs.append("")  # this is root
     _.tagdir2parent[0] = 0  # marker for root (the only self-reference)
     _.tags, _.tag2paths = [], dd()  # temporary structures for manual tag and extension mapping, and respective paths
-    _._walk(_.root)
+    _._walk(_.root)  # recursive indexing
     tagdirs = len(_.tagdirs)
-    _.mapTagsIntoDirs()  # unified with folder entries for simple lookup and filtering
+    rm = _.mapTagsIntoDirsAndCompressIndex()  # unified with folder entries for simple lookup and filtering
     tags = len(_.tags)
     del _.tags, _.tag2paths  # remove temporary structures
-    rm = [tag for tag, dirs in dictviewitems(_.tagdir2paths) if len(dirs) == 0]  # finding entries that were emptied due to ignores
-    for r in rm: _.tagdir2paths.pop(r)  # remove empty lists from index (was too optimistic, removed by ignore or skip)
-    if _.log >= 1: info("Indexed %d folders and %d tags/globs/extensions." % (tagdirs, tags))
+    if _.log >= 1: info("Indexed %d folders and %d tags/globs/extensions, pruned %d unused entries." % (tagdirs, tags, rm))
 
   def _walk(_, aDir, parent = 0, tags = []):
     ''' Recursive walk through folder tree.
         Adds all directories as tags unless ignored; considers manually set configuration
         aDir: path relative to root (always with preceding and no trailing forward slash)
+        parent: the parent folder's index in the index
+        tags: list of aggregated tag/folder names
     '''
     if _.log >= 2: info("Walking " + aDir)
 
      # First part: check folder's configuration
     skip, ignore = False, False  # marks dir as "no recursion"/"no tagging" respectively
-    adds = []  # additional tags for single files in this folder, not to be promoted to sub-directories
+    adds = []  # indexes of additional tags for single files in this folder, not to be promoted to sub-directories (which would only be folder tag names)
+              # these tags apply of course only to certain files, but the index has to be over-generic to catch them and match them in a second step to certain files
     marks = _.cfg.paths.get(aDir[len(_.root):], {})
     if SKIP in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' and SLASH in aDir else '') in dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])):
       if _.log >= 1: info("  Skip %s%s" % (aDir, '' if SKIP in marks else ' due to global skip setting'))
       return  # completely ignore sub-tree
     elif IGNORE in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' and SLASH in aDir else '') in dictget(dictget(_.cfg.paths, '', {}), IGNORED, [])):  # former checks path cfg, latter checks global ignore TODO allow glob check? TODO add marker file check
-      ignore = True  # ignore this directory as tag, don't index contents
       if _.log >= 1: info("  Ignore %s%s" % (aDir, '' if IGNORE in marks else ' due to global ignore setting'))
-    else:
-      if TAG in marks:
-        for t in marks[TAG]:
-          if _.log >= 1: info("  Tag '%s' in %s" % (t, aDir))
-          tag, pos, neg = t.split(SEPA)  # tag name, includes, excludes
-          i = lindex(_.tags, tag, appendandreturnindex)
-          adds.append(i); _.tag2paths[i].append(parent)
-      if FROM in marks:  # use tags from that folder to include here
-        for f in marks[FROM]:
-          if _.log >= 1: info("  Map from %s into %s" % (f, aDir))
-          other = pathnorm(os.path.abspath(os.path.join(aDir, f))[len(_.root):] if not f.startswith(SLASH) else os.path.join(_.root, f))
-          _marks = _.cfg.paths.get(other, {})
-          if TAG in _marks:
-            for t in _marks[TAG]:
-              tag, pos, neg = t.split(SEPA)  # tag name, includes, excludes
-              i = lindex(_.tags, tag, appendandreturnindex)
-              adds.append(i); _.tag2paths[i].append(parent)
+      ignore = True  # ignore this directory as tag, don't index contents
+    elif TAG in marks:  # neither SKIP nor IGNORE in config: consider manual folder tagging
+      for t in marks[TAG]:
+        if _.log >= 1: info("  Tag '%s' in %s" % (t, aDir))
+        tag, pos, neg = t.split(SEPA)  # tag name, includes, excludes
+        i = lindex(_.tags, tag, appendandreturnindex)  # find existing index of that tag, or create a new and return its index
+        adds.append(i); _.tag2paths[i].append(parent)
+    elif FROM in marks:  # consider tags from mapped folder
+      for f in marks[FROM]:
+        if _.log >= 1: info("  Map from %s into %s" % (f, aDir))
+        other = pathnorm(os.path.abspath(os.path.join(aDir, f))[len(_.root):] if not f.startswith(SLASH) else os.path.join(_.root, f))
+        _marks = _.cfg.paths.get(other, {})
+        if TAG in _marks:
+          for t in _marks[TAG]:
+            tag, pos, neg = t.split(SEPA)  # tag name, includes, excludes
+            i = lindex(_.tags, tag, appendandreturnindex)
+            adds.append(i); _.tag2paths[i].append(parent)
 
      # Second part: recurse folder-wise
-    files = wrapExc(lambda: os.listdir(aDir), lambda: [])
+    files = wrapExc(lambda: os.listdir(aDir), lambda: [])  # read file list TODO use walker cache? there's something in the standard lib
     if SKPFILE in files:
       if _.log >= 1: info("  Skip %s due to local skip file" % aDir)
-      return
-    ignore = ignore or (IGNFILE in files)
-    if ignore:
+      return  # completely ignore sub-tree
+    ignore = ignore or (IGNFILE in files)  # config setting or file marker
+    if ignore:  # ignore this directory as tag, don't index contents
       if _.log >= 1: info("  Ignore %s due to local ignore file" % aDir)
-      _.tagdir2paths[tags[-1]].remove(parent)  # remove from index and children markers
+      _.tagdir2paths[tags[-1]].remove(parent)  # remove current folder tag from index (was introduced/appended by recursion parent/caller). may leave empty list behind
 
-    for file in (ff for ff in files if DOT in ff[1:]):  # index file extensions
+    for file in (ff for ff in files if DOT in ff[1:]):  # index only file extensions
       ext = normalizer.filenorm(file[file.rindex(DOT):])
       i = lindex(_.tags, ext, appendandreturnindex)  # add file extension to local dir's tags only
       adds.append(i); _.tag2paths[i].append(parent)  # add current dir to index of that extension
-    tags = tags[:-1] if ignore else [t for t in tags]  # if ignore: all except current, else copy all
-    children = (f[len(aDir) + (1 if not aDir.endswith(SLASH) else 0):] for f in filter(isdir, (os.path.join(aDir, ff) for ff in files)))  # only folders. ternary condition necessary for D:\ root dir
+    tags = tags[:-1] if ignore else [t for t in tags]  # if ignore: propagate all tags except current folder name to children, otherwise all (by shallow copy)
+    children = (f[len(aDir) + (1 if not aDir.endswith(SLASH) else 0):] for f in filter(isdir, (os.path.join(aDir, ff) for ff in files)))  # only folders. ternary condition necessary for D:\ root dir special case
     for child in children:
-      idx = len(_.tagdirs)  # add new element at next index
+      idx = len(_.tagdirs)  # for this child folder, add one new element at next index (no matter if name already exists)
       _.tagdir2parent[idx] = parent
-      _.tagdirs.append(intern(normalizer.filenorm(child)))
-      tags.append(_.tagdirs.index(_.tagdirs[idx]))  # temporary addition of first occurence of that tag string
+      _.tagdirs.append(intern(normalizer.filenorm(child)))  # now add the child folder name
+      tags.append(idx)  # TODO that was bullshit: _.tagdirs.index(_.tagdirs[idx]))  # temporary addition of first occurence of that tag string
       for tag in frozenset(tags + adds): _.tagdir2paths[tag].append(idx)  # store first occurence index only
       _._walk(aDir + SLASH + child, idx, tags)
-      tags.pop()  # remove temporary add after recursion (modify list instead of full copy on each recursion)
+      tags.pop()  # remove temporary folder add after recursion (modify list instead of full copy on each recursion)
 
-  def mapTagsIntoDirs(_):
+  def mapTagsIntoDirsAndCompressIndex(_):
     ''' After all manual tags have been added, we map them into the tagdir structure. '''
     if _.log >= 1: info("Mapping tags into index")
     for itag, tag in enumerate(_.tags):
-      idx = lindex(_.tagdirs, tag, appendandreturnindex)  # get index in list, or append
-      _.tagdir2paths[idx] += _.tag2paths[itag]
+      idx = lindex(_.tagdirs, tag, appendandreturnindex)  # get index in list, or append if not in yet
+      _.tagdir2paths[idx].extend(_.tag2paths[itag])
+    rm = [tag for tag, dirs in dictviewitems(_.tagdir2paths) if len(dirs) == 0]  # finding entries that were emptied due to ignores
+    for r in rm: del _.tagdir2paths[r]; debug("Removing no-children tag %s" % _.tagdirs[r])  # remove empty lists from index (was too optimistic, removed by ignore or skip)
+    return len(rm)
 
   def unwalk(_, idx = 0, path = ""):
     ''' Walk entire tree from index (slow but proof of correctness). '''
@@ -445,13 +448,17 @@ class Indexer(object):
         exclude: list of cleaned tag names to exclude
         returnAll: shortcut flag that simply returns all paths from index
     '''
+    if _.log >= 2: debug("findFolders +<%s> -<%s> ALL?=%s" % (",".join(include), ",".join(exclude), returnAll))
     idirs, sdirs = dictget(dictget(_.cfg.paths, '', {}), IGNORED, []), dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored or skipped paths
     currentPathInGlobalIgnores = lambda path: (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs
     partOfAnyGlobalSkipPath = lambda path: any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])
     anyParentIsSkipped = lambda path: any([SKIP in dictget(_.cfg.paths, SLASH.join(path.split(SLASH)[:p + 1]), {}) for p in range(path.count(SLASH))])
     allPaths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set()))))
-    if returnAll: return list([path for path in allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})])  # all existing paths except globally ignored/skipped paths TODO add marker file logic below. using set(paths) because of tags different ids can return the same paths
-    paths, first, cache = set(), True, {}
+    if returnAll or len(include) == 0:
+      if _.log >= 2: debug("Building list of all paths")
+      alls = list([path for path in allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})])  # all existing paths except globally ignored/skipped paths TODO add marker file logic below. using set(paths) because of tags different ids can return the same paths
+      if returnAll: return alls
+    paths, first, cache = set() if len(include) > 0 else alls, True, {}
     for tag in include:  # positive restrictive matching
       if _.log >= 2: info("Filtering paths by inclusive tag %s" % tag)
       if isglob(tag):
@@ -466,7 +473,7 @@ class Indexer(object):
           new = set()  # ignore glob in folder filtering altogether
       elif tag.startswith(DOT):  # explicit file extension filtering
         new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index
-      else:  # no glob, no extension
+      else:  # no glob, no extension: can be tag or file name
         new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index
       paths = new if first else paths & new
       first = False
@@ -484,7 +491,7 @@ class Indexer(object):
   def findFiles(_, aFolder, poss, negs = [], force = False):
     ''' Determine files for the given folder.
         aFolder: folder to filter files in
-        poss: positive tags, extension, or file/glob to consider
+        poss: positive tags, extension, or file/glob to consider, or empty list (falls back to none to ensure negative tags work at all)
         negs: negative assertions
         force: don't perform file existence checks
         returns: (list of filenames for given folder, has a skip marker file)
@@ -516,10 +523,10 @@ class Indexer(object):
           if tg == tag:  # mark that matches the find criterion: we can remove all others!
             found = True
             news = set(files)  # collect all files subsumed under the tag that should remain. hint: this is not a tag ^ tag match!
-            for i in safeSplit(inc, ","):  # if tag manually specified, only keep those included files
+            for i in safeSplit(inc):  # if tag manually specified, only keep those included files
               if isglob(i): news &= set([f for f in files if normalizer.globmatch(f, i)])  # is glob
               else: news &= set([i] if normalizer.filenorm(i) in files and (force or isfile(_.root + folder + SLASH + i)) else [])  # is no glob: add only if file exists
-            for e in safeSplit(exc, ","):  # if tag is manually specified, exempt these files (add back)
+            for e in safeSplit(exc):  # if tag is manually specified, exempt these files (add back)
               if isglob(e): news |= set([n for n in news if normalizer.globmatch(n, e)])
               else: news.discard(e)  # add file to keep
             keep = keep & news
@@ -537,15 +544,15 @@ class Indexer(object):
           if tg == tag:
             found = True
             news = set()  # collect all file that should be excluded
-            for i in safeSplit(inc, ","):
+            for i in safeSplit(inc):
               if isglob(i): news |= set([f for f in files if normalizer.globmatch(f, i)])  # is glob
               else: news |= set([i] if i in files and (force or isfile(_.root + folder + SLASH + i)) else [])  # is no glob: add, only if exists
-            for e in safeSplit(exc, ","):
+            for e in safeSplit(exc):
               if isglob(e): news -= set([n for n in news if normalizer.globmatch(n, e)])
               else: news.add(e)
             remo |= news
             break
-        if not found: remo = set(files)
+        if not found: remo = set()
       files = (files & keep) - remo
       if _.log >= 2: debug("Files for folder '%s': %s (Keep/Remove: <%s>/<%s>)" % (folder, ",".join(files), ",".join(keep), ",".join(remo)))
       allfiles |= files

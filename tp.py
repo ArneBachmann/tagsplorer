@@ -12,6 +12,7 @@ if sys.version_info.major == 3: from functools import reduce  # not built-in
 # Little helper functions
 def xany(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if type(lizt) == list else list(lizt), False)  # short-circuit cross-2/3 implementation
 def xall(pred, lizt): return reduce(lambda a, b: a and pred(b), lizt if type(lizt) == list else list(lizt), True)
+def withoutFilesAndGlobs(tags): return [t for t in tags if not isglob(t) and DOT not in t[1:]]
 
 def commaArgsIntoList(lizt):
   '''
@@ -60,7 +61,6 @@ def getRoot(options, args):
   >>> o = O(); o.index = None
   >>> o.root = "/x"; print(getRoot(o, []))
   /x
-
   >>>  # o.root = None; print(getRoot(o, []))
   None
   >>>  # print(getRoot(o, ["/y"]))
@@ -80,7 +80,7 @@ def getRoot(options, args):
 class CatchExclusionsParser(optparse.OptionParser):
   ''' Allows to process undefined options as non-option arguments. '''
   def __init__(_):
-    optparse.OptionParser.__init__(_, prog = "TagsPlorer", usage = "python tp.py <tags or options>", version = "Tagsplorer Release " + __version__)  # , formatter = optparse.TitledHelpFormatter(),
+    optparse.OptionParser.__init__(_, prog = "tagsPlorer", usage = "python tp.py <tags or options>", version = "tagsPlorer Release " + __version__)  # , formatter = optparse.TitledHelpFormatter(),
   def _process_args(_, largs, rargs, values):
     while rargs:
       try: optparse.OptionParser._process_args(_, largs, rargs, values)
@@ -118,10 +118,10 @@ class Main(object):
 
   def find(_):
     ''' Find all folders that match the provided tags, excluding those from _.options.excludes.
-        _.options: options structure from optparse, using rot and log
-        poss, negs: lists of tags to include or exlcude. poss can also be comma-separated tag1,-tag2,...
+        _.options: options structure from optparse
+        poss, negs: lists of tags to include or exlcude. poss can also be aggregated comma-separated tag1,-tag2,... including excludes
         returns: None
-        side-effect: print found files
+        side-effect: print found files to stdout, logging to stderr
     '''
     poss, negs = splitCrit(commaArgsIntoList(_.args), lambda e: e[0] != '-')  # potentially including +/-
     poss.extend(commaArgsIntoList(_.options.find))
@@ -135,13 +135,13 @@ class Main(object):
       error("No index file found. Crawling file tree")
       idx = _.updateIndex()  # crawl file tree
     else:
-      idx = Indexer(folder); idx.log = _.options.log
+      idx = Indexer(index); idx.log = _.options.log  # initiate indexer
       idx.load(indexFile)
     normalizer.setupCasematching(idx.cfg.case_sensitive)
     poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))
     if _.options.log >= 1: info("Effective filters +<%s> -<%s>" % (",".join(poss), ",".join(negs)))
     if _.options.log >= 1: info("Searching for tags +<%s> -<%s> in %s" % (','.join(poss), ','.join(negs), os.path.abspath(idx.root)))
-    paths = idx.findFolders([p for p in poss if not isglob(p) and DOT not in p[1:]], [n for n in negs if not isglob(n) and DOT not in n[1:]]) # TODO remove negs here?
+    paths = idx.findFolders(withoutFilesAndGlobs(poss), withoutFilesAndGlobs(negs))
     if _.options.log >= 1: info("Potential matches found in %d folders" % (len(paths)))
     if _.options.log >= 2: [debug(path) for path in paths]  # optimistic: all folders "seem" to match all tags, but only some might actually be (due to excludes etc)
     if len(paths) == 0 and xany(lambda x: isglob(x) or DOT in x, poss + negs):
@@ -152,15 +152,19 @@ class Main(object):
       for n in negs: paths[:] = [x for x in paths if not normalizer.globmatch(safeRSplit(x, SLASH), n)]
       if _.options.log >= 1: info("Found %d paths for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
       info("%d folders found for +<%s> -<%s>." % (len(paths), ",".join(poss), ".".join(negs)))
-      if len(paths) > 0: printo("\n".join(paths))#idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
+      try:
+        if len(paths) > 0: printo("\n".join(paths))#idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
+      except KeyboardInterrupt: pass  #idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
       return
     dcount, counter, skipped = 0, 0, []  # if not only folders, but also files
     for path, (files, skip) in ((path, idx.findFiles(path, poss, negs, not _.options.strict)) for path in paths):
       if skip: skipped.append(path); continue  # memorize to skip all folders with this prefix TODO is this always ordered correctly (breadth first)?
       if any([path.startswith(skp) if skp != '' else (path == '') for skp in skipped]): continue  # is in skipped folder tree
       dcount += 1
-      if len(files) > 0: printo("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
-    if _.options.log >= 1: info("%d files found in %d checked paths for +<%s> -<%s>." % (counter, dcount, ",".join(poss), ".".join(negs)))
+      try:
+        if len(files) > 0: printo("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
+      except KeyboardInterrupt: pass
+    if _.options.log >= 1: info("%d files found in %d checked paths for +<%s> -<%s>." % (counter, dcount, ",".join(poss), ".".join(negs)))  # TODO dcount reflect mapped as well?
 
   def config(_, unset = False, get = False):
     ''' Define, retrieve or remove a global configuration parameter. '''
@@ -205,7 +209,7 @@ class Main(object):
     cfg.load(os.path.join(index, CONFIG))
 
     filez = _.args  # process function arguments
-    tags = safeSplit(_.options.tag, ",")
+    tags = safeSplit(_.options.tag)
     poss, negs = splitCrit(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
     normalizer.setupCasematching(cfg.case_sensitive)
@@ -237,7 +241,7 @@ class Main(object):
     cfg.load(os.path.join(index, CONFIG))
 
     filez = _.args  # process function arguments
-    tags = safeSplit(_.options.untag, ",")
+    tags = safeSplit(_.options.untag)
     poss, negs = splitCrit(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
     normalizer.setupCasematching(cfg.case_sensitive)
@@ -257,6 +261,35 @@ class Main(object):
           if _.options.strict: continue
       if cfg.delTag(parent[len(root):], file, poss, negs): modified = True
     if modified and not _.options.simulate: cfg.store(os.path.join(index, CONFIG))
+
+  def stats(_):
+    folder = getRoot(_.options, _.args)
+    index = folder if not _.options.index else _.options.index
+    root = pathnorm(os.path.abspath(folder))
+    if _.options.log >= 1: info("Using configuration from %s" % index)
+    indexFile = os.path.join(index, INDEX)
+    if not os.path.exists(indexFile):
+      error("No index file found. Cannot show stats")
+      return
+    idx = Indexer(index); idx.log = _.options.log  # initiate indexer
+    idx.load(indexFile)
+    info("Indexer stats")
+    info("  Compression level:", idx.compressed)
+    info("  Timestamp:", idx.timestamp)
+    info("  Root folder:", idx.root)
+    info("  Tags:", len(idx.tagdirs))
+    if idx.log >= 1:
+      info("Tags and folders")
+      byOccurrence = dd()
+      for i, _ in enumerate(idx.tagdirs):
+        if i in idx.tagdir2paths: byOccurrence[len(idx.tagdir2paths[i])].append(_)
+      for n, t in sorted(byOccurrence.items()):  # TODO move above two lines into one dict comprehension
+        info(" ".join(["    %d occurrences for %s " % (n, ", ".join(sorted(t)) if t[0] != '' else "/")]))
+    info("Configuration stats")
+    info("  Tagged/mapped folders:", len(idx.cfg.paths))
+    info("  Average number of entries per folder: %.2f" % (sum([len(_) for _ in idx.cfg.paths.values()]) / float(len(idx.cfg.paths))))
+    # TODO show config file timestamp
+
 
   def parse(_):
     ''' Main logic that analyses the command line arguments and starts an opteration. '''
@@ -279,6 +312,7 @@ class Main(object):
     op.add_option('-n', '--simulate', action = "store_true", dest = "simulate", help = "Don't write anything")
     op.add_option('--dirs', action = "store_true", dest = "onlyfolders", help = "Only find directories that contain matches")
     op.add_option('-v', action = "store_true", dest = "verbose", help = "Switch only for unit test")
+    op.add_option('--stats', action = "store_true", dest = "stats", help = "Show internal index data")
     _.options, _.args = op.parse_args()
     if _.options.log >= 2: debug("Options: " + str(_.options))
     if _.options.log >= 2: debug("Arguments: " + str(_.args))
@@ -298,6 +332,7 @@ class Main(object):
     elif _.options.setconfig: _.config()
     elif _.options.getconfig: _.config(get = True)
     elif _.options.unsetconfig: _.config(unset = True)
+    elif _.options.stats: _.stats()
     elif len(_.args) > 0 or _.options.find or _.options.excludes: _.find()  # default action is always find
     else: error("No option given.")
     if _.options.log >= 1: info("Finished at %s after %.1fs" % (time.strftime("%H:%M:%S"), time.time() - ts))

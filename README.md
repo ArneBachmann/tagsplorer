@@ -10,7 +10,7 @@ The entire system is fully backwards-compatible with the common file tree metaph
 ## Initial example
 If you happen to manage your data in a tree-like manner, as supported by most all currently used file systems, your data may look like that:
 
-----
+```
 /personal/money/tax/2016
 /personal/money/tax/2017
 /personal/money/invoice/2016
@@ -19,7 +19,7 @@ If you happen to manage your data in a tree-like manner, as supported by most al
 /personal/travel/2011/new york
 /work/projects/archive
 /work/projects/current/communication
- ----
+ ```
 
 This is just an example, but gives you the general idea. In each folder, you have files of varying types like office documents, media, or other.
 tagsPlorer allows you to create virtual "views" over your file by asking for "all Word documents from 2016", or "all money-related spreadsheets files from 2017" etc.:
@@ -37,17 +37,18 @@ Each file belongs to only one parent folder, which practically prohibits a file 
 There are (semantic) search engines that continuously crawl and oversee your file system, guessing and suggesting what you might want to access next. Here the problem lies in the system overhead and loss of control - you don't know if you are presented the right file versions, and if you search for the right terms, plus you loose oversight of your file system structure.
 
 ## Solution: tagsPlorer to the rescue!
-TagsPlorer uses a simple concept which enables you to continue using simple and compatible file trees, keep all your data under version control of your choice, allows you to put files or entire folders into more than one (virtual) category, and still benefit from little manual maintenance or additional setup. The benefit will increase even more with graphical tools using this library and with tight integration into your OS of choice.
+tagsPlorer uses a simple concept which enables you to continue using simple and compatible file trees, keep all your data under version control of your choice, allows you to put files or entire folders into more than one (virtual) category, and still benefit from little manual maintenance or additional setup. The benefit will increase even more with graphical tools using this library and with tight integration into your OS of choice.
 
 ## History
-I have been attemptin to write a similar utility several times in the past, namely `taggify`, `tagtree`, and `tagtree2`.
-This is my latest take at this persistent problem of convenient data archival and retrieval.
+I have been attempting to write a similar utility several times in the past, namely `taggify`, `tagtree`, and `tagtree2`.
+This is my latest take at this persistent problem of convenient data archival and retrieval by using space-efficient ahead of time indexing.
 
 # Usage
-Hint: Currently it's not possible to glob over folder names efficiently; trying to do so will need to walk all folders that are left in the filter process or will have no effect when preselection picks up a set of potential folder matches before.
+*Hint:* Currently it's not possible to glob over folder names efficiently; trying to do so will need to walk all folders that are left in the filter process or will have no effect when preselection picks up a set of potential folder matches before that step.
+We recommend invoking tagsPlorer with the [PyPy](http://pypy.org) Python distribution, as we found performance to be generally better.
 
 ## Command-line interface
-The current main and only user interface is `tp.py`, a thin yet convenient layerover the library's basic functions.
+The current main and only user interface is `tp.py`, a thin yet convenient layer over the library's basic functions.
 Here is a short description of valid program options and arguments:
 
 * `--help`
@@ -129,6 +130,7 @@ Here is a short description of valid program options and arguments:
 ## Search algorithm
 In general, what the program does is simple boolean set operations. The index maps tags to folders, with the risk of false positives (it's an over-specified, optimistic index, linking folders with both inclusive or exclusive manual tag settings and tags mapped from other folders, plus file extension information).
 After determination of potential folders in a first search step, the found folders' contents are filtered by potential further tags and inclusive or exclusive file name patterns. This step always operates on the actual currently encountered files, not on any indexed and potentially outdated state, to ensure correctness of output filtered data.
+If a mapped folder is excluded by a negative tag, its contents can still be found by the name of the positive tags that receives the mapping. TODO check if true.
 
 
 ## Configuration file

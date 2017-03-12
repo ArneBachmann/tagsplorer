@@ -1,4 +1,6 @@
 # tagsPlorer test suite  (C) Arne Bachmann https://github.com/ArneBachmann/tagsplorer
+# Test suite. Please export environment variable DEBUG=True
+# TODO check D: vs. D:\
 
 import os
 import subprocess
@@ -68,6 +70,32 @@ class TestRepoTestCase(unittest.TestCase):
     ''' Helper assert. '''
     [_.assertIn(a, where) for a in lizt]
 
+  def testFunctions(_):
+    def x(a):
+      if a == None: raise Exception("should not have been processed")
+      return a == 3
+    _.assertTrue(tp.xany(x, [1, 2, 3, None]))
+    _.assertTrue(tp.xall(x, [3, 3, 3]))
+    _.assertEquals(["abc", ".ext", "d"], tp.withoutFilesAndGlobs(["abc", ".ext", "a?v.c", "ab.c", "*x*", "d"]))
+    _.assertTrue(lib.isfile("tests.py"))
+    _.assertFalse(lib.isdir("tests.py"))
+    _.assertFalse(lib.isfile(os.getcwd()))
+    _.assertTrue(lib.isdir(os.getcwd()))
+    x = [1, 2]
+    i = id(x)
+    _.assertTrue(i == id(lib.lappend(x, 3)))
+    _.assertTrue(i == id(lib.lappend(x, [4, 5])))
+    _.assertEquals([1, 2, 3, 4, 5], x)
+    _.assertEquals(0, lib.appendandreturnindex([], 1))
+    _.assertEquals(1, lib.appendandreturnindex([1], 1))
+    _.assertEquals([], lib.safeSplit(''))
+    _.assertEquals(["1"], lib.safeSplit('1'))
+    _.assertEquals(["1", "2"], lib.safeSplit('1,2'))
+    _.assertEquals(["1", "2"], lib.safeSplit('1;2', ";"))
+    d = lib.dd()
+    d[1].append(1)
+    _.assertEquals([1], d[1])
+
   @unittest.SkipTest
   def testFilenameCaseSetting(_):
     ''' This test confirms that case setting works (only executed on Linux). '''
@@ -90,11 +118,11 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Removed global configuration entry", runP("--unset __test -l1"))
 
   def testGlobalIgnoreDir(_):
-    _.assertIn("No folder match", runP("-s filea.exta"))
+    _.assertAllIn(["0 files found"], runP("-s filea.exta -v"))  # was "No folder match" earlier, but searching files reduces the "includes" list to [] which returns all paths now
     _.assertNotIn("filea.exta", runP("-s filea.exta"))
 
   def testGlobalSkipDir(_):
-    _.assertIn("No folder match", runP("-s filec.extb"))
+    _.assertIn("0 files found", runP("-s filec.extb -v"))
     _.assertNotIn("filec.extb", runP("-s filec.extb"))
 
   def testLocalIgnoreDir(_):
@@ -107,7 +135,8 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("1 files found", runP("-s ignore_skip,marker-files,b,2.2 -l1"))
 
   def testLocalTag(_):
-    _.assertIn("1 files found", runP("-s b1,tag1 -l1"))  # The other file is excluded manually TODO separate testswith inc/exc and file/glob
+    _.assertAllIn(["found in 1 folders", "1 folders found"], runP("-s b1,tag -v --dirs"))  # TODO doesn't find!
+    _.assertIn("1 files found", runP("-s b1,tag1 -v"))  # The other file is excluded manually TODO separate testswith inc/exc and file/glob
 
   def testMappedInclude(_):
     _.assertIn("2 files found", runP("-s two,test -l1"))  # one direct match and one mapped
@@ -121,8 +150,10 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testMappedOnlyFilename(_):
     ''' Find a certain filename, crawling entire tree. '''
-    _.assertIn("No folder match", runP("-s 2.2 -l1"))
     _.assertIn("3 files found", runP("-s 2.2 -l1"))
+
+  def testExtensionOnly(_):
+    _.assertIn("No folder match", runP(".xyz -l2"))
 
   def testMappedGlobExclude(_):
     pass
@@ -147,6 +178,9 @@ class TestRepoTestCase(unittest.TestCase):
       print(i.findFolders(["folders", "folder2"])[0])
     _.assertIn('/folders/folder2', wrapChannels(tmp))
 
+  def testStats(_):
+    _.assertNotIn("0 occurrences", runP("--stats -v"))  # TODO seems like same folder  names get added to index several times
+
   def testAddRemove(_):
     ''' Add a tag, check and remove. '''
     try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))
@@ -168,9 +202,11 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testNegativeSearch(_):
     _.assertIn("No option", runP(""))
-    _.assertIn("Potential matches found in 2 folders", runP("-s a -x a1 -v -l2"))  # TODO remove set is same as keep, therefore nothing returned
-    _.assertIn("3 files found", runP("-s a -x a1 -v -l2"))
-    _.assertIn("1 folders found", runP("-s a -x a1 -v -l2 --dirs"))  # TODO handles -a1 as negative on the folders contents. correct semantics?
+    _.assertAllIn(["Potential matches found in 2 folders", "file3.ext3", "3 files found"], runP("-s a -x a1 -l2"))
+    _.assertIn("1 folders found", runP("-s a -x a1 -l2 --dirs"))  # TODO handles -a1 as negative on the folders contents. correct semantics?
+
+  def testTest(_):
+    _.assertEquals("", call(sys.executable + " lib.py --test"))
 
   @unittest.SkipTest
   def testUnwalk(_):
@@ -181,7 +217,7 @@ class TestRepoTestCase(unittest.TestCase):
       i.unwalk()
     res = wrapChannels(tmp).replace("\r", "")
     logFile.write(res + "\n")
-    _.assertEqual(len(res.split("\n")), 32)
+    _.assertEquals(len(res.split("\n")), 32)
 
 @unittest.SkipTest
 def compressionTest_():
