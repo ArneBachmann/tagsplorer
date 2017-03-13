@@ -73,7 +73,7 @@ Here is a short description of valid program options and arguments:
 * `--search [[+]tag1[,tags2[,tags...]]] [[-]tag3[,tag4[,tags...]]] [-r rootfolder]` or `-s` or no option switch plus search terms appended
 
   Perform a search (which corresponds to a "virtual folder" listing).
-  This is the main usage for tagsPlorer tools and accepts inclusive as well as exclusive search terms.
+  This is the main usage for tagsPlorer tools and accepts inclusive as well as exclusive search terms (tag, folder name, file name, file glob).
   There can be any number of arguments, which optionally can also be specified in a comma-separated way (after one initial positives tag), or using the `-x` option with optional comma-separated further exclusive terms.
   Note, however, that the command line interface cannot distinguish between valid option switches (like -r <root>) and negative tag arguments (like -r to exclude all files tagged with "r"). Therefore, negative (exclusive) tag arguments must be specified after either a double-dash `--` or after a comma of a positive (inclusive) term.
 

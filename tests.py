@@ -22,7 +22,7 @@ print("Using VCS '%s'" % "SVN" if SVN else "Git")
 logFile = None
 
 
-def call(argstr): return subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE).communicate()[0]
+def call(argstr): so = subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE).communicate()[0]; return so.decode('ascii') if sys.version_info.major >= 3 else so
 
 def runP(argstr):  # instead of script call via Popen, to allow for full coverage stats
   def tmp():
@@ -44,7 +44,7 @@ def wrapChannels(func):
   return buf.getvalue()
 
 def setUpModule():
-  ''' Test suite setup: missing SKIP removes index and reverts config '''
+  ''' Test suite setup: missing SKIP environment variable removes previous index and reverts config file. '''
   os.environ["DEBUG"] = "True"
   global logFile
   logFile = open(".testRun.log", "w")
@@ -133,6 +133,7 @@ class TestRepoTestCase(unittest.TestCase):
   def testLocalSkipDir(_):
     _.assertIn("0 files found", runP("-s ignore_skip,marker-files,b,1.1 -l1"))
     _.assertIn("1 files found", runP("-s ignore_skip,marker-files,b,2.2 -l1"))
+    _.assertNotIn(".3", runP("--stats -v"))  # TODO shouldn't be in index, but was included although it's in an ignored
 
   def testLocalTag(_):
     _.assertAllIn(["found in 1 folders", "1 folders found"], runP("-s b1,tag1 -v --dirs"))  # 
@@ -203,10 +204,10 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testNegativeSearch(_):
     _.assertIn("No option", runP(""))
-    _.assertAllIn(["Info:     1 folders found for +<a> -<>.",   "/a"], runP("-s a       -v --dirs").split("\n"))  # only include only dirs
-    _.assertAllIn(["Info:     1 folders found for +<a> -<a1>.", "/a"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
-    _.assertAllIn(["Potential matches found in 2 folders", "file3.ext3", "3 files found"], runP("-s a -x a1 -l2"))  # only include with files
-    _.assertIn("1 folders found", runP("-s a -x a1 -l2 --dirs"))  # with exclude with files
+    _.assertAllIn(["Info:    3 folders found for +<a> -<>.",   "/a", "/a/a1", "/a/a2"], runP("-s a -v --dirs").split("\n"))  # only include only dirs
+    _.assertAllIn(["Info:    2 folders found for +<a> -<a1>.", "/a", "/a/a2"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
+    _.assertAllIn(["Potential matches found in 3 folders", "6 files found", "file3.ext3"], runP("-s a -v"))  # only include with files
+    _.assertAllIn(["Potential matches found in 2 folders", "3 files found", "file3.ext1"], runP("-s a -x a1 -l2"))  # with exclude with files
 
   def testTest(_):
     _.assertEqual("", call(sys.executable + " lib.py --test"))

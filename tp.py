@@ -145,12 +145,14 @@ class Main(object):
     if _.options.log >= 1: info("Potential matches found in %d folders" % (len(paths)))
     if _.options.log >= 2: [debug(path) for path in paths]  # optimistic: all folders "seem" to match all tags, but only some might actually be (due to excludes etc)
     if len(paths) == 0 and xany(lambda x: isglob(x) or DOT in x, poss + negs):
+      if _.options.onlyfolders: warn("Nothing found."); return
       warn("No folder match; cannot filter on folder names. Checking entire folder tree")  # the logic is wrong: we ignore lots of tags while finding folders, and the continue filtering. better first filter on exts or all, then continue??
       paths = idx.findFolders([], [], True)  # return all folders names unfiltered (except ignore/skip without marker files)
     if _.options.onlyfolders:
-      for p in poss: paths[:] = [x for x in paths if normalizer.globmatch(safeRSplit(x, SLASH), p)]  # successively reduce paths down to matching positive tags
-      for n in negs: paths[:] = [x for x in paths if not normalizer.globmatch(safeRSplit(x, SLASH), n)]  # TODO this is too strict and ignores configured tags and the index entirely
-      if _.options.log >= 1: info("Found %d paths for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
+      info((paths, poss, negs))
+      for p in poss: paths[:] = [x for x in paths if not isglob(p) or normalizer.globmatch(safeRSplit(x, SLASH), p)]  # successively reduce paths down to matching positive tags, as in --dirs mode tags currently have to be folder names TODO later we should reflect actual mapping
+      for n in negs: paths[:] = [x for x in paths if not isglob(n) or not normalizer.globmatch(safeRSplit(x, SLASH), n)]  # TODO this is too strict and ignores configured tags and the index entirely
+      if _.options.log >= 1: info("Found %d folders for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
       info("%d folders found for +<%s> -<%s>." % (len(paths), ",".join(poss), ".".join(negs)))
       try:
         if len(paths) > 0: printo("\n".join(paths))#idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output

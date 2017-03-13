@@ -361,11 +361,11 @@ class Indexer(object):
     if ignore:  # ignore this directory as tag, don't index contents
       if _.log >= 1: info("  Ignore %s due to local ignore file" % aDir)
       _.tagdir2paths[tags[-1]].remove(parent)  # remove current folder tag from index (was introduced/appended by recursion parent/caller). may leave empty list behind
-
-    for file in (ff for ff in files if DOT in ff[1:]):  # index only file extensions
-      ext = normalizer.filenorm(file[file.rindex(DOT):])
-      i = lindex(_.tags, ext, appendandreturnindex)  # add file extension to local dir's tags only
-      adds.append(i); _.tag2paths[i].append(parent)  # add current dir to index of that extension
+    else:  # only index extensions if not ignore
+      for file in (ff for ff in files if DOT in ff[1:]):  # index only file extensions
+        ext = normalizer.filenorm(file[file.rindex(DOT):])
+        i = lindex(_.tags, ext, appendandreturnindex)  # add file extension to local dir's tags only
+        adds.append(i); _.tag2paths[i].append(parent)  # add current dir to index of that extension
     tags = tags[:-1] if ignore else [t for t in tags]  # if ignore: propagate all tags except current folder name to children, otherwise all (by shallow copy)
     children = (f[len(aDir) + (1 if not aDir.endswith(SLASH) else 0):] for f in filter(isdir, (os.path.join(aDir, ff) for ff in files)))  # only folders. ternary condition necessary for D:\ root dir special case
     for child in children:
