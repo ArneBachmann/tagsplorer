@@ -76,7 +76,7 @@ class TestRepoTestCase(unittest.TestCase):
       return a == 3
     _.assertTrue(tp.xany(x, [1, 2, 3, None]))
     _.assertTrue(tp.xall(x, [3, 3, 3]))
-    _.assertEquals(["abc", ".ext", "d"], tp.withoutFilesAndGlobs(["abc", ".ext", "a?v.c", "ab.c", "*x*", "d"]))
+    _.assertEqual(["abc", ".ext", "d"], tp.withoutFilesAndGlobs(["abc", ".ext", "a?v.c", "ab.c", "*x*", "d"]))
     _.assertTrue(lib.isfile("tests.py"))
     _.assertFalse(lib.isdir("tests.py"))
     _.assertFalse(lib.isfile(os.getcwd()))
@@ -85,16 +85,16 @@ class TestRepoTestCase(unittest.TestCase):
     i = id(x)
     _.assertTrue(i == id(lib.lappend(x, 3)))
     _.assertTrue(i == id(lib.lappend(x, [4, 5])))
-    _.assertEquals([1, 2, 3, 4, 5], x)
-    _.assertEquals(0, lib.appendandreturnindex([], 1))
-    _.assertEquals(1, lib.appendandreturnindex([1], 1))
-    _.assertEquals([], lib.safeSplit(''))
-    _.assertEquals(["1"], lib.safeSplit('1'))
-    _.assertEquals(["1", "2"], lib.safeSplit('1,2'))
-    _.assertEquals(["1", "2"], lib.safeSplit('1;2', ";"))
+    _.assertEqual([1, 2, 3, 4, 5], x)
+    _.assertEqual(0, lib.appendandreturnindex([], 1))
+    _.assertEqual(1, lib.appendandreturnindex([1], 1))
+    _.assertEqual([], lib.safeSplit(''))
+    _.assertEqual(["1"], lib.safeSplit('1'))
+    _.assertEqual(["1", "2"], lib.safeSplit('1,2'))
+    _.assertEqual(["1", "2"], lib.safeSplit('1;2', ";"))
     d = lib.dd()
     d[1].append(1)
-    _.assertEquals([1], d[1])
+    _.assertEqual([1], d[1])
 
   @unittest.SkipTest
   def testFilenameCaseSetting(_):
@@ -135,8 +135,9 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("1 files found", runP("-s ignore_skip,marker-files,b,2.2 -l1"))
 
   def testLocalTag(_):
-    _.assertAllIn(["found in 1 folders", "1 folders found"], runP("-s b1,tag -v --dirs"))  # TODO doesn't find!
-    _.assertIn("1 files found", runP("-s b1,tag1 -v"))  # The other file is excluded manually TODO separate testswith inc/exc and file/glob
+    _.assertAllIn(["found in 1 folders", "1 folders found"], runP("-s b1,tag1 -v --dirs"))  # 
+    _.assertIn("1 files found", runP("-s b1,tag1 -v"))  # The other file is excluded by the tag1 exclude in the config TODO separate testswith inc/exc and file/glob
+    _.assertIn("1 files found", runP("-s b1 -s tag1 -v"))  # Different interface, same result
 
   def testMappedInclude(_):
     _.assertIn("2 files found", runP("-s two,test -l1"))  # one direct match and one mapped
@@ -202,11 +203,13 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testNegativeSearch(_):
     _.assertIn("No option", runP(""))
-    _.assertAllIn(["Potential matches found in 2 folders", "file3.ext3", "3 files found"], runP("-s a -x a1 -l2"))
-    _.assertIn("1 folders found", runP("-s a -x a1 -l2 --dirs"))  # TODO handles -a1 as negative on the folders contents. correct semantics?
+    _.assertAllIn(["Info:     1 folders found for +<a> -<>.",   "/a"], runP("-s a       -v --dirs").split("\n"))  # only include only dirs
+    _.assertAllIn(["Info:     1 folders found for +<a> -<a1>.", "/a"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
+    _.assertAllIn(["Potential matches found in 2 folders", "file3.ext3", "3 files found"], runP("-s a -x a1 -l2"))  # only include with files
+    _.assertIn("1 folders found", runP("-s a -x a1 -l2 --dirs"))  # with exclude with files
 
   def testTest(_):
-    _.assertEquals("", call(sys.executable + " lib.py --test"))
+    _.assertEqual("", call(sys.executable + " lib.py --test"))
 
   @unittest.SkipTest
   def testUnwalk(_):
@@ -217,7 +220,7 @@ class TestRepoTestCase(unittest.TestCase):
       i.unwalk()
     res = wrapChannels(tmp).replace("\r", "")
     logFile.write(res + "\n")
-    _.assertEquals(len(res.split("\n")), 32)
+    _.assertEqual(len(res.split("\n")), 32)
 
 @unittest.SkipTest
 def compressionTest_():
