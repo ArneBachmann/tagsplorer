@@ -29,13 +29,13 @@ else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
   printo = eval("lambda s: sys.stdout.write(str(s) + '\\n') and sys.stdout.flush()")
   printe = eval("lambda s: sys.stderr.write(str(s) + '\\n') and sys.stderr.flush()")
   if LOG >= ERROR:
-    def error(*s): print >> sys.stderr, "Error:   ", " ".join([str(_) for _ in s])
+    def error(*s): print >> sys.stderr, "Error:  ", " ".join([str(_) for _ in s])
     if LOG >= WARN:
-      def warn(*s): print >> sys.stderr, "Warning: ", " ".join([str(_) for _ in s])
+      def warn(*s): print >> sys.stderr, "Warning:", " ".join([str(_) for _ in s])
       if LOG >= INFO:
-        def info(*s): print >> sys.stderr, "Info:    ", " ".join([str(_) for _ in s])
+        def info(*s): print >> sys.stderr, "Info:   ", " ".join([str(_) for _ in s])
         if LOG >= DEBUG:
-          def debug(*s): print >> sys.stderr, "Debug:   ", " ".join([str(_) for _ in s])
+          def debug(*s): print >> sys.stderr, "Debug:  ", " ".join([str(_) for _ in s])
 
 
 # Constants
