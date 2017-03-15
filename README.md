@@ -22,7 +22,7 @@ If you happen to manage your data in a tree-like manner, as supported by most al
  ```
 
 This is just an example, but gives you the general idea. In each folder, you have files of varying types like office documents, media, or other.
-tagsPlorer allows you to create virtual "views" over your file by asking for "all Word documents from 2016", or "all money-related spreadsheets files from 2017" etc.:
+tagsPlorer allows you to create virtual "views" over your files by asking for "all Word documents from 2016", or "all money-related spreadsheets files from 2017" etc.:
 
 `tp.py .docx 2016` or `tp.py money 2017 .xlsx`
 
@@ -40,15 +40,16 @@ There are (semantic) search engines that continuously crawl and oversee your fil
 tagsPlorer uses a simple concept which enables you to continue using simple and compatible file trees, keep all your data under version control of your choice, allows you to put files or entire folders into more than one (virtual) category, and still benefit from little manual maintenance or additional setup. The benefit will increase even more with graphical tools using this library and with tight integration into your OS of choice.
 
 ## History
-I have been attempting to write a similar utility several times in the past, namely `taggify`, `tagtree`, and `tagtree2`.
-This is my latest take at this persistent problem of convenient data archival and retrieval by using space-efficient ahead of time indexing.
+The author has been attempting to write a similar utility several times in the past, namely `taggify`, `tagtree`, and `tagtree2`.
+This is his latest take at this persistent problem of convenient data archival and retrieval by using space-efficient ahead of time indexing.
 There are similarities to the Linux `find` and `gre` utilites, which are performant but crawl the entire folder tree on every search, and don't support virtual folder mapping.
 
 # Usage
 *Hint:* Currently it's not possible to glob over folder names efficiently; trying to do so will need to walk all folders that are left in the filter process or will have no effect when preselection picks up a set of potential folder matches before that step.
-We recommend invoking tagsPlorer with the [PyPy](http://pypy.org) Python distribution, as we found performance to be generally better.
 
 ## Command-line interface
+We recommend invoking tagsPlorer with the [PyPy](http://pypy.org) Python distribution, as we found performance to be generally better.
+
 The current main and only user interface is `tp.py`, a thin yet convenient layer over the library's basic functions.
 Here is a short description of valid program options and arguments:
 
