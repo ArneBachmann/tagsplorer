@@ -133,7 +133,7 @@ class TestRepoTestCase(unittest.TestCase):
   def testLocalSkipDir(_):
     _.assertIn("0 files found", runP("-s ignore_skip,marker-files,b,1.1 -l1"))
     _.assertIn("1 files found", runP("-s ignore_skip,marker-files,b,2.2 -l1"))
-    _.assertNotIn(".3", runP("--stats -v"))  # TODO shouldn't be in index, but was included although it's in an ignored
+    _.assertNotIn(".3", runP("--stats -v"))
 
   def testLocalTag(_):
     _.assertAllIn(["found in 1 folders", "1 folders found"], runP("-s b1,tag1 -v --dirs"))  # 
@@ -181,7 +181,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn('/folders/folder2', wrapChannels(tmp))
 
   def testStats(_):
-    _.assertNotIn("0 occurrences", runP("--stats -v"))  # TODO seems like same folder  names get added to index several times
+    _.assertNotIn("0 occurrences", runP("--stats -v"))
 
   def testAddRemove(_):
     ''' Add a tag, check and remove. '''
@@ -190,15 +190,18 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("0 files found", runP("-s missing -v"))
     _.assertIn("File or glob not found", runP("--tag missing,-exclusive /tagging/anyfile1 -v"))
     _.assertIn("0 files found", runP("-s missing -v"))  # shouldn't be modified above
-    # TODO test adding on existing file, then search
     # test adding non-existing file, then search
-    _.assertIn("added anyway", runP("--tag missing,-exclusive /tagging/anyfile1 -v --relaxed"))
+    _.assertAllIn(["Adding tags", "added anyway"], runP("--tag missing,-exclusive /tagging/anyfile1 -v --relaxed"))
     _.assertIn("0 files found", runP("-s missing -v"))  # because file doesn't exist, regardless of tag being defined or not
+    _.assertAllIn(["removing anyway", "Removing positive entry"], runP("--untag missing,-exclusive /tagging/anyfile1 -v --relaxed"))
+    _.assertIn("0 files found", runP("-s missing -v"))  # because neither file nor tagging exists
+    # test adding on existing file, then search
     with open(os.path.join(REPO, "tagging", "anyfile1"), "w") as fd: fd.close()  # touch to create file
+    _.assertIn("Adding tags", runP("--tag missing,-exclusive /tagging/anyfile1 -v"))  # now possible without --relaxed
     _.assertIn("1 files found", runP("-s missing -v"))
-    try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))
+    try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))  # remove again
     except: pass
-    _.assertIn("skipping", runP("--untag missing,-exclusive /tagging/anyfile1 -l 2"))
+    _.assertIn("skipping", runP("--untag missing,-exclusive /tagging/anyfile1 -v"))  # now possible without --relaxed
     _.assertIn("anyway", runP("--untag missing,-exclusive /tagging/anyfile1 -l 2 --relax"))
     _.assertIn("0 files found", runP("-s missing -l 2"))
 

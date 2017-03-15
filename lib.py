@@ -223,6 +223,7 @@ class Config(object):
 
      # Now really add new patterns to config
     for tag in (list(keep_pos.keys()) + list(keep_neg.keys())):
+      if _.log >= 1: debug("Adding tags <%s>/<%s>" % (",".join(keep_pos.get(tag, [])), ",".join(keep_neg.get(tag, []))))
       entry = dictget(conf, TAG, [])
       missing = True
       for i, line in enumerate(entry):
@@ -230,7 +231,6 @@ class Config(object):
         if tg == tag:  # found: augment existing entry
           entry[i] = "%s;%s;%s" % (tag, ",".join(sorted(set(safeSplit(inc, ",") + keep_pos.get(tag, [])))), ",".join(sorted(set(safeSplit(exc) + keep_neg.get(tag, [])))))
           missing = False  # tag already exists
-          if _.options.log > 2: debug("Adding tags <%s>/<%s>" % (",".join(keep_pos.get(tag, [])), ",".join(keep_neg.get(tag, []))))
           break  # line iteration
       if missing: entry.append("%s;%s;%s" % (tag, ",".join(keep_pos.get(tag, [])), ",".join(keep_neg.get(tag, []))))  # if new: create entry
     return len(keep_pos.keys()) + len(keep_neg.keys()) > 0
@@ -243,15 +243,16 @@ class Config(object):
         negs: exclusive tags or globs to remove
         returns: modified?
     '''
+    if _.log >= 2: debug(str((folder, pattern, poss, negs)))  # TODO document l2 debug == trace? TODO use for all method entries?
     conf = dictget(_.paths, folder, {})  # creates empty config entry if it doesn't exist
     changed = False
     for tag in poss + negs:
-      for line in conf.get(TAG, []):  # all tag markers for the given folder
+      removes = []  # indices not to update, but to remove entirely
+      for confindex, line in enumerate(conf.get(TAG, [])):  # all tag markers for the given folder
         tg, inc, exc = line.split(SEPA)
         if tg == tag:  # if tag specified in configuration line
           ii = safeSplit(inc)
           ee = safeSplit(exc)
-          info(str((ii, ee, pattern)))
           if pattern in ii and tag in poss:
             changed = True
             ii.remove(pattern)
@@ -260,6 +261,9 @@ class Config(object):
             changed = True
             ee.remove(pattern)
             if _.log >= 1: debug("Removing negative entry '%s' for tag '%s'" % (pattern, tag))
+          if len(ii + ee) > 0: conf.get(TAG)[confindex] = ";".join([tg, ",".join(ii), ",".join(ee)])  # update conf entry
+          else: removes.append(confindex)
+      for remindex in reversed(removes): conf.get(TAG).pop(remindex)  # decreasing order to keep valid indices during modification
     return changed
 
 
