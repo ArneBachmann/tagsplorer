@@ -42,6 +42,7 @@ tagsPlorer uses a simple concept which enables you to continue using simple and 
 ## History
 I have been attempting to write a similar utility several times in the past, namely `taggify`, `tagtree`, and `tagtree2`.
 This is my latest take at this persistent problem of convenient data archival and retrieval by using space-efficient ahead of time indexing.
+There are similarities to the Linux `find` and `gre` utilites, which are performant but crawl the entire folder tree on every search, and don't support virtual folder mapping.
 
 # Usage
 *Hint:* Currently it's not possible to glob over folder names efficiently; trying to do so will need to walk all folders that are left in the filter process or will have no effect when preselection picks up a set of potential folder matches before that step.
@@ -128,7 +129,7 @@ Here is a short description of valid program options and arguments:
 
 # Architecture and program semantics
 ## Search algorithm
-In general, what the program does is simple boolean set operations. The index maps tags to folders, with the risk of false positives (it's an over-specified, optimistic index, linking folders with both inclusive or exclusive manual tag settings and tags mapped from other folders, plus file extension information).
+In general, what the program does is simple boolean set operations. The index maps tags (= names, tokens, terms) to matching folders in the indexed folder tree, with the risk of false positives (it's an over-generic, optimistic index, linking folders with both inclusive or exclusive manual tag settings and tags mapped from other folders, plus file extension information).
 After determination of potential folders in a first search step, the found folders' contents are filtered by potential further tags and inclusive or exclusive file name patterns. This step always operates on the actual currently encountered files, not on any indexed and potentially outdated state, to ensure correctness of output filtered data.
 If a mapped folder is excluded by a negative tag, its contents can still be found by the name of the positive tags that receives the mapping. TODO check if true.
 
@@ -180,7 +181,7 @@ In addition, it's possible to specify global settings under the root configurati
 
 * `ignored=dirname`
 
-  Similar to single folders' `ignore` configuration, this defines a global folder (directory) name to ignore and to not index; per `ignored` configuration entry only one folder is specified.
+  Similar to single folders' `ignore` configuration, this defines a global folder name (not a path) to ignore and to not index, but continue indexing its child folders; for each `ignored` configuration entry only one folder name is specified, which is valid at any recursion depth.
 
 * `skipd=dirname`
 

@@ -57,18 +57,22 @@ def findRootFolder(options, filename):
 def getRoot(options, args):
   ''' Determine root folder by checking arguments and some fall-back logic.
   >>> class O: pass
-  >>> def findRootFolder(o, f): return "/z/a.b"  # TODO doesn't override def
-  >>> o = O(); o.index = None
+  >>> import tp
+  >>> tmp = tp.findRootFolder; tp.findRootFolder = lambda o, f: "/z/a.b"  # mock away this function
+  >>> o = O(); o.index = None; o.root = None
+  >>> print(getRoot(o, []))
+  /z
+  >>> tp.findRootFolder = tmp  # restore function
   >>> o.root = "/x"; print(getRoot(o, []))
   /x
-  >>>  # o.root = None; print(getRoot(o, []))
-  None
-  >>>  # print(getRoot(o, ["/y"]))
+  >>> o.index = "/y"; print(getRoot(o, []))
+  /x
+  >>> o.root = o.index = None; print(getRoot(o, ["/y"]))
   /y
-  >>> o.root = None; o.index = "/abc"; print(getRoot(o, []))  # this should never be called
+  >>> o.root = None; o.index = "/abc"; print(getRoot(o, []))  # this combination should never occur
   None
   '''
-  if options.index: return options.root  # short cut: -i and -r always go together
+  if options.index: return options.root  # -i and -r always go together
   folder = options.root if options.root else (args[0] if len(args) > 0 else None)
   if folder is None:
     folder = findRootFolder(options, CONFIG)
@@ -151,7 +155,7 @@ class Main(object):
     if _.options.onlyfolders:
       info((paths, poss, negs))
       for p in poss: paths[:] = [x for x in paths if not isglob(p) or normalizer.globmatch(safeRSplit(x, SLASH), p)]  # successively reduce paths down to matching positive tags, as in --dirs mode tags currently have to be folder names TODO later we should reflect actual mapping
-      for n in negs: paths[:] = [x for x in paths if not isglob(n) or not normalizer.globmatch(safeRSplit(x, SLASH), n)]  # TODO this is too strict and ignores configured tags and the index entirely
+      for n in negs: paths[:] = [x for x in paths if not isglob(n) or not normalizer.globmatch(safeRSplit(x, SLASH), n)]  # TODO is this too strict and ignores configured tags and the index entirely?
       if _.options.log >= 1: info("Found %d folders for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
       info("%d folders found for +<%s> -<%s>." % (len(paths), ",".join(poss), ".".join(negs)))
       try:
@@ -288,8 +292,8 @@ class Main(object):
       for n, t in sorted(byOccurrence.items()):  # TODO move above two lines into one dict comprehension
         info(" ".join(["    %d occurrences for %s " % (n, ", ".join(sorted(t)) if t[0] != '' else "/")]))
     info("Configuration stats")
-    info("  Tagged/mapped folders:", len(idx.cfg.paths))
-    info("  Average number of entries per folder: %.2f" % (sum([len(_) for _ in idx.cfg.paths.values()]) / float(len(idx.cfg.paths))))
+    info("  Number of tags:", len(idx.cfg.paths))
+    info("  Average number of entries per folder: %.2f" % (float(sum([len(_) for _ in idx.cfg.paths.values()])) / len(idx.cfg.paths)))
     # TODO show config file timestamp
 
 
@@ -305,8 +309,8 @@ class Main(object):
     op.add_option('-r', '--root', action = "store", dest = "root", type = str, default = None, help = "Specify root folder for index and configuration")
     op.add_option('-i', '--index', action = "store", dest = "index", type = str, default = None, help = "Specify alternative index location independent of root folder")
     op.add_option('-l', '--log', action = "store", dest = "log", type = int, default = 0, help = "Set log level (0=none, 1=debug, 2=trace)")
-    op.add_option('-x', '--exclude', action = "append", dest = "excludes", default = [], help = "Tags to ignore")  # TODO allow multiple args via list
-    op.add_option('--no', action = "append", dest = "excludes", default = [], help = "Same as --exclude or -tag")  # same as above TODO allow multiple arguments
+    op.add_option('-x', '--exclude', action = "append", dest = "excludes", default = [], help = "Tags to ignore")
+    op.add_option('--no', action = "append", dest = "excludes", default = [], help = "Same as --exclude or -tag")  # same as above
     op.add_option('--get', action = "store", dest = "getconfig", default = None, help = "Get global configuration parameter")
     op.add_option('--set', action = "store", dest = "setconfig", default = None, help = "Set global configuration parameter key=value")
     op.add_option('--unset', action = "store", dest = "unsetconfig", default = None, help = "Unset global configuration parameter")
@@ -322,7 +326,6 @@ class Main(object):
     _.options.excludes.extend([e[2:] for e in excludes])
     _.options.log = max(1 if _.options.verbose else 0, _.options.log)
     if _.options.index is not None and _.options.root is None: error("Index location specified (-i) without specifying root (-r)"); return
-    if _.options.root is None: _.options.root = os.getcwd()
     if _.options.log >= 1: info("Started at %s" % (time.strftime("%H:%M:%S")))
     debug("Running in debug mode.")
     if _.options.log >= 2: debug("Parsed options: " + str(_.options))

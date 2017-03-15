@@ -81,7 +81,7 @@ def isunderroot(root, folder): return os.path.commonprefix([root, folder]).start
 def isglob(f): return '*' in f or '?' in f
 def getTs(): return ilong(time.time() * 1000.)
 def safeSplit(s, d = ","): return [_ for _ in s.split(d) if _ != '']  # remove empty strings that appear e.g. for "  ".split(" ") or "".split(" ")
-def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s  # TODO rename
+def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s
 def dd(tipe = list): return collections.defaultdict(tipe)
 def step(): import pdb; pdb.set_trace()
 def dictget(dikt, key, default):
@@ -113,7 +113,7 @@ normalizer = Normalizer()  # to keep a static module-reference
 class ConfigParser(object):
   ''' Much simplified config file (ini file) reader. No line continuation, no colon separation, no symbolic replacement, no comments, no empty lines. '''
 
-  def __init__(_): _.sections = collections.OrderedDict()  # to assure same order on every load/write operation
+  def __init__(_): _.sections = {}
 
   def load(_, fd):
     ''' Read from file object to enable reading from arbitrary data source and position.
@@ -145,7 +145,7 @@ class ConfigParser(object):
     if parent is not None:  # store parent's properties
       if "" not in _.sections: _.sections[intern("")] = dd()
       _.sections[""][GLOBAL] = sorted(["%s=%s" % (k.lower(), str(parent.__dict__[k])) for k, v in (kv.split("=")[:2] for kv in _.sections.get("", {}).get(GLOBAL, []))])  # store updated config
-    for title, _map in dictviewitems(_.sections):  # in added order
+    for title, _map in sorted(dictviewitems(_.sections)):  # in added order
       fd.write("[%s]\n" % (title))
       for key, values in sorted(_map.items()):  # no need for iteritems, as supposedly small (max. size = 4)
         if values is None: fd.write("%s=\n" % (key.lower()))  # skip or ignore
@@ -372,7 +372,7 @@ class Indexer(object):
       idx = len(_.tagdirs)  # for this child folder, add one new element at next index (no matter if name already exists)
       _.tagdir2parent[idx] = parent
       _.tagdirs.append(intern(normalizer.filenorm(child)))  # now add the child folder name
-      tags.append(idx)  # TODO that was bullshit: _.tagdirs.index(_.tagdirs[idx]))  # temporary addition of first occurence of that tag string
+      tags.append(idx)  # temporary addition of first occurence of that tag string
       for tag in frozenset(tags + adds): _.tagdir2paths[tag].append(idx)  # store first occurence index only
       _._walk(aDir + SLASH + child, idx, tags)
       tags.pop()  # remove temporary folder add after recursion (modify list instead of full copy on each recursion)
@@ -456,7 +456,7 @@ class Indexer(object):
     allPaths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set()))))
     if returnAll or len(include) == 0:
       if _.log >= 2: debug("Building list of all paths")
-      alls = list([path for path in allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})])  # all existing paths except globally ignored/skipped paths TODO add marker file logic below. using set(paths) because of tags different ids can return the same paths
+      alls = list([path for path in allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})])  # all existing paths except globally ignored/skipped paths TODO add marker file logic below
       if returnAll: return alls
     paths, first, cache = set() if len(include) > 0 else alls, True, {}
     for tag in include:  # positive restrictive matching
