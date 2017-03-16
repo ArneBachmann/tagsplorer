@@ -233,7 +233,7 @@ class Main(object):
       parent, file = os.path.split(file)
       parent = pathnorm(os.path.abspath(os.path.join(_.options.root, parent)))  # check if this is a relative path
       if not isunderroot(root, parent):  # if outside folder tree
-        warn("Relative file path outside indexed folder tree; skipping %s" % file); print ((root, parent)); continue
+        warn("Relative file path '%s' outside indexed folder tree '%s'; skipping %s" % (parent, root, file)); continue
       if cfg.addTag(parent[len(root):], file, poss, negs, not _.options.strict): modified = True
     if modified and not _.options.simulate: cfg.store(os.path.join(index, CONFIG))
 
@@ -256,7 +256,7 @@ class Main(object):
 
     modified = False
     for file in filez:
-      repoRelative = file.startswith("/")
+      repoRelative = file.startswith("/")  # TODO not used in code below!
       while file.startswith("/"): file = file[1:]  # prune repo-relative marker(s)
       parent, file = os.path.split(file)
       parent = pathnorm(os.path.abspath(os.path.join(_.options.root, parent)))  # check if this is a relative path

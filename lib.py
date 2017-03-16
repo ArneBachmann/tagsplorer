@@ -146,6 +146,7 @@ class ConfigParser(object):
       if "" not in _.sections: _.sections[intern("")] = dd()
       _.sections[""][GLOBAL] = sorted(["%s=%s" % (k.lower(), str(parent.__dict__[k])) for k, v in (kv.split("=")[:2] for kv in _.sections.get("", {}).get(GLOBAL, []))])  # store updated config
     for title, _map in sorted(dictviewitems(_.sections)):  # in added order
+      if len(_map) == 0: continue  # this is probably not sufficient, as the map's contents may also be empty
       fd.write("[%s]\n" % (title))
       for key, values in sorted(_map.items()):  # no need for iteritems, as supposedly small (max. size = 4)
         if values is None: fd.write("%s=\n" % (key.lower()))  # skip or ignore
