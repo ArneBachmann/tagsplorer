@@ -45,7 +45,7 @@ def wrapChannels(func):
 
 def setUpModule():
   ''' Test suite setup: missing SKIP environment variable removes previous index and reverts config file. '''
-  os.environ["DEBUG"] = "True"
+  lib.LOG = lib.DEBUG
   global logFile
   logFile = open(".testRun.log", "w")
   if not os.environ.get("SKIP", "False").lower() == "true":
@@ -110,7 +110,7 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testConfigs(_):
     ''' This test tests global configuration CRUD. '''
-    _.assertIn("Added global configuration entry", runP("--set __test=123 -l1"))
+    _.assertAllIn(["debug mode", "Added global configuration entry"], runP("--set __test=123 -l1"))
     _.assertIn("Modified global configuration entry", runP("--set __test=234 -l1"))
     ret = runP("--get __test -l1")
     _.assertIn("__test = 234", ret)
@@ -136,7 +136,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertNotIn(".3", runP("--stats -v"))
 
   def testLocalTag(_):
-    _.assertAllIn(["found in 1 folders", "1 folders found"], runP("-s b1,tag1 -v --dirs"))  # 
+    _.assertAllIn(["found in 1 folders", "1 folders found"], runP("-s b1,tag1 -v --dirs"))  #
     _.assertIn("1 files found", runP("-s b1,tag1 -v"))  # The other file is excluded by the tag1 exclude in the config TODO separate testswith inc/exc and file/glob
     _.assertIn("1 files found", runP("-s b1 -s tag1 -v"))  # Different interface, same result
 
@@ -213,7 +213,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["Potential matches found in 2 folders", "3 files found", "file3.ext1"], runP("-s a -x a1 -l2"))  # with exclude with files
 
   def testTest(_):
-    _.assertEqual("", call(sys.executable + " lib.py --test"))
+    _.assertEqual("", call(sys.executable if sys.platform != 'win32' else '"' + sys.executable + '"' + " lib.py --test"))
 
   @unittest.SkipTest
   def testUnwalk(_):
