@@ -14,7 +14,7 @@ if sys.version_info.major < 3:
 else:
   from io import StringIO
 
-PYTHON = os.path.realpath(sys.executable)
+PYTHON = os.path.realpath(sys.executable) if sys.platform != 'win32' else '"' + os.path.realpath(sys.executable) + '"'
 REPO = '_test-data'
 SVN = tp.findRootFolder(None, '.svn') is not None
 print("Using VCS '%s'" % "SVN" if SVN else "Git")
@@ -213,7 +213,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["Potential matches found in 2 folders", "3 files found", "file3.ext1"], runP("-s a -x a1 -l2"))  # with exclude with files
 
   def testTest(_):
-    _.assertEqual("", call(sys.executable if sys.platform != 'win32' else '"' + sys.executable + '"' + " lib.py --test"))
+    _.assertEqual("", call(PYTHON + " lib.py --test"))
 
   @unittest.SkipTest
   def testUnwalk(_):
@@ -247,5 +247,5 @@ def load_tests(loader, tests, ignore):
 
 if __name__ == '__main__':
   import unittest
-  sys.unittesting = None
+  sys.unittesting = None  # flag to enable functions to know they are being tested (may help sometimes)
   unittest.main()

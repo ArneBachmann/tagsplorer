@@ -3,7 +3,7 @@
 # This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python 2 and Python 3.
 
 
-import collections, copy, fnmatch, os, re, sys, time, zlib
+import collections, copy, dircache, fnmatch, os, re, sys, time, zlib
 
 DEBUG = 3; INFO = 2; WARN = 1; ERROR = 0
 LOG = INFO if os.environ.get("DEBUG", "False").lower() != "true" else DEBUG  # maximum log level
@@ -358,7 +358,7 @@ class Indexer(object):
             adds.append(i); _.tag2paths[i].append(parent)
 
      # Second part: recurse folder-wise
-    files = wrapExc(lambda: os.listdir(aDir), lambda: [])  # read file list TODO use walker cache? there's something in the standard lib
+    files = wrapExc(lambda: dircache.listdir(aDir), lambda: [])  # read file list
     if SKPFILE in files:
       if _.log >= 1: info("  Skip %s due to local skip file" % aDir)
       return  # completely ignore sub-tree
@@ -510,7 +510,7 @@ class Indexer(object):
     allfiles, willskip = set(), False  # contains files from current or mapped folders (without path, since "mapped", but could have local symlink - TODO
     for folder in folders:
       if _.log >= 1: debug("Checking %sfolder %s" % ("root " if folder == "" else '', folder))
-      files = set(wrapExc(lambda: [f for f in os.listdir(_.root + folder) if isfile(_.root + folder + SLASH + f)], []))  # all from current folder, exc: folder name (unicode etc.)
+      files = set(wrapExc(lambda: [f for f in dircache.listdir(_.root + folder) if isfile(_.root + folder + SLASH + f)], []))  # all from current folder, exc: folder name (unicode etc.)
       if IGNFILE in files: continue  # skip is more difficult to handle than ignore, cf. return tuple here and code in tp.find() with return
       if folder == aFolder and SKPFILE in files: willskip = True; info("Skip %s due to local marker file" % folder); continue  # return ([], True)  # TODO semantics: handle mapped folder even for skip local marker?
       conf = _.cfg.paths.get(folder, {})  # if empty, files remains unchanged, we return all of them regularly
