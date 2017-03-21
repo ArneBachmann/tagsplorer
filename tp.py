@@ -1,5 +1,8 @@
 # tagsPlorer command-line application  (C) Arne Bachmann https://github.com/ArneBachmann/tagsplorer
 # This is the main entry point of the tagsPlorer utility
+# TODO tp: using full path not normalized to root in untag/tag
+# TODO allow relative root-absolute paths for add tag (contained in remove tag)
+
 
 import optparse
 from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports
@@ -227,7 +230,7 @@ class Main(object):
     for file in filez:
       repoRelative = file.startswith("/")
       while file.startswith("/"): file = file[1:]  # prune repo-relative marker(s)
-      if not (os.path.exists(os.path.join(folder, file) if repoRelative else file) or fnmatch.filter(os.listdir(folder if repoRelative else os.getcwd()), file)):
+      if not (os.path.exists(os.path.join(folder, file) if repoRelative else file) or fnmatch.filter(dircache.listdir(folder if repoRelative else os.getcwd()), file)):
         warn("File or glob not found%s %s%s" % (", skipping" if _.options.strict else ", but added anyway", "/" if repoRelative else "./", file))
         if _.options.strict: continue
       parent, file = os.path.split(file)

@@ -1,6 +1,8 @@
 # tagsPlorer main library  (C) Arne Bachmann https://github.com/ArneBachmann/tagsplorer
 # This is the tagging library to augment OS folder structures by tags (and provide virtual folder view plus queries over tags)
 # This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python 2 and Python 3.
+# TODO move to logging framework?
+# TODO / (root) contained in all tagged files (!). why?
 
 
 import collections, copy, dircache, fnmatch, os, re, sys, time, zlib
@@ -364,23 +366,24 @@ class Indexer(object):
       return  # completely ignore sub-tree
     ignore = ignore or (IGNFILE in files)  # config setting or file marker
     if ignore:  # ignore this directory as tag, don't index contents
-      if _.log >= 1: info("  Ignore %s due to local ignore file" % aDir)
-      _.tagdir2paths[tags[-1]].remove(parent)  # remove current folder tag from index (was introduced/appended by recursion parent/caller). may leave empty list behind
-    else:  # only index extensions if not ignore
-      for file in (ff for ff in files if DOT in ff[1:]):  # index only file extensions
+      if _.log >= 1: info("  Ignore %s due to local ignore setting" % aDir)
+      if len(tags) > 0: _.tagdir2paths[tags[-1]].remove(parent)  # TODO recheck remove current folder tag from index (was introduced/appended by recursion parent/caller, unless we're in root). may leave empty list behind
+    else:  # no ignore, only index extensions as additional tags
+      for file in (ff for ff in files if DOT in ff[1:]):  # index only file extensions in this folder, without propagation to sub-folders
         ext = normalizer.filenorm(file[file.rindex(DOT):])
         i = lindex(_.tags, ext, appendandreturnindex)  # add file extension to local dir's tags only
         adds.append(i); _.tag2paths[i].append(parent)  # add current dir to index of that extension
-    tags = tags[:-1] if ignore else [t for t in tags]  # if ignore: propagate all tags except current folder name to children, otherwise all (by shallow copy)
+    newtags = tags[:-1] if ignore else [t for t in tags]  # if ignore: propagate all tags except current folder name to children, otherwise all (by shallow copy)
     children = (f[len(aDir) + (1 if not aDir.endswith(SLASH) else 0):] for f in filter(isdir, (os.path.join(aDir, ff) for ff in files)))  # only folders. ternary condition necessary for D:\ root dir special case
     for child in children:
-      idx = len(_.tagdirs)  # for this child folder, add one new element at next index (no matter if name already exists)
+      idx = len(_.tagdirs)  # for this child folder, add one new element at next index (no matter if name already exists, because it has a differen paren)
       _.tagdir2parent[idx] = parent
       _.tagdirs.append(intern(normalizer.filenorm(child)))  # now add the child folder name
-      tags.append(idx)  # temporary addition of first occurence of that tag string
-      for tag in frozenset(tags + adds): _.tagdir2paths[tag].append(idx)  # store first occurence index only
-      _._walk(aDir + SLASH + child, idx, tags)
-      tags.pop()  # remove temporary folder add after recursion (modify list instead of full copy on each recursion)
+      newtags.append(idx)  # temporary addition of first occurence of that tag string
+      if _.log >= 2: debug("Tagging folder '%s' with tags '%s' ('%s')" % (child, ",".join([_.tagdirs[x] for x in newtags]), ",".join([_.tags[x] for x in adds])))  # TODO can contain root (empty string)
+      for tag in frozenset(newtags + adds): _.tagdir2paths[tag].append(idx)  # store first occurence index only
+      _._walk(aDir + SLASH + child, idx, newtags)
+      newtags.pop()
 
   def mapTagsIntoDirsAndCompressIndex(_):
     ''' After all manual tags have been added, we map them into the tagdir structure. '''
@@ -458,14 +461,14 @@ class Indexer(object):
     currentPathInGlobalIgnores = lambda path: (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs
     partOfAnyGlobalSkipPath = lambda path: any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])
     anyParentIsSkipped = lambda path: any([SKIP in dictget(_.cfg.paths, SLASH.join(path.split(SLASH)[:p + 1]), {}) for p in range(path.count(SLASH))])
-    allPaths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set()))))
+    _.allPaths = wrapExc(lambda: _.allPaths, lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))))
     if returnAll or len(include) == 0:
       if _.log >= 2: debug("Building list of all paths")
-      alls = list([path for path in allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})])  # all existing paths except globally ignored/skipped paths TODO add marker file logic below
+      alls = list([path for path in _.allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})])  # all existing paths except globally ignored/skipped paths TODO add marker file logic below
       if returnAll: return alls
     paths, first, cache = set() if len(include) > 0 else alls, True, {}
     for tag in include:  # positive restrictive matching
-      if _.log >= 2: info("Filtering paths by inclusive tag %s" % tag)
+      if _.log >= 2: info("Filtering paths by inclusive tag '%s'" % tag)
       if isglob(tag):
         if DOT in tag:  # [:-1]:  # contains an extension in non-final position (in final should not be possible)
           ext = normalizer.filenorm(tag[tag.index(DOT):])
@@ -477,13 +480,13 @@ class Indexer(object):
           warn("Preliminarily ignoring glob <%s> while filtering folders (no file extension in glob)" % tag)
           new = set()  # ignore glob in folder filtering altogether
       elif tag.startswith(DOT):  # explicit file extension filtering
-        new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index
+        new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index TODO same as below
       else:  # no glob, no extension: can be tag or file name
         new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index
       paths = new if first else paths & new
       first = False
     for tag in exclude:  # we don't excluded globs here, because we would also exclude potential candidates (because index is over-specified)
-      if _.log >= 2: info("Filtering paths by exclusive tag %s" % tag)
+      if _.log >= 2: info("Filtering paths by exclusive tag '%s'" % tag)
       potentialRemove = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # can only be removed, if no manual tag/file extension/glob in config or "from"
       new = _.removeIncluded(include, potentialRemove)  # remove paths with includes from "remove" list (adding back...)
       if first:  # start with all all paths, except determined excluded paths

@@ -48,23 +48,25 @@ def setUpModule():
   lib.LOG = lib.DEBUG
   global logFile
   logFile = open(".testRun.log", "w")
-  if not os.environ.get("SKIP", "False").lower() == "true":
-    try: os.unlink(REPO + os.sep + lib.INDEX)
-    except: pass  # if earlier tests finished without errors
-    if SVN:  call("svn revert %s" % (REPO + os.sep + lib.CONFIG))  # for subversion
-    else:    call("git checkout %s/%s" % (REPO, lib.CONFIG))  # for git
-  runP("-u -v")  # initial indexing, invisible
 
 def tearDownModule():
   logFile.close()
   if not os.environ.get("SKIP", "False").lower() == "true":
-    os.unlink(REPO + os.sep + lib.INDEX)
+    try: os.unlink(REPO + os.sep + lib.INDEX)
+    except: pass
     if SVN: call("svn revert %s" % (REPO + os.sep + lib.CONFIG))  # for subversion
     else:   call("git checkout %s/%s" % (REPO, lib.CONFIG))  # for git
 
 
 class TestRepoTestCase(unittest.TestCase):
   ''' All tests are run through the command-line interface of tp.py. '''
+
+  def setUp(_):
+    try: os.unlink(REPO + os.sep + lib.INDEX)
+    except: pass  # if earlier tests finished without errors
+    if SVN:  call("svn revert %s" % (REPO + os.sep + lib.CONFIG))  # for subversion
+    else: call("git checkout %s/%s" % (REPO, lib.CONFIG))  # for git
+    runP("-u")  # initial indexing, invisible
 
   def assertAllIn(_, lizt, where):
     ''' Helper assert. '''
@@ -205,12 +207,15 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("anyway", runP("--untag missing,-exclusive /tagging/anyfile1 -l 2 --relax"))
     _.assertIn("0 files found", runP("-s missing -l 2"))
 
-  def testNegativeSearch(_):
+  def testNoOption(_):
     _.assertIn("No option", runP(""))
-    _.assertAllIn(["Info:    3 folders found for +<a> -<>.",   "/a", "/a/a1", "/a/a2"], runP("-s a -v --dirs").split("\n"))  # only include only dirs
+
+  def testNegativeSearch(_):
+    _.assertIn("3 occurrences for .2, .ext2, a", runP("--stats -v"))
+    _.assertAllIn(["Info:    3 folders found for +<a> -<>.",   "/a", "/a/a1", "/a/a2"], runP("-s a -l2 --dirs").split("\n"))  # only include only dirs
     _.assertAllIn(["Info:    2 folders found for +<a> -<a1>.", "/a", "/a/a2"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
-    _.assertAllIn(["Potential matches found in 3 folders", "6 files found", "file3.ext3"], runP("-s a -v"))  # only include with files
-    _.assertAllIn(["Potential matches found in 2 folders", "3 files found", "file3.ext1"], runP("-s a -x a1 -l2"))  # with exclude with files
+    _.assertAllIn(["Potential matches found in 3 folders", "6 files found in 3 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -v"))  # only include with files
+    _.assertAllIn(["Potential matches found in 2 folders", "3 files found in 2 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -l2"))  # with exclude with files
 
   def testTest(_):
     _.assertEqual("", call(PYTHON + " lib.py --test"))
