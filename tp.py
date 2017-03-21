@@ -230,7 +230,7 @@ class Main(object):
     for file in filez:
       repoRelative = file.startswith("/")
       while file.startswith("/"): file = file[1:]  # prune repo-relative marker(s)
-      if not (os.path.exists(os.path.join(folder, file) if repoRelative else file) or fnmatch.filter(dircache.listdir(folder if repoRelative else os.getcwd()), file)):
+      if not (os.path.exists(os.path.join(folder, file) if repoRelative else file) or fnmatch.filter(listdir(folder if repoRelative else os.getcwd()), file)):
         warn("File or glob not found%s %s%s" % (", skipping" if _.options.strict else ", but added anyway", "/" if repoRelative else "./", file))
         if _.options.strict: continue
       parent, file = os.path.split(file)
