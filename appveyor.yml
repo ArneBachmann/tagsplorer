@@ -12,7 +12,7 @@ install:
   - cmd: "python --version"
   - ps: If(($env:PYTHON).Contains("pypy2")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py',     "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
   - ps: If(($env:PYTHON).Contains("pypy3")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/3.2/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
-  - ps: If(($env:PYTHON).Contains("pypy3")) { python -m pip install --disable-pip-version-check --upgrade "pip<8.0.0" } Else { python -m pip install --disable-pip-version-check --upgrade pip } # downgrade pip
+  - ps: If(($env:PYTHON).Contains("pypy3")) { python -m pip install --disable-pip-version-check --upgrade "pip<8.0.0"; python -m pip install -U --force-reinstall pip } Else { python -m pip install --disable-pip-version-check --upgrade pip } # downgrade pip, https://github.com/pypa/pip/issues/2669
   - ps: If(($env:PYTHON).Contains("pypy")) { python -m pip --version } else { pip --version }  # points to CPython, even when running Pypy (because pypy has no \Scripts folder)
   - cmd: "python -m pip install coverage"
   - ps: If(($env:PYTHON).Contains("pypy")) { & ($env:PYTHON + '\bin\coverage') 'help' } Else { coverage help }
