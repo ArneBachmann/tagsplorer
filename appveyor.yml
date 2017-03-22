@@ -48,9 +48,9 @@ environment:
 build_script:
   - cmd: python -B setup.py build
 test_script:
-  - ps: If(($env:PYTHON).Contains("pypy")) { $env:PYTHON\bin\coverage run tests.py } Else { coverage run tests.py }
+  - ps: If(($env:PYTHON).Contains("pypy")) { & ($env:PYTHON + '\bin\coverage run tests.py') } Else { coverage run tests.py }
 after_test:
-  - ps: If(($env:PYTHON).Contains("pypy")) { $env:PYTHON\bin\coverage html; $env:PYTHON\bin\coverage annotate tests.py } Else { coverage html; coverage annotate tests.py }
+  - ps: If(($env:PYTHON).Contains("pypy")) { & ($env:PYTHON + '\bin\coverage) 'html'; & ($env:PYTHON + '\bin\coverage') annotate tests.py } Else { coverage html; coverage annotate tests.py }
   - cmd: dir
   - ps: dir "$env:appveyor_build_folder"
   - ps: 7z a coverage.zip "$env:appveyor_build_folder\htmlcov\*"
