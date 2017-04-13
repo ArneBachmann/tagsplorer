@@ -12,9 +12,11 @@ install:
   - cmd: "python --version"
   - ps: If(($env:PYTHON).Contains("pypy2")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py',     "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
   - ps: If(($env:PYTHON).Contains("pypy3")) { (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/3.2/get-pip.py', "$env:appveyor_build_folder\get-pip.py"); python get-pip.py }
-  - ps: If(($env:PYTHON).Contains("pypy3")) { python -m pip install --disable-pip-version-check --upgrade "pip<8.0.0" } Else { python -m pip install --disable-pip-version-check --upgrade pip } # downgrade pip
+  - ps: If(($env:PYTHON).Contains("pypy3")) { python -m pip install --disable-pip-version-check --upgrade "pip<8.0.0" } Else { python -m pip install --disable-pip-version-check --upgrade pip } # downgrade pip, https://github.com/pypa/pip/issues/2669
+  - ps: If(($env:PYTHON).Contains("pypy3")) { python -m pip install -U --force-reinstall pip }
   - ps: If(($env:PYTHON).Contains("pypy")) { python -m pip --version } else { pip --version }  # points to CPython, even when running Pypy (because pypy has no \Scripts folder)
   - cmd: "python -m pip install coverage"
+  - ps: If(($env:PYTHON).Contains("pypy")) { & ($env:PYTHON + '\bin\coverage') 'help' } Else { coverage help }
 clone_script:
   - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
 environment:
@@ -46,10 +48,11 @@ environment:
       platform: x64
 build_script:
   - cmd: python -B setup.py build
+# Examples learned from https://social.technet.microsoft.com/wiki/contents/articles/7703.powershell-running-executables.aspx
 test_script:
-  - ps: If(($env:PYTHON).Contains("pypy")) { '$env:PYTHON\bin\coverage run tests.py' } Else { 'coverage run tests.py' }
+  - ps: If(($env:PYTHON).Contains("pypy")) { & ($env:PYTHON + '\bin\coverage') 'run' 'tests.py' } Else { coverage run tests.py }
 after_test:
-  - ps: If(($env:PYTHON).Contains("pypy")) { '$env:PYTHON\bin\coverage html'; '$env:PYTHON\bin\coverage annotate tests.py' } Else { 'coverage html'; 'coverage annotate tests.py' }
+  - ps: If(($env:PYTHON).Contains("pypy")) { & ($env:PYTHON + '\bin\coverage') 'html'; & ($env:PYTHON + '\bin\coverage') 'annotate' 'tests.py' } Else { coverage html; coverage annotate tests.py }
   - cmd: dir
   - ps: dir "$env:appveyor_build_folder"
   - ps: 7z a coverage.zip "$env:appveyor_build_folder\htmlcov\*"
