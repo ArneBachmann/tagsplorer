@@ -540,8 +540,8 @@ class Indexer(object):
     for tag in include:  # positive restrictive matching
       if _.log >= 2: info("Filtering paths by inclusive tag '%s'" % tag)
       if isglob(tag):
-        if os.extsep in tag:  # [:-1]:  # contains an extension in non-final position (in final should not be possible)
-          ext = normalizer.filenorm(tag[tag.index(os.extsep):])
+        if DOT in tag:  # [:-1]:  # contains an extension in non-final position (in final should not be possible)
+          ext = normalizer.filenorm(tag[tag.index(DOT):])
           if isglob(ext):  # glob search with glob extension
             new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), fnmatch.filter(_.tagdirs, ext), set())  # filters all extensions in index by glob (e.g. .c??). update returns updated same object instead of a | set() or a.union(set())
           else:  # glob search with fixed extension
