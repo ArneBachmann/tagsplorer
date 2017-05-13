@@ -1,8 +1,8 @@
-# tagsPlorer main library  (C) Arne Bachmann https://github.com/ArneBachmann/tagsplorer
+# tagsPlorer main library  (C) 2016-2017  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer
 # This is the tagging library to augment OS folder structures by tags (and provide virtual folder view plus queries over tags)
 # This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python 2 and Python 3.
-# TODO move to logging framework?
-# TODO / (root) contained in all tagged files (!). why?
+# TODO migrate to logging framework
+# TODO add option to interrupt find or walk (probably on process level via SIGINT?)
 
 
 import collections, copy, fnmatch, os, re, sys, time, zlib
@@ -10,7 +10,8 @@ if sys.version_info.major >= 3: from os import listdir
 else: from dircache import listdir
 
 DEBUG = 3; INFO = 2; WARN = 1; ERROR = 0
-LOG = INFO if os.environ.get("DEBUG", "False").lower() != "true" else DEBUG  # maximum log level
+LOG = DEBUG if os.environ.get("DEBUG", "false").lower() == "true" else INFO  # maximum log level
+ON_WINDOWS = sys.platform == 'win32'  # there's a different detection schema, but I don't remember
 
 # Version-dependent imports
 debug, info, warn, error = [lambda _: None] * 4
@@ -49,7 +50,7 @@ INDEX =   ".tagsplorer.idx"  # index file (re-built when timestamps differ)
 SKPFILE = ".tagsplorer.skp"  # marker file (can also be configured in configuration instead)
 IGNFILE = ".tagsplorer.ign"  # marker file (dito)
 IGNORE, SKIP, TAG, FROM, SKIPD, IGNORED, GLOBAL = map(intern, ("ignore", "skip", "tag", "from", "skipd", "ignored", "global"))  # config file options
-SEPA, SLASH, DOT = map(intern, (";", "/", "."))
+SEPA, SLASH, DOT = map(intern, (";", "/", os.extsep))
 
 
 # Functions
@@ -67,7 +68,7 @@ def wrapExc(func, otherwise = None):
   except: return otherwise() if callable(otherwise) else otherwise
 
 def lindex(lizt, value, otherwise = lambda _lizt, _value: None):
-  ''' List index function with lazy computation if not found.
+  ''' List index function with lazy append computation if not found. Default fallback logic is: do nothing and return None.
   >>> print(lindex([1, 2], 2))
   1
   >>> print(lindex([], 1))
@@ -76,9 +77,10 @@ def lindex(lizt, value, otherwise = lambda _lizt, _value: None):
   return wrapExc(lambda: lizt.index(value), lambda: otherwise(lizt, value))  # ValueError
 
 ilong = eval("lambda s: int(s)") if sys.version_info.major >= 3 else eval("lambda s: long(s)")
+def ident(_): return _
 def isdir(f): return os.path.isdir(f) and not os.path.islink(f) and not os.path.ismount(f)
 def isfile(f): return wrapExc(lambda: os.path.isfile(f) and not os.path.ismount(f) and not os.path.isdir(f), lambda: False)  # on error "no file"
-pathnorm = (lambda s: s.replace("\\", SLASH)) if sys.platform == 'win32' else (lambda s: s)  # as lambda to allow dynamic definition
+pathnorm = (lambda s: s.replace("\\", SLASH)) if ON_WINDOWS else ident  # as lambda to allow dynamic definition
 def lappend(lizt, elem): (lizt.extend if type(elem) == list else lizt.append)(elem); return lizt   # functional list.append that returns self afterwards to avoid new array creation (lizt + [elem])
 def appendandreturnindex(lizt, elem): return len(lappend(lizt, elem)) - 1
 def isunderroot(root, folder): return os.path.commonprefix([root, folder]).startswith(root)
@@ -105,14 +107,25 @@ def splitCrit(lizt, pred):
   ([2, 4], [1, 3, 5])
   '''
   return reduce(lambda acc, next: (lappend(acc[0], next), acc[1]) if pred(next) else (acc[0], lappend(acc[1], next)), lizt, ([], []))
+def caseNormalize(s): return s.upper()
 
 
 # Classes
 class Normalizer(object):
   def setupCasematching(_, case_sensitive):
-    _.filenorm = (lambda s: s) if case_sensitive else (lambda s: s.lower()) # we can't use "str if case_sensitive else str.lower" because for unicode strings this fails, as the function reference comes from the str object
-    _.globmatch = fnmatch.fnmatchcase if case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower())  # fnmatch behavior depends on file system, therefore fixed here
-normalizer = Normalizer()  # to keep a static module-reference
+    ''' Setup normalization.
+    >>> n = Normalizer(); n.setupCasematching(True); print(n.filenorm("Abc"))
+    Abc
+    >>> print(n.globmatch("abc", "?Bc"))
+    False
+    >>> n.setupCasematching(False); print(n.filenorm("Abc"))
+    ABC
+    >>> print(n.globmatch("abc", "?Bc"))
+    True
+    '''
+    _.filenorm = ident if case_sensitive else caseNormalize  # we can't use "str if case_sensitive else str.upper" because for unicode strings this fails, as the function reference comes from the str object
+    _.globmatch = fnmatch.fnmatchcase if case_sensitive else lambda f, g: fnmatch.fnmatch(f.upper(), g.upper())  # fnmatch behavior depends on file system, therefore fixed here
+normalizer = Normalizer()  # to keep a static module-reference. TODO move to main instead?
 
 class ConfigParser(object):
   ''' Much simplified config file (ini file) reader. No line continuation, no colon separation, no symbolic replacement, no comments, no empty lines. '''
@@ -164,11 +177,13 @@ class Config(object):
   def __init__(_):
     _.log = 0  # level
     _.paths = {}  # map from relative dir path to dict of marker -> [entries]
-    _.case_sensitive = sys.platform != 'win32'  # dynamic default unless specified in the config file
-    normalizer.setupCasematching(_.case_sensitive)
+    _.case_sensitive = not ON_WINDOWS  # dynamic default unless specified differently in the config file
+    _.reduce_case_storage = False  # default is always store case-noramlized plus true case
+    normalizer.setupCasematching(_.case_sensitive)  # default, overridden by load
 
   def load(_, filename, index_ts = None):
     ''' Load configuration from file, if timestamp differs from index' timestamp. '''
+    if _.log >= 2: debug("load " + str((filename, index_ts)))
     with open(filename, 'r') as fd:  # HINT: don't use rb, because in Python 3 this return bytes objects
       if _.log >= 1: info("Comparing configuration timestamp for " + filename)
       timestamp = float(fd.readline().rstrip())
@@ -176,13 +191,14 @@ class Config(object):
         if _.log >= 1: info("Skip loading configuration, because index is up to date")
         return False  # no skew detected, allow using old index' interned configuration ("self" will be discarded)
       if _.log >= 1: info("Loading configuration from file system" + ("" if index_ts is None else " because index is outdated"))
-      cp = ConfigParser(); dat = cp.load(fd); _.__dict__.update(dat)
+      cp = ConfigParser(); dat = cp.load(fd); _.__dict__.update(dat)  # update with global options
       _.paths = cp.sections
       normalizer.setupCasematching(_.case_sensitive)
       return True
 
   def store(_, filename, timestamp = None):
     ''' Store configuration to file, prepending data by the timestamp, or the current time. '''
+    if _.log >= 2: debug("store " + str((filename, timestamp)))
     if timestamp is None: timestamp = getTs()  # for all cases we modify only config file (e.g. tag, untag, config)
     cp = ConfigParser(); cp.sections = _.paths
     with open(filename, "w") as fd:  # don't use wb for Python 3 compatibility
@@ -199,6 +215,7 @@ class Config(object):
         force: allows adding tags already subsumed by globs
         returns: modified?
     '''
+    if _.log >= 2: debug("addTag " + str((folder, pattern, poss, negs, force)))
     conf = dictget(_.paths, folder, {})  # creates empty config entry if it doesn't exist
     is_glob = isglob(pattern)
     pname = "Glob" if is_glob else "File"
@@ -248,7 +265,7 @@ class Config(object):
         negs: exclusive tags or globs to remove
         returns: modified?
     '''
-    if _.log >= 2: debug(str((folder, pattern, poss, negs)))  # TODO document l2 debug == trace? TODO use for all method entries?
+    if _.log >= 2: debug("delTag " + str((folder, pattern, poss, negs)))
     conf = dictget(_.paths, folder, {})  # creates empty config entry if it doesn't exist
     changed = False
     for tag in poss + negs:
@@ -280,12 +297,13 @@ class Indexer(object):
     _.timestamp = 1.23456789  # for comparison with configuration timestamp
     _.cfg = None  # reference to latest corresponding configuration
     _.root = pathnorm(os.path.abspath(startDir))
-    _.tagdirs = []  # array of tags (plain dirnames and manually set tags (not represented in parent)
-    _.tagdir2parent = {}  # index of dir -> index of parent to represent tree structure (exclude folder links)
-    _.tagdir2paths = dd()  # dirname index (first occurrence?) to [all path indices containing dirname]
+    _.tagdirs = []  # array of tags (plain dirnames and manually set tags (not represented in parent), both case-normalized and as-is)
+    _.tagdir2parent = []  # index of dir entry (tagdirs) -> index of parent to represent tree structure (exclude folder links)
+    _.tagdir2paths = dd()  # dirname/tag index -> list of [all path indices relevant for that dirname/tag]
 
   def load(_, filename, ignore_skew = False, recreate_index = True):
     ''' Load a pickled index into memory. Optimized for speed. '''
+    if _.log >= 2: debug("load " + str((filename, ignore_skew, recreate_index)))
     with open(filename, "rb") as fd:
       if _.log >= 1: info("Reading index from " + filename)
       c = pickle.loads(zlib.decompress(fd.read()) if _.compressed else fd.read())
@@ -294,11 +312,13 @@ class Indexer(object):
       if (ignore_skew or cfg.load(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)) and recreate_index:
         if _.log >= 1: info("Recreating index considering configuration")
         _.cfg = cfg  # set more recent config and update
+        normalizer.setupCasematching(cfg.case_sensitive)  # update after loading current state from config file, otherwise keep interned value from pickled object
         _.walk()  # re-create this index
         _.store(filename)
 
   def store(_, filename, config_too = True):
     ''' Persist index in a file, including currently active configuration. '''
+    if _.log >= 2: debug("store " + str((filename, config_too)))
     with open(filename, "wb") as fd:
       nts = getTs()
       _.timestamp = _.timestamp + 0.001 if nts <= _.timestamp else nts  # assign new date, ensure always differing from old value
@@ -314,36 +334,52 @@ class Indexer(object):
     if _.log >= 1: info("Walking folder tree")
     if cfg is not None: _.cfg = cfg
     if _.cfg is None: error("No configuration loaded. Cannot walk folder tree"); return
-    _.tagdirs.append("")  # this is root
-    _.tagdir2parent[0] = 0  # marker for root (the only self-reference)
+    if _.log >= 2: debug("Configuration: case_sensitive = %s, reduce_case_storage = %s" % (_.cfg.case_sensitive, _.cfg.reduce_case_storage))
+    _.tagdirs = [""]  # this is root
+    _.tagdir2parent = [0]  # marker for root (the only self-reference)
+    _.tagdir2paths = dd()  # maps index of tag to list of path leaf indexes
     _.tags, _.tag2paths = [], dd()  # temporary structures for manual tag and extension mapping, and respective paths
-    _._walk(_.root)  # recursive indexing
-    tagdirs = len(_.tagdirs)
+    _._walk(_.root, 0)  # recursive indexing: folder to index and parent's dirname index (from _.tagdirs)
+    tagdirs = len(_.tagdirs)  # not the same as _.tagdirs, here we only memorize the length for stats output
     rm = _.mapTagsIntoDirsAndCompressIndex()  # unified with folder entries for simple lookup and filtering
     tags = len(_.tags)
     del _.tags, _.tag2paths  # remove temporary structures
     if _.log >= 1: info("Indexed %d folders and %d tags/globs/extensions, pruned %d unused entries." % (tagdirs, tags, rm))
 
-  def _walk(_, aDir, parent = 0, tags = []):
+  def _walk(_, aDir, parent, tags = []):
     ''' Recursive walk through folder tree.
-        Adds all directories as tags unless ignored; considers manually set configuration
+        Adds all parent directories' names as tags und current directory's name as well unless ignored by configuration or file marker.
+        General approach is to add children's tag(s) in the parent, then recurse, potentially removing added tags in the recursion if necessary.
+        Flow of execution:
+          1.  get folder configuration, if any
+          1a. set skip or ignore flags from configuration
+          1b. read additional tags for folder and folder mapping from configuration into "tags" and "adds", no matter if inclusive or exclusive
+          2.  process contained file names
+          2a. index all folders' file and sub-folder file names' extensions
+          3.  prepare recursion
+          3a. add sub-folder name to "tagdirs" and "tagdir2parent" 
+          3b. recurse
         aDir: path relative to root (always with preceding and no trailing forward slash)
-        parent: the parent folder's index in the index
-        tags: list of aggregated tag/folder names
+        parent: the parent folder's index in the index (usually original case)
+        tags: list of aggregated tag/folder names of parent directories
     '''
-    if _.log >= 2: info("Walking " + aDir)
+    if _.log >= 2: info("_walk " + aDir)
+#    if len(aDir) > 1 and aDir.split("/")[-1] == 'a':  # TODO remove debug code
+#      import pdb; pdb.set_trace()
 
-     # First part: check folder's configuration
-    skip, ignore = False, False  # marks dir as "no recursion"/"no tagging" respectively
-    adds = []  # indexes of additional tags for single files in this folder, not to be promoted to sub-directories (which would only be folder tag names)
+    # 1.  get folder configuration, if any
+    skip, ignore = False, False  # marks folder as "no further recursion" or "no tagging for this folder only", respectively
+    adds = []  # indexes of additional tags (of "tags") for single files (extensions) in this folder, not to be promoted to sub-directories (which would only be folder tag names)
               # these tags apply of course only to certain files, but the index has to be over-generic to catch them and match them in a second step to certain files
     marks = _.cfg.paths.get(aDir[len(_.root):], {})
+    # 1a: check folder's configuration
     if SKIP in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' and SLASH in aDir else '') in dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])):
       if _.log >= 1: info("  Skip %s%s" % (aDir, '' if SKIP in marks else ' due to global skip setting'))
       return  # completely ignore sub-tree
     elif IGNORE in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' and SLASH in aDir else '') in dictget(dictget(_.cfg.paths, '', {}), IGNORED, [])):  # former checks path cfg, latter checks global ignore TODO allow glob check? TODO add marker file check
       if _.log >= 1: info("  Ignore %s%s" % (aDir, '' if IGNORE in marks else ' due to global ignore setting'))
       ignore = True  # ignore this directory as tag, don't index contents
+    # 1b: check folder's configuration
     elif TAG in marks:  # neither SKIP nor IGNORE in config: consider manual folder tagging
       for t in marks[TAG]:
         if _.log >= 1: info("  Tag '%s' in %s" % (t, aDir))
@@ -361,31 +397,51 @@ class Indexer(object):
             i = lindex(_.tags, tag, appendandreturnindex)
             adds.append(i); _.tag2paths[i].append(parent)
 
-     # Second part: recurse folder-wise
+    #  2.  process contained file names
     files = wrapExc(lambda: listdir(aDir), lambda: [])  # read file list
-    if SKPFILE in files:
+    if SKPFILE in files:  # TODO what about file name case? should be no problem, as even Windows allows lower-case file names and should match here
       if _.log >= 1: info("  Skip %s due to local skip file" % aDir)
       return  # completely ignore sub-tree
     ignore = ignore or (IGNFILE in files)  # config setting or file marker
-    if ignore:  # ignore this directory as tag, don't index contents
+    if ignore:  # ignore this directory as tag, don't index its contents, but continue with children
       if _.log >= 1: info("  Ignore %s due to local ignore setting" % aDir)
-      if len(tags) > 0: _.tagdir2paths[tags[-1]].remove(parent)  # TODO recheck remove current folder tag from index (was introduced/appended by recursion parent/caller, unless we're in root). may leave empty list behind
-    else:  # no ignore, only index extensions as additional tags
-      for file in (ff for ff in files if DOT in ff[1:]):  # index only file extensions in this folder, without propagation to sub-folders
-        ext = normalizer.filenorm(file[file.rindex(DOT):])
-        i = lindex(_.tags, ext, appendandreturnindex)  # add file extension to local dir's tags only
+      if not _.cfg.reduce_case_storage and len(tags) >= 2 and _.tagdirs[tags[-1]] == caseNormalize(_.tagdirs[tags[-2]]): _.tagdir2paths[tags[-1]].pop()  # in case parent caller added true case *and also* case-normalized version, remove both
+#      elif len(tags) > 0: _.tagdir2paths[tags[-1]].remove(parent)  # TODO recheck why needed? remove current folder tag from index (was introduced/appended by recursion parent/caller, unless we're in root). may leave empty list behind
+    else:  # no ignore, so index extensions as additional tags, folders and files alike
+      # 2a. index all folders' contents' names file extensions
+      for _file in (ff for ff in files if DOT in ff[1:]):  # index only file extensions in this folder, without propagation to sub-folders
+        ext = _file[_file.rindex(DOT):]  # split off extension
+        iext = caseNormalize(ext)
+        i = lindex(_.tags, ext, appendandreturnindex)  # get or add file extension to local dir's tags only
         adds.append(i); _.tag2paths[i].append(parent)  # add current dir to index of that extension
-    newtags = tags[:-1] if ignore else [t for t in tags]  # if ignore: propagate all tags except current folder name to children, otherwise all (by shallow copy)
-    children = (f[len(aDir) + (1 if not aDir.endswith(SLASH) else 0):] for f in filter(isdir, (os.path.join(aDir, ff) for ff in files)))  # only folders. ternary condition necessary for D:\ root dir special case
-    for child in children:
-      idx = len(_.tagdirs)  # for this child folder, add one new element at next index (no matter if name already exists, because it has a differen paren)
-      _.tagdir2parent[idx] = parent
-      _.tagdirs.append(intern(normalizer.filenorm(child)))  # now add the child folder name
-      newtags.append(idx)  # temporary addition of first occurence of that tag string
-      if _.log >= 2: debug("Tagging folder '%s' with tags '%s' ('%s')" % (child, ",".join([_.tagdirs[x] for x in newtags]), ",".join([_.tags[x] for x in adds])))  # TODO can contain root (empty string)
-      for tag in frozenset(newtags + adds): _.tagdir2paths[tag].append(idx)  # store first occurence index only
-      _._walk(aDir + SLASH + child, idx, newtags)
-      newtags.pop()
+        if not _.cfg.reduce_case_storage and iext != ext:  # differs from normalized version: store normalized as well
+          i = lindex(_.tags, iext, appendandreturnindex)  # add file extension to local dir's tags only
+          adds.append(i); _.tag2paths[i].append(parent)  # add current dir to index of that extension
+    # 3.  prepare recursion
+    newtags = tags[1:-1] if ignore else [t for t in tags]  # 1: because, :-1 because??? if ignore: propagate all tags except current folder name and case-normalized variant (because only one parent allowed) to children, otherwise all (by shallow copy).
+    children = (f[len(aDir) + (1 if not aDir.endswith(SLASH) else 0):] for f in filter(isdir, (os.path.join(aDir, ff) for ff in files)))  # only consider folders. ternary condition is necessary for the backslash in "D:\", a Windows root dir special case
+    for child in children:  # iterate sub-folders
+      idxs = []  # first element in "idx" is next index to use in recursion, no matter if true-case or case-normalized mode is selected
+      # 3a. add sub-folder name to "tagdirs" and "tagdir2parent"
+      if not (ON_WINDOWS and _.cfg.reduce_case_storage):  # Windows: only store true-case if not reducing storage, Linux: always store
+        if _.log >= 1: debug("Storing true-case folder name '%s'" % child)
+        idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
+        _.tagdirs.append(intern(child))  # now add the child folder name
+        _.tagdir2parent.append(parent)  # at at same index as tagdirs "next" position
+      iname = caseNormalize(child)
+      if ON_WINDOWS or (not _.cfg.reduce_case_storage and iname != child):  # Linux: only store case-normalized if not reducing storage, Windows: always store
+        if _.log >= 1: debug("Storing case-normalized folder name '%s'" % iname)
+        idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
+        _.tagdirs.append(intern(iname))  # now add the child folder name
+        _.tagdir2parent.append(parent)  # at at same index as tagdirs
+      del iname  # prior to recursion
+      for idx in idxs: newtags.append(idx)  # temporary addition of current child folder's name variants for recursed folders
+      if _.log >= 2: debug("Tagging folder '%s' with tags +<%s> -<%s>" % (child, ",".join([_.tagdirs[x] for x in newtags]), ",".join([_.tags[x] for x in adds])))  # TODO can contain root (empty string)
+      # 3b. recurse
+      for tag in frozenset(newtags): _.tagdir2paths[tag].extend(idxs)  # add subfolder name(s) for all collected tags
+      _._walk(aDir + SLASH + child, idxs[0], newtags)  # as parent, always use original case index, not case-normalized one (unless configured to reduce space)
+      for i in range(len(idxs)): newtags.pop()  # remove regular temporary added entry
+
 
   def mapTagsIntoDirsAndCompressIndex(_):
     ''' After all manual tags have been added, we map them into the tagdir structure. '''
@@ -394,24 +450,33 @@ class Indexer(object):
       idx = lindex(_.tagdirs, tag, appendandreturnindex)  # get index in list, or append if not in yet
       _.tagdir2paths[idx].extend(_.tag2paths[itag])
     rm = [tag for tag, dirs in dictviewitems(_.tagdir2paths) if len(dirs) == 0]  # finding entries that were emptied due to ignores
-    for r in rm: del _.tagdir2paths[r]; debug("Removing no-children tag %s" % _.tagdirs[r])  # remove empty lists from index (was too optimistic, removed by ignore or skip)
+    for r in rm:
+      del _.tagdir2paths[r]
+      if _.log >= 2: debug("Removing no-children tag %s" % _.tagdirs[r])  # remove empty lists from index (was too optimistic, removed by ignore or skip)
+    if _.log >= 1: debug("Removed no-children tags from index for %d tags" % len(rm))
+    found = 0
+    for tag, dirs in dictviewitems(_.tagdir2paths): _l = len(_.tagdir2paths[tag]); _.tagdir2paths[tag] = frozenset(dirs); found += len(_.tagdir2paths[tag]) < _l  # make contents immutable TODO replace set by list makes test addremove pass, but should not
+    if found > 0: info("Removed duplicates from index for %d tags" % found)
     return len(rm)
 
   def unwalk(_, idx = 0, path = ""):
     ''' Walk entire tree from index (slow but proof of correctness). '''
+    if _.log >= 2: debug("unwalk " + str((idx, path)))
     tag = _.tagdirs[idx]  # name of head element
     children = (f[0] for f in filter(lambda a: a[1] == idx and a[0] != idx, dictviewitems(_.tagdir2parent)))  # using generator expression
     if _.log >= 1: info(path + tag + SLASH)
     for child in children: _.unwalk(child, path + tag + SLASH)
 
-  def getPath(_, id, cache):
-    ''' Return one root-relative path for the given index id by recursively going through index-> name mappings. '''
-    assert id < len(_.tagdirs)  # otherwise hell on earth
-    if id == 0: return ""  # root path special case
-    parent = _.tagdir2parent[id]  # get parent id
+  def getPath(_, idx, cache):
+    ''' Return one root-relative path for the given index idx by recursively going through index-> name mappings. '''
+    assert idx < len(_.tagdirs) and idx >= 0  # otherwise hell on earth
+    found = cache.get(idx, None)
+    if found is not None: return found
+    if idx == 0: return ""  # root path special case
+    parent = _.tagdir2parent[idx]  # get parent index
     found = dictget(cache, parent, lambda: _.getPath(parent, cache))  # recursive folder name resolution
-    new = found + SLASH + _.tagdirs[id]
-    cache[id] = new
+    new = found + SLASH + _.tagdirs[idx]
+    cache[idx] = new
     return new
 
   def getPaths(_, ids, cache = {}):
@@ -424,6 +489,7 @@ class Indexer(object):
         excludedPaths: the paths not found in the index, scheduled for removal
         there is no need to check all tags in configuration, because they could be inclusive or exclusive, and are on per-file basis. the existence of a tag suffices for retaining paths
     '''
+    if _.log >= 2: debug("removeIncluded " + str((includedTags, excludedPaths)))
     retain = []
     for path in excludedPaths:
       conf = _.cfg.paths.get(path, {})
@@ -457,6 +523,7 @@ class Indexer(object):
         include: list of cleaned tag names to include
         exclude: list of cleaned tag names to exclude
         returnAll: shortcut flag that simply returns all paths from index
+        returns: list of folder paths
     '''
     if _.log >= 2: debug("findFolders +<%s> -<%s> ALL=%s" % (",".join(include), ",".join(exclude), "Yes" if returnAll else "No"))
     idirs, sdirs = dictget(dictget(_.cfg.paths, '', {}), IGNORED, []), dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored or skipped paths
@@ -466,7 +533,9 @@ class Indexer(object):
     _.allPaths = wrapExc(lambda: _.allPaths, lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))))
     if returnAll or len(include) == 0:
       if _.log >= 2: debug("Building list of all paths")
-      alls = list([path for path in _.allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})])  # all existing paths except globally ignored/skipped paths TODO add marker file logic below
+      alls = [path for path in _.allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})]  # all existing paths except globally ignored/skipped paths TODO add marker file logic below TODO move checks fo _.allPaths cache
+      alls = [a for a in alls if isdir(_.root + os.sep + a)]
+      if _.cfg.log >= 2: debug("findFolders: " + str(alls))
       if returnAll: return alls
     paths, first, cache = set() if len(include) > 0 else alls, True, {}
     for tag in include:  # positive restrictive matching
@@ -475,7 +544,7 @@ class Indexer(object):
         if DOT in tag:  # [:-1]:  # contains an extension in non-final position (in final should not be possible)
           ext = normalizer.filenorm(tag[tag.index(DOT):])
           if isglob(ext):  # glob search with glob extension
-            new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), fnmatch.filter(_.tagdirs, ext), set())  # filters all extensions in index by glob (e.g. .c??). Filter is always case-sensitive, index differs by flag
+            new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), fnmatch.filter(_.tagdirs, ext), set())  # filters all extensions in index by glob (e.g. .c??). update returns updated same object instead of a | set() or a.union(set())
           else:  # glob search with fixed extension
             new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(ext)], cache)), lambda: set())  # exception is unknown index in getPath()
         else:  # no extension: cannot filter folder; ignore glob altogether
@@ -485,7 +554,8 @@ class Indexer(object):
         new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index TODO same as below
       else:  # no glob, no extension: can be tag or file name
         new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index
-      paths = new if first else paths & new
+      if first: paths = new
+      else: paths.intersection_update(new)
       first = False
     for tag in exclude:  # we don't excluded globs here, because we would also exclude potential candidates (because index is over-specified)
       if _.log >= 2: info("Filtering paths by exclusive tag '%s'" % tag)
@@ -494,38 +564,54 @@ class Indexer(object):
       if first:  # start with all all paths, except determined excluded paths
         paths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))) - new  # get paths from index data structure
       else:
-        paths -= new  # reduce found paths
+        paths.difference_update(new)  # reduce found paths
       first = False
-    return list([path for path in paths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path)])  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
+    # Now convert to return list (!)
+    paths = [p for p in paths if not currentPathInGlobalIgnores(p) and not partOfAnyGlobalSkipPath(p)]  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
+    if not _.cfg.case_sensitive:  # eliminate different case writings
+      caseMapping = dd()
+      for path in paths: caseMapping[caseNormalize(path)].append(path)
+      paths[:] = [l[1] if len(l) > 1 else l[0] for l in (list(sorted(ll)) for ll in caseMapping.values())]  # first entry [0] is always all-uppercase (lower ASCII character than lower case), therefore order is always ABC, Abc (abC, abc), and no more than two entries are expected
+    paths[:] = [p for p in paths if isdir(_.root + os.sep + p)]
+    if _.cfg.log >= 2: debug("findFolders: " + str(paths))
+    return paths
 
   def findFiles(_, aFolder, poss, negs = [], force = False):
     ''' Determine files for the given folder.
         aFolder: folder to filter files in
-        poss: positive tags, file extensions, or files/globs to consider, or empty list (falls back to all files to ensure negative tags work at all)
-        negs: negative assertions
-        force: don't perform file existence checks
-        returns: (list of filenames for given folder, has a skip marker file)
+        poss: (potentially case-normalized) positive tags, file extensions, file names or glob patternss to consider, or an empty list (falls back to considering all files to ensure negative tags work at all)
+        negs: negative assertions, same options as for 'poss'
+        force: don't perform true file existence checks, might return false positives for special files or directories (usually no problem)
+        returns: 2-tuple (list [filenames] for given folder, bool: has a skip marker file - don't recurse into)
     '''
-    remainder = set(poss) - set(aFolder.split(SLASH)[1:])  # split folder path into tags and remove from remaining criteria
-    if _.log >= 1: info("Filtering folder %s%s" % (aFolder, (" by remaining tags: " + (", ".join(remainder)) if len(remainder) > 0 else DOT)))
+    if _.log >= 2: debug("findFiles " + str((aFolder, poss, negs, force)))
+    inPath = set(safeSplit(aFolder, SLASH))
+    if not _.cfg.case_sensitive: inPath.update(set([caseNormalize(f) for f in safeSplit(aFolder, SLASH)]))  # all path elements to remove from positive tags
+    remainder = set([p for p in poss if (p if _.cfg.case_sensitive else caseNormalize(p)) not in inPath])  # split folder path into tags and remove from remaining criteria, considering case-sensitivity unless deselected or case same as normalized variant
+    if _.log >= 1: info("Filtering folder %s%s" % (aFolder, (" by remaining tags: " + ((", ".join(remainder)) if len(remainder) > 0 else '') + DOT)))
     conf = _.cfg.paths.get(aFolder, {})  # if empty, files remain unchanged, we return all
-    folders = [aFolder] + [pathnorm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])]  # all mapped folders
+    folders = [aFolder] + [pathnorm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])]  # list of original and all mapped folders
     if _.log >= 1 and len(folders) > 1: info("Mapped folders to check: %s" % os.pathsep.join(folders[1:]))
 
     allfiles, willskip = set(), False  # contains files from current or mapped folders (without path, since "mapped", but could have local symlink - TODO
     for folder in folders:
       if _.log >= 1: debug("Checking %sfolder %s" % ("root " if folder == "" else '', folder))
-      files = set(wrapExc(lambda: [f for f in listdir(_.root + folder) if isfile(_.root + folder + SLASH + f)], []))  # all from current folder, exc: folder name (unicode etc.)
+      files = set(wrapExc(lambda: [f for f in listdir(_.root + folder) if isfile(_.root + folder + SLASH + f)], []))  # all from current folder, potential excecption: folder name (unicode etc.)
       if IGNFILE in files: continue  # skip is more difficult to handle than ignore, cf. return tuple here and code in tp.find() with return
-      if folder == aFolder and SKPFILE in files: willskip = True; info("Skip %s due to local marker file" % folder); continue  # return ([], True)  # TODO semantics: handle mapped folder even for skip local marker?
+      if folder == aFolder and SKPFILE in files:
+        willskip = True
+        if _.log >= 1: info("Skip %s due to local marker file" % folder)
+        continue  # return ([], True)  # TODO semantics: handle mapped folder even for skip local marker?
+      caseMapping = {caseNormalize(f): f for f in files}  # from noramlized to real names
+      if not _.cfg.case_sensitive: files.update(set(caseMapping.keys()))  # add case-normalized file names to enable matching
       conf = _.cfg.paths.get(folder, {})  # if empty, files remains unchanged, we return all of them regularly
       if _.log >= 2: debug("Conf used for %s'%s': %s" % ("mapped folder " if folder != aFolder else "", folder, str(conf)))
       tags = conf.get(TAG, [None])
       keep = set(files)  # start with all to keep, then restrict set
 
       for tag in remainder:  # for every tag remaining to filter, we check if action on current files is necessary
-        if tag.startswith(DOT): keep &= set([f for f in files if normalizer.filenorm(f[-len(tag):]) == tag]); continue  # filter by file extension
-        elif isglob(tag) or tag in files: keep &= set([f for f in files if normalizer.globmatch(f, tag)]); continue  # filter globs and direct file names
+        if tag.startswith(DOT): keep.intersection_update(set([f for f in files if f[-len(tag):] == tag])); continue  # filter by file extension
+        elif isglob(tag) or tag in files: keep.intersection_update(set(fnmatch.filter(files, tag))); continue  # filter globs and direct file names
         found = False  # marker for the case that none of the provided extension/glob/file tags matched: check tags in configuration
         for value in tags:
           if value is None: keep = set(); found = True; break  # None means no config found, therefore due to remaining provided tags we don't match any for this (mapped) folder
@@ -534,19 +620,19 @@ class Indexer(object):
             found = True
             news = set(files)  # collect all files subsumed under the tag that should remain
             for i in safeSplit(inc):  # if tag manually specified, only keep those included files
-              if isglob(i): news &= set([f for f in files if normalizer.globmatch(f, i)])  # is glob
-              else: news = set([i] if normalizer.filenorm(i) in files and (force or isfile(_.root + folder + SLASH + i)) else [])  # is a file: add only if exists
+              if isglob(i): news.intersection_update(set(fnmatch.filter(files, i)))  # is glob
+              else: news = set([i] if i in files and (force or isfile(_.root + folder + SLASH + i)) else [])  # is a file: add only if exists, otherwise add nothing
             for e in safeSplit(exc):  # if tag is manually specified, exempt these files (add back)
-              if isglob(e): news |= set([n for n in news if normalizer.globmatch(n, e)])
+              if isglob(e): news.update(set(fnmatch.filter(news, e)))
               else: news.discard(e)  # add file to keep
-            keep = keep & news
+            keep.intersection_update(news)
             break
         if not found: keep = set()  # if no remaining tag matched
 
       remo = set()  # start with none to remove, than enlarge set
       for tag in negs:
-        if tag.startswith(DOT): remo |= set([f for f in files if normalizer.filenorm(f[-len(tag):]) == tag]); continue  # filter by file extension
-        elif isglob(tag) or tag in files: remo |= set([f for f in files if normalizer.globmatch(f, tag)]); continue  # filter globs and direct file names
+        if tag.startswith(DOT): remo.update(set([f for f in files if f[-len(tag):] == tag])); continue  # filter by file extension
+        elif isglob(tag) or tag in files: remo.update(set(fnmatch.filter(files, tag))); continue  # filter globs and direct file names
         found = False  # marker for the case that none of the provided extension/glob/file tags matched: check tags in configuration
         for value in tags:
           if value is None: remo = set(); found = True; break  # None means no config found, no further matching needed
@@ -555,18 +641,20 @@ class Indexer(object):
             found = True
             news = set()  # collect all file that should be excluded
             for i in safeSplit(inc):
-              if isglob(i): news |= set([f for f in files if normalizer.globmatch(f, i)])  # is glob
-              else: news |= set([i] if i in files and (force or isfile(_.root + folder + SLASH + i)) else [])  # is no glob: add, only if exists
+              if isglob(i): news.update(set(fnmatch.filter(files, i)))  # is glob
+              else: news.update(set([i] if i in files and (force or isfile(_.root + folder + SLASH + i)) else []))  # is no glob: add, only if exists
             for e in safeSplit(exc):
-              if isglob(e): news -= set([n for n in news if normalizer.globmatch(n, e)])
+              if isglob(e): news.difference_update(set(fnmatch.filter(news, e)))
               else: news.add(e)  # add file to remove
-            remo |= news
+            remo.update(news)
             break
-#        if not found: remo = set(files)  # if none of the remaining exclusive tags match, there is nothing to remove, actually
-      files = (files & keep) - remo
+      files.intersection_update(keep)
+      files.difference_update(remo)
       if _.log >= 2: debug("Files for folder '%s': %s (Keep/Remove: <%s>/<%s>)" % (folder, ",".join(files), ",".join(keep), ",".join(remo)))
-      allfiles |= files
-    return (list(allfiles), willskip)
+      allfiles.update(files)
+    result = ([ff for ff in set([caseMapping.get(f, f) for f in allfiles])], willskip)  # In contrast to findFolder, no file existence checks (necessary)
+    if _.log >= 2: debug("findFiles: " + str(result))
+    return result
 
 
 if __name__ == '__main__':

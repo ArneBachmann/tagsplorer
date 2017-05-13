@@ -1,23 +1,21 @@
 # tagsPlorer test suite  (C) Arne Bachmann https://github.com/ArneBachmann/tagsplorer
 # Test suite. Please export environment variable DEBUG=True
-# TODO check D: vs. D:\
+# TODO check D: vs. D:\ logic
 
 import os
 import subprocess
 import sys
 import unittest
+import traceback
+StringIO = (__import__("StringIO" if sys.version_info.major < 3 else "io")).StringIO  # enables import via ternary expression
+
+# Custom modules
 import lib
 import tp
-import traceback
-if sys.version_info.major < 3:
-  from StringIO import StringIO
-else:
-  from io import StringIO
 
-PYTHON = os.path.realpath(sys.executable) if sys.platform != 'win32' else '"' + os.path.realpath(sys.executable) + '"'
+PYTHON = os.path.realpath(sys.executable) if not lib.ON_WINDOWS else '"' + os.path.realpath(sys.executable) + '"'
 REPO = '_test-data'
 SVN = tp.findRootFolder(None, '.svn') is not None
-print("Using VCS '%s'" % "SVN" if SVN else "Git")
 
 logFile = None
 
@@ -29,8 +27,7 @@ def runP(argstr):  # instead of script call via Popen, to allow for full coverag
     sys.argv = ["tp.py", "-r", REPO] + lib.safeSplit(argstr, " ")
     logFile.write("TEST: " + " ".join(sys.argv) + " " + repr(argstr) + "\n")
     tp.Main().parse()  # initiates script run due to overriding sys.path above
-  try: res = wrapChannels(tmp)
-  except Exception as E: logFile.write(str(E) + "\n"); traceback.print_exc(file = logFile); raise E
+  res = wrapChannels(tmp)
   logFile.write(res)
   logFile.write("\n")
   return res
@@ -39,7 +36,8 @@ def wrapChannels(func):
   oldv, oldo, olde = sys.argv, sys.stdout, sys.stderr
   buf = StringIO()
   sys.stdout = sys.stderr = buf
-  func()
+  try: func()
+  except Exception as E: buf.write(str(E) + "\n"); traceback.print_exc(file = buf)
   sys.argv, sys.stdout, sys.stderr = oldv, oldo, olde
   return buf.getvalue()
 
@@ -54,8 +52,8 @@ def tearDownModule():
   if not os.environ.get("SKIP", "False").lower() == "true":
     try: os.unlink(REPO + os.sep + lib.INDEX)
     except: pass
-    if SVN: call("svn revert %s" % (REPO + os.sep + lib.CONFIG))  # for subversion
-    else:   call("git checkout %s/%s" % (REPO, lib.CONFIG))  # for git
+    if SVN: call("svn revert %s" % (REPO + os.sep + lib.CONFIG))  # for subversion (development system)
+    else:   call("git checkout %s/%s" % (REPO, lib.CONFIG))  # for git (CI system)
 
 
 class TestRepoTestCase(unittest.TestCase):
@@ -98,21 +96,48 @@ class TestRepoTestCase(unittest.TestCase):
     d[1].append(1)
     _.assertEqual([1], d[1])
 
-  @unittest.SkipTest
+  def testOnlySearchTerms(_):
+    _.assertIn("1 files found", runP(".x -l2"))
+
+  def testReduceCaseStorage(_):
+    _.assertIn("Tags: 81" if not lib.ON_WINDOWS else "Tags: 85", runP("--stats"))
+    _.assertIn("2 files found", runP("Case -v"))
+    _.assertIn("0 files found", runP("case -v"))
+    _.assertIn("2 files found", runP("case -v -C"))
+    _.assertIn("0 files found" if not lib.ON_WINDOWS else "2 files found", runP("CASE -v"))
+    _.assertIn("Added global configuration entry", runP("--set reduce_case_storage=True -v"))
+    runP("-u")  # trigger update index after config change (but should automatically do so anyway)
+    _.assertIn("Tags: 46", runP("--stats"))
+    _.assertIn("2 files found" if not lib.ON_WINDOWS else "0 files found", runP("Case -v"))  # update after config change
+    _.assertIn("0 files found", runP("case -v"))  # update after config change
+    _.assertIn("0 files found" if not lib.ON_WINDOWS else "2 files found", runP("CASE -v"))
+
   def testFilenameCaseSetting(_):
     ''' This test confirms that case setting works (only executed on Linux). '''
-    _.assertIn("Modified global configuration entry", runP("--set case_sensitive=False -l1"))
-    _.assertIn("Wrote", runP("-u -v"))  # TODO swap order when bug has been fixed to match initial .cfg
-    _.assertIn("1 files found", runP("-s x.x -l1"))
-    _.assertIn("1 files found", runP("-s X.x -l1"))
+    # Start with tag/dir search
+    if lib.ON_WINDOWS: return  # TODO only skip the minimal part that is Linux-specific, but not all
+    _.assertIn("0 files found", runP("-s case -v"))
+    _.assertIn("2 files found", runP("-s Case -v"))
+    _.assertIn("0 files found", runP("-s CASE -v"))
+    _.assertIn("2 files found", runP("-s case -v --ignore-case"))  # should be same as next line above
+    _.assertIn("Modified global configuration entry", runP("--set case_sensitive=False -v"))
+    _.assertIn("Wrote", runP("-u -v"))  # update after config change
+    _.assertIn("2 files found", runP("-s case -v"))
+    _.assertIn("2 files found", runP("-s Case -v"))
+    # Now file-search
+    _.assertIn("1 files found", runP("-s x.x -v"))  # doesn't find because case-normalized X.X doesn't exist
+    _.assertIn("1 files found", runP("-s x.x -v"))  # TODO also test --relaxed for removed file
+    _.assertIn("1 files found", runP("-s X.x -v --ignore-case"))
+    _.assertIn("1 files found", runP("-s x.x --ignore-case -v"))  # TODO stupid to use --relaxed everywhere - better replace by real case
     _.assertIn("Modified global configuration entry", runP("--set case_sensitive=True"))
     _.assertIn("Wrote", runP("-u -v"))
-    _.assertIn("1 files found", runP("-s x.x -l1"))
-    _.assertIn("0 files found", runP("-s X.x -l1"))
+    _.assertIn("1 files found", runP("-s x.x -v"))
+    _.assertIn("0 files found", runP("-s X.x -v"))
+    _.assertIn("1 files found", runP("-s X.x -v -C"))
 
   def testConfigs(_):
     ''' This test tests global configuration CRUD. '''
-    _.assertAllIn(["debug mode", "Added global configuration entry"], runP("--set __test=123 -l1"))
+    _.assertAllIn(["debug mode", "Added global configuration entry"], runP("--set __test=123 -v"))
     _.assertIn("Modified global configuration entry", runP("--set __test=234 -l1"))
     ret = runP("--get __test -l1")
     _.assertIn("__test = 234", ret)
@@ -179,11 +204,18 @@ class TestRepoTestCase(unittest.TestCase):
       i = lib.Indexer(REPO)
       i.log = lib.WARN  # set log level
       i.load(os.path.join(REPO, lib.INDEX), True, False)
-      print(i.findFolders(["folders", "folder2"])[0])
+      print(i.findFolders(["folders", "folder2"]))
     _.assertIn('/folders/folder2', wrapChannels(tmp))
+    _.assertEqual(3, len(wrapChannels(tmp).split("\n")))  # header and one line and newline
+    def tmp():
+      i = lib.Indexer(REPO)
+      i.log = lib.DEBUG  # set log level
+      i.load(os.path.join(REPO, lib.INDEX), True, False)
+      print(lib.wrapExc(lambda: set(i.getPaths(i.tagdir2paths[i.tagdirs.index("a")], cache)), lambda: set()))
+    _.assertIn("set([])", wrapChannels(tmp))  # "a" not in index TODO but should be
 
   def testStats(_):
-    _.assertNotIn("0 occurrences", runP("--stats -v"))
+    _.assertNotIn(" 0 occurrences", runP("--stats -v"))
 
   def testAddRemove(_):
     ''' Add a tag, check and remove. '''
@@ -211,7 +243,6 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("No option", runP(""))
 
   def testNegativeSearch(_):
-    _.assertIn("3 occurrences for .2, .ext2, a", runP("--stats -v"))
     _.assertAllIn(["Info:    3 folders found for +<a> -<>.",   "/a", "/a/a1", "/a/a2"], runP("-s a -l2 --dirs").split("\n"))  # only include only dirs
     _.assertAllIn(["Info:    2 folders found for +<a> -<a1>.", "/a", "/a/a2"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
     _.assertAllIn(["Potential matches found in 3 folders", "6 files found in 3 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -v"))  # only include with files
@@ -251,6 +282,9 @@ def load_tests(loader, tests, ignore):
 
 
 if __name__ == '__main__':
+  if not os.environ.get("DEBUG", "False").lower() == "true":
+    print("Error: Set environment variable DEBUG=True to run the test suite"); sys.exit(1)
+  print("Using VCS '%s'" % "SVN" if SVN else "Git")
   import unittest
   sys.unittesting = None  # flag to enable functions to know they are being tested (may help sometimes)
   unittest.main()

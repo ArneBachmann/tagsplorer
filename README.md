@@ -177,8 +177,19 @@ In addition, it's possible to specify global settings under the root configurati
 
   * *`case_sensitive`*
 
-      This key is either `true` or `false` or undefined.
-      If undefined, the current operating system determines, if character case is used for file name indexing and searching (Windows defaults to false, other operating systems may default to true).
+      This key is either `true` or `false` and defaults to `true` on Linuxy operating systems and `false` on Windows, if undefined.
+      The setting determines if file searching and matching is case-sensitive or not by default, and applies only during searching, not during indexing.
+      If set to `false`, both `a` and `A` will match both file names `a` and `A`; if set to `true`, each search term would find only the respective file name case version (`a` for `a` and `A` for `A`.
+      If set to false, users may still override by using command-line option `--ignore-case`.
+      As an implementation note, case-insensitive searching converts all search terms to upper-case and finds those in the index, unless the index has pruned case-normalized entries (cf. setting `store_case_normalized`).
+      TODO check unicode working. also generic issue that non-western characters have different normalization rules
+
+  * *`reduce_case_storage`*
+
+      This key is either `true` or `false` and defaults to `false` if undefined.
+      This setting determines if the indexer reduces file name storage to a OS-dependent minimum, which is case-sensitive on Linux, and case-insensitive on Windows. By default, tagsPlorer stores both true case and case-normalized file names in the index, independent of the OS, allowing case-independent matching on Linux, and true-case folder name retrieval on Windows.
+      On Linux systems, setting `redce_case_storage` to `true` deactivates storage of case-normalized file names, effectively disabling search for them, while retaining true case file names which can still be found.
+      On Windows, setting `reduce_case_storage` to `true` deactivates storage of true case file names, effectively disabling print out of actual file name cases, while retaining case-normalized search capabilities. Nevertheless case-sensitive searching is still a feature offered by tagsPlorer even on Windows, when the flag is kept at its default `false`. Note, however, that the search flag `case_sensitive` defaults to false, but can be activated if case-sensitive search on Windows is desired.
 
 * `ignored=dirname`
 
