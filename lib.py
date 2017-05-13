@@ -442,7 +442,6 @@ class Indexer(object):
       _._walk(aDir + SLASH + child, idxs[0], newtags)  # as parent, always use original case index, not case-normalized one (unless configured to reduce space)
       for i in range(len(idxs)): newtags.pop()  # remove regular temporary added entry
 
-
   def mapTagsIntoDirsAndCompressIndex(_):
     ''' After all manual tags have been added, we map them into the tagdir structure. '''
     if _.log >= 1: info("Mapping tags into index")
@@ -541,8 +540,8 @@ class Indexer(object):
     for tag in include:  # positive restrictive matching
       if _.log >= 2: info("Filtering paths by inclusive tag '%s'" % tag)
       if isglob(tag):
-        if DOT in tag:  # [:-1]:  # contains an extension in non-final position (in final should not be possible)
-          ext = normalizer.filenorm(tag[tag.index(DOT):])
+        if os.extsep in tag:  # [:-1]:  # contains an extension in non-final position (in final should not be possible)
+          ext = normalizer.filenorm(tag[tag.index(os.extsep):])
           if isglob(ext):  # glob search with glob extension
             new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), fnmatch.filter(_.tagdirs, ext), set())  # filters all extensions in index by glob (e.g. .c??). update returns updated same object instead of a | set() or a.union(set())
           else:  # glob search with fixed extension
