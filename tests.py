@@ -212,7 +212,7 @@ class TestRepoTestCase(unittest.TestCase):
       i.log = lib.DEBUG  # set log level
       i.load(os.path.join(REPO, lib.INDEX), True, False)
       print(lib.wrapExc(lambda: set(i.getPaths(i.tagdir2paths[i.tagdirs.index("a")], cache)), lambda: set()))
-    _.assertIn("set([])", wrapChannels(tmp))  # "a" not in index TODO but should be
+    _.assertIn(repr(set()), wrapChannels(tmp))  # "a" not in index TODO but should be
 
   def testStats(_):
     _.assertNotIn(" 0 occurrences", runP("--stats -v"))

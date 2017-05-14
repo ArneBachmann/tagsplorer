@@ -1,7 +1,6 @@
 # tagsPlorer main library  (C) 2016-2017  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer
 # This is the tagging library to augment OS folder structures by tags (and provide virtual folder view plus queries over tags)
 # This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python 2 and Python 3.
-# TODO migrate to logging framework
 # TODO add option to interrupt find or walk (probably on process level via SIGINT?)
 
 
@@ -21,6 +20,7 @@ if sys.version_info.major >= 3:
   from functools import reduce  # not built-in anymore
   lmap = lambda pred, lizt: list(map(pred, lizt))
   dictviewkeys, dictviewvalues, dictviewitems = dict.keys, dict.values, dict.items  # returns generators operating on underlying data in Python 3
+  cmp = lambda a, b: -1 if a < b else (1 if a > b else 0)
   def xreadlines(fd): return fd.readlines()
   from functools import reduce  # not built-in
   printo = eval("lambda s: print(s)")  # perfectly legal use of eval - supporting P2/P3

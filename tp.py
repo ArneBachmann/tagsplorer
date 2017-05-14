@@ -1,7 +1,6 @@
 # tagsPlorer command-line application  (C) 2016-2017  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer
 # This is the main entry point of the tagsPlorer utility
 
-# TODO tokenize folder names and add each word plus full name!
 # TODO tp: using full path not normalized to root in untag/tag
 # TODO allow relative root-absolute paths for add tag (contained in remove tag)
 
