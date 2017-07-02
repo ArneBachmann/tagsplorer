@@ -3,6 +3,7 @@
 
 # TODO tp: using full path not normalized to root in untag/tag
 # TODO allow relative root-absolute paths for add tag (contained in remove tag)
+# TODO add global excludes in same format like corrupdetect and redundir
 
 
 import optparse
@@ -317,7 +318,7 @@ class Main(object):
           byMapping = dd()
           for _t in ts: byMapping[idx.tagdirs[_t]].extend(idx.tagdir2paths[_t])  # aggregate all mappings
           for _t in sorted(byMapping.keys(), caseCompare):
-            debug("    Entries '%s' (%s) map to: " % (_t if _t != '' else "/", ",".join([str(i) for i, x in enumerate(idx.tagdirs) if x == _t])) + ", ".join(["%s (%d)" % (idx.getPath(_i, _cache), _i) for _i in byMapping[_t]]))
+            debug("    Entries %s (%s) map to: " % ("'" + _t + "'" if _t != '' else "/", ",".join([str(i) for i, x in enumerate(idx.tagdirs) if x == _t])) + ", ".join(["%s (%d)" % (idx.getPath(_i, _cache), _i) for _i in byMapping[_t]]))
     info("Configuration stats")
     info("  Number of tags:", len(idx.cfg.paths))
     info("  Average number of entries per folder: %.2f" % (float(sum([len(_) for _ in idx.cfg.paths.values()])) / len(idx.cfg.paths)))

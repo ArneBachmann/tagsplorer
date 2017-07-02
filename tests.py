@@ -156,6 +156,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("0 files found", runP("-s 3.3 -l1"))  # not filtering on folder tags
     _.assertIn("1.2", runP("-s 1.2 -l1"))  #
     _.assertIn("2.1", runP("-s 2.1 -l1"))
+    _.assertIn("0 files found", runP("-s .3 -l2"))  # due to local ignore marker file
 
   def testLocalSkipDir(_):
     _.assertIn("0 files found", runP("-s ignore_skip,marker-files,b,1.1 -l1"))
@@ -243,10 +244,10 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("No option", runP(""))
 
   def testNegativeSearch(_):
-    _.assertAllIn(["Info:    3 folders found for +<a> -<>.",   "/a", "/a/a1", "/a/a2"], runP("-s a -l2 --dirs").split("\n"))  # only include only dirs
-    _.assertAllIn(["Info:    2 folders found for +<a> -<a1>.", "/a", "/a/a2"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
-    _.assertAllIn(["Potential matches found in 3 folders", "6 files found in 3 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -v"))  # only include with files
-    _.assertAllIn(["Potential matches found in 2 folders", "3 files found in 2 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -l2"))  # with exclude with files
+    _.assertAllIn(["Info:    4 folders found for +<a> -<>.",   "/a", "/a/a1", "/a/a2"], runP("-s a -l2 --dirs").split("\n"))  # only include only dirs
+    _.assertAllIn(["Info:    3 folders found for +<a> -<a1>.", "/a", "/a/a2"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
+    _.assertAllIn(["Potential matches found in 4 folders", "6 files found in 4 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -v"))  # only include with files
+    _.assertAllIn(["Potential matches found in 3 folders", "3 files found in 3 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -l2"))  # with exclude with files
 
   def testTest(_):
     _.assertEqual("", call(PYTHON + " lib.py --test"))
