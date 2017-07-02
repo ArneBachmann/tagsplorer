@@ -3,8 +3,6 @@
 # This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python 2 and Python 3.
 
 # markers in this file: TODO (open tasks) and HINT (to think about)
-# TODO add option to interrupt find or walk (probably on process level via SIGINT?)
-# TODO replace %s by %r or use invalid character replacing in logger?
 
 
 import collections, copy, fnmatch, os, re, sys, time, zlib  # standard library
@@ -18,7 +16,7 @@ ON_WINDOWS = sys.platform == 'win32'  # there exists a different detection schem
 # Version-dependent imports
 trace, debug, info, warn, error = [lambda _: None] * 5
 if sys.version_info.major >= 3:
-  import pickle  # instead of cPickle
+  import pickle  # instead of cPickle in the Python 2 family
   from sys import intern
   from functools import reduce  # not built-in anymore
   lmap = lambda pred, lizt: list(map(pred, lizt))  # don't return a generator
