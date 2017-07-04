@@ -1,6 +1,6 @@
 # tagsPlorer main library  (C) 2016-2017  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer
 # This is the tagging library to augment OS folder structures by tags (and provide virtual folder view plus queries over tags)
-# This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python 2 and Python 3.
+# This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python 2 and Python 3
 
 # markers in this file: TODO (open tasks) and HINT (to think about)
 
@@ -60,7 +60,7 @@ def wrapExc(func, otherwise = None):
   ''' Wrap an exception and compute return value lazily if an exception is raised. Useful for recursive function application.
   >>> print(wrapExc(lambda: 1))
   1
-  >>> print(wrapExc(lambda: 1 / 0))  # return default
+  >>> print(wrapExc(lambda: 1 / 0))  # return default fallback value (None)
   None
   >>> print(wrapExc(lambda: 1 / 0, lambda: 1 + 1))  # return default by function call
   2
@@ -94,7 +94,6 @@ def getTs(): return ilong(time.time() * 1000.)
 def safeSplit(s, d = ","): return [_ for _ in s.split(d) if _ != '']  # remove empty strings that appear e.g. for "  ".split(" ") or "".split(" ")
 def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s
 def dd(tipe = list): return collections.defaultdict(tipe)
-def step(): import pdb; pdb.set_trace()
 def dictget(dikt, key, default):
   ''' Improved dict.get(key, default).
   >>> a = {}; b = a.get(0, 0); print((a, b))  # normal dict get
@@ -297,8 +296,8 @@ class Config(object):
 class Indexer(object):
   ''' Main index creation. Goes through all recursive file paths and indexes the folder tags. Addtionally, tags for single files or globs, and those mapped by the FROM tag are included in the index. File-specific tags are only determined during the find phase. '''
   def __init__(_, startDir):
-    _.log = 0  # log level
-    _.compressed = 2  # pure pickling is faster than any bz2 compression, but zlib level 2 had best size/speed combination. if changed to 0, index needs to be re-created (or removed) manually
+    _.log = 0  # log level (default: no logging, only result printing)
+    _.compressed = 2  # pure pickling is faster than any bz2 compression, but zlib level 2 seems to have best size/speed combination. if changed to 0, data will be stored uncompressed and the index needs to be re-created
     _.timestamp = 1.23456789  # for comparison with configuration timestamp
     _.cfg = None  # reference to latest corresponding configuration
     _.root = pathnorm(os.path.abspath(startDir))
@@ -337,6 +336,7 @@ class Indexer(object):
   def walk(_, cfg = None):
     ''' Build index by recursively walking folder tree.
         cfg: if set, use that configuration instead of contained one.
+        returns: None
     '''
     if _.log >= 1: info("Walking folder tree")
     if cfg is not None: _.cfg = cfg  # allow config injection
@@ -365,7 +365,7 @@ class Indexer(object):
           2.  process contained file names
           2a. index all folders' file and sub-folder file names' extensions
           3.  prepare recursion
-          3a. add sub-folder name to "tagdirs" and "tagdir2parent" 
+          3a. add sub-folder name to "tagdirs" and "tagdir2parent"
           3b. recurse
         aDir: path relative to root (always with preceding and no trailing forward slash)
         parent: the parent folder's index in the index (usually the one in the original case)
@@ -429,19 +429,20 @@ class Indexer(object):
     for child in children:  # iterate sub-folders using above generator expression
       idxs = []  # first element in "idx" is next index to use in recursion (future parent, current child), no matter if true-case or case-normalized mode is selected
       # 3a. add sub-folder name to "tagdirs" and "tagdir2parent"
-      if not (ON_WINDOWS and _.cfg.reduce_case_storage):  # Windows: only store true-case if not reducing storage, Linux: always store
+      if not (ON_WINDOWS and _.cfg.reduce_case_storage):  # for Windows: only store true-case if not reducing storage, Linux: always store
         if _.log >= 1: debug("Storing true-case folder name %r for %r" % (child, _.getPath(parent, {})))
         idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
         _.tagdirs.append(intern(child))  # now add the child folder name (duplicates allowed, because we build the tree structure here)
         _.tagdir2parent.append(parent)  # at at same index as tagdirs "next" position
         assert len(_.tagdirs) == len(_.tagdir2parent)
       iname = caseNormalize(child)
-      if iname != child and (ON_WINDOWS or (not _.cfg.reduce_case_storage)):  # Linux: only store case-normalized if not reducing storage, Windows: always store
+      if ON_WINDOWS or (iname != child and not _.cfg.reduce_case_storage):  # Linux: only store case-normalized if not reducing storage, Windows: always store
         if _.log >= 1: debug("Storing case-normalized folder name %r for %r" % (iname, _.getPath(parent, {})))
         idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
         _.tagdirs.append(intern(iname))  # now add the child folder name
         _.tagdir2parent.append(parent)  # at at same index as tagdirs
         assert len(_.tagdirs) == len(_.tagdir2parent)
+      assert len(idxs) in (1, 2)
       del iname  # prior to recursion
       if _.log >= 2: debug("Tagging folder %r with tags +<%s> *<%s>" % (child, ",".join([_.tagdirs[x] for x in (newtags + idxs)]), ",".join([_.tags[x] for x in adds])))  # TODO can contain root (empty string)
       # 3b. recurse
@@ -469,35 +470,47 @@ class Indexer(object):
     if found > 0: info("Removed duplicates from index for %d tags" % found)
     return len(rm)
 
-  def unwalk(_, idx = 0, path = ""):
-    ''' Walk entire tree from index (slow but proof of correctness). '''
-    if _.log >= 2: debug("unwalk " + str((idx, path)))
-    tag = _.tagdirs[idx]  # name of head element
-    children = (f[0] for f in filter(lambda a: a[1] == idx and a[0] != idx, dictviewitems(_.tagdir2parent)))  # using generator expression
-    if _.log >= 1: info(path + tag + SLASH)
-    for child in children: _.unwalk(child, path + tag + SLASH)
-
   def getPath(_, idx, cache):
-    ''' Return one root-relative path for the given index idx by recursively going through index-> name mappings. '''
+    ''' Return one root-relative path for the given index idx by recursively going through index->name mappings.
+        idx: folder entry index from _.tagdirs
+        cache: dictionary for speeding up consecutive calls (remembers already collected parent path mappings)
+        returns: root-relative path string
+    >>> i = Indexer("bla")
+    >>> i.tagdirs =       ["", "a", "b", "c"]
+    >>> i.tagdir2parent = [0,  0,   1,   1]  # same popsitions as in tagdirs
+    >>> print(" ".join(i.getPath(j) for j in range(3)))
+     /a /a/b /a/c
+    '''
     assert idx < len(_.tagdirs) and idx >= 0  # otherwise hell on earth
+    if idx == 0: return ""  # root path special case
     found = cache.get(idx, None)
     if found is not None: return found
-    if idx == 0: return ""  # root path special case
-    parent = _.tagdir2parent[idx]  # get parent index
-    found = dictget(cache, parent, lambda: _.getPath(parent, cache))  # recursive folder name resolution
-    new = found + SLASH + _.tagdirs[idx]
+    parent_idx = _.tagdir2parent[idx]  # get parent index from tree-structure
+    parent = dictget(cache, parent_idx, lambda: _.getPath(parent_idx, cache))  # recursive folder name resolution
+    new = parent + SLASH + _.tagdirs[idx]
     cache[idx] = new
     return new
 
   def getPaths(_, ids, cache = {}):
-    ''' Returns generator for all paths for the given list of ids, using intermediate caching. '''
+    ''' Returns a generator for all paths for the given list of ids, using intermediate caching.
+        ids: iterable of tagdirs ids
+        cache: dictionary for speeding up consecutive calls to _.getPath
+        returns: generator that returns root-relative path strings
+    >>> i = Indexer("")
+    >>> i.tagdirs =       ["", "a", "b", "c"]
+    >>> i.tagdir2parent = [0,  0,   1,   1]  # same popsitions as in tagdirs
+    >>> print(i.getPaths(range(3)))
+     /a /a/b /a/c
+    '''
     return (_.getPath(i, cache) for i in ids)
 
   def removeIncluded(_, includedTags, excludedPaths):
-    ''' Return those paths, that have no manual tags or from tags from inclusion list; subtract from the exclusion list to reduce set of paths to ignore.
-        includedTags: search tags (no extensions, no globs) to keep included: will be removed from the excludedPaths list returned
-        excludedPaths: the paths not found in the index, scheduled for removal
-        there is no need to check all tags in configuration, because they could be inclusive or exclusive, and are on per-file basis. the existence of a tag suffices for retaining paths
+    ''' Return those paths, that have no manual tags or from tags from the inclusion list; subtract from the exclusion list to reduce set of paths to ignore.
+        includedTags: search tags (no extensions, no globs) to keep included: will be removed from the excludedPaths list
+        excludedPaths: all paths for exclusive tags, scheduled for removal from search results
+        returns: list of paths to retain
+        hint: there is no need to check all tags in configuration, because they could be inclusive or exclusive, and are on a per-file basis
+        the existence of a tag suffices for retaining paths
     '''
     if _.log >= 2: debug("removeIncluded " + str((includedTags, excludedPaths)))
     retain = []
@@ -505,15 +518,15 @@ class Indexer(object):
       conf = _.cfg.paths.get(path, {})
       if len(conf) == 0: retain.append(path); continue  # keep for removal, because no inclusion information available
       tags = conf.get(TAG, [])
-      if len(tags) == 0:
+      if len(tags) == 0:  # if no direct tags, it depends on the froms
         froms = conf.get(FROM, [])
         if len(froms) == 0: retain.append(path); continue  # keep for removal, no manual tags in mapped config
         retainit = True
         for other in froms:
           conf2 = _.cfg.paths.get(other, {})
           if len(conf2) == 0:  # the mapped folder has no manual tags specified
-#            error("Encountered missing FROM source config in '%s': '%s'; please repair" % (path, other))  # TODO can be removed? what to do here?
-            retainit = True  # TODO is this correct? we don't know anything about the mapped files?
+            error("Encountered missing FROM source config in '%s': '%s'; please repair" % (path, other))  # TODO can be removed? what to do here?
+            # TODO is this correct? we don't know anything about the mapped files?
           tags2 = conf2.get(TAG, [])
           if len(tags2) == 0: break  # found from config, but has no tags: no need to consider for removal from removes -> retain
           for value2 in tags2:
@@ -569,7 +582,7 @@ class Indexer(object):
       first = False
     for tag in exclude:  # we don't excluded globs here, because we would also exclude potential candidates (because index is over-specified)
       if _.log >= 2: info("Filtering paths by exclusive tag '%s'" % tag)
-      potentialRemove = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # can only be removed, if no manual tag/file extension/glob in config or "from"
+      potentialRemove = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # these paths can only be removed, if no manual tag or file extension or glob defined in config or "from" TODO what if positive extension looked for? already handled?
       new = _.removeIncluded(include, potentialRemove)  # remove paths with includes from "remove" list (adding back...)
       if first:  # start with all all paths, except determined excluded paths
         paths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))) - new  # get paths from index data structure
@@ -642,7 +655,7 @@ class Indexer(object):
       remo = set()  # start with none to remove, than enlarge set
       for tag in negs:
         if tag.startswith(DOT): remo.update(set([f for f in files if f[-len(tag):] == tag])); continue  # filter by file extension
-        elif isglob(tag) or tag in files: remo.update(set(fnmatch.filter(files, tag))); continue  # filter globs and direct file names
+        elif isglob(tag) or tag in files: remo.update(set(fnmatch.filter(files, tag))); continue  # filter globs and direct file names TODO case/normalization here?
         found = False  # marker for the case that none of the provided extension/glob/file tags matched: check tags in configuration
         for value in tags:
           if value is None: remo = set(); found = True; break  # None means no config found, no further matching needed

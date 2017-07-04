@@ -1,5 +1,7 @@
 # tagsPlorer command-line application  (C) 2016-2017  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer
 # This is the main entry point of the tagsPlorer utility
+# TODO find: don't display folder match if no files contained that match
+# TODO find: tax,2016,-.pdf says no folder match
 
 
 import optparse
@@ -138,9 +140,7 @@ class Main(object):
     return idx
 
   def find(_):
-    ''' Find all folders that match the provided tags, excluding those from _.options.excludes.
-        _.options: options structure from optparse
-        poss, negs: lists of tags to include or exlcude. poss can also be aggregated comma-separated tag1,-tag2,... including excludes
+    ''' Find all folders that match the provided tags in _.options.find, excluding those from _.options.excludes.
         returns: None
         side-effect: print found files to stdout, logging to stderr
     '''
@@ -325,25 +325,26 @@ class Main(object):
     ''' Main logic that analyses the command line arguments and starts an opteration. '''
     ts = time.time()
     op = CatchExclusionsParser()  # https://docs.python.org/3/library/optparse.html#optparse-option-callbacks
-    op.add_option('-I', '--init', action = "store_true", dest = "init", default = False, help = "Create empty index (repository root)")
-    op.add_option('-u', '--update', action = "store_true", dest = "update", default = False, help = "Update index, crawling files in folder tree")
-    op.add_option('-s', '--search', action = "append", dest = "find", default = [], help = "Find files by tags (default action if no option given)")
-    op.add_option('-t', '--tag', action = "store", dest = "tag", help = "Set tag(s) for given file(s) or glob(s): tp.py -t tag,tag2,-tag3... file,glob...")
-    op.add_option('-T', '--untag', action = "store", dest = "untag", help = "Unset tag(s) for given file(s) or glob(s): tp.py -d tag,tag2,-tag3... file,glob...")
-    op.add_option('-r', '--root', action = "store", dest = "root", type = str, default = None, help = "Specify root folder for index (and configuration)")
-    op.add_option('-i', '--index', action = "store", dest = "index", type = str, default = None, help = "Specify alternative index folder (other than root)")
-    op.add_option('-l', '--log', action = "store", dest = "log", type = int, default = 0, help = "Set log level (0=none, 1=debug, 2=trace)")
-    op.add_option('-x', '--exclude', action = "append", dest = "excludes", default = [], help = "Tags to ignore. Same as --no, or -<tag>")
-    op.add_option('--no', action = "append", dest = "excludes", default = [], help = "Tags to ignore. Same as --exclude, or -<tag>")  # same as above
-    op.add_option('-C', '--ignore-case', action = "store_true", dest = "ignore_case", default = None, help = "Always search case-insensitive (overrides option in index)")
-    op.add_option('--get', action = "store", dest = "getconfig", default = None, help = "Get global configuration parameter")
-    op.add_option('--set', action = "store", dest = "setconfig", default = None, help = "Set global configuration parameter key=value")
-    op.add_option('--unset', action = "store", dest = "unsetconfig", default = None, help = "Unset global configuration parameter")
-    op.add_option('-R', '--relaxed', action = "store_false", dest = "strict", default = True, help = "Relax safety measures")  # mapped to inverse "strict" flag
-    op.add_option('-n', '--simulate', action = "store_true", dest = "simulate", default = False, help = "Don't write anything")  # TODO confirm nothing modified on FS
-    op.add_option('--dirs', action = "store_true", dest = "onlyfolders", default = False, help = "Only find directories that contain matches")
-    op.add_option('-v', action = "store_true", dest = "verbose", default = False, help = "Same as -l1. More verbose unit test output")
-    op.add_option('--stats', action = "store_true", dest = "stats", default = False, help = "List index internals (-l1, -l2)")
+    op.add_option('-I', '--init',        action = "store_true",  dest = "init",       default = False, help = "Create empty index (repository root)")
+    op.add_option('-u', '--update',      action = "store_true",  dest = "update",     default = False, help = "Update index, crawling files in folder tree")
+    op.add_option('-s', '--search',      action = "append",      dest = "find",       default = [], help = "Find files by tags (default action if no option given)")
+    op.add_option('-t', '--tag',         action = "store",       dest = "tag", help = "Set tag(s) for given file(s) or glob(s): tp.py -t tag,tag2,-tag3... file,glob...")
+    op.add_option('-T', '--untag',       action = "store",       dest = "untag", help = "Unset tag(s) for given file(s) or glob(s): tp.py -d tag,tag2,-tag3... file,glob...")
+    op.add_option('-r', '--root',        action = "store",       dest = "root", type = str, default = None, help = "Specify root folder for index (and configuration)")
+    op.add_option('-i', '--index',       action = "store",       dest = "index", type = str, default = None, help = "Specify alternative index folder (other than root)")
+    op.add_option('-l', '--log',         action = "store",       dest = "log", type = int, default = 0, help = "Set log level (0=none, 1=debug, 2=trace)")
+    op.add_option('-x', '--exclude',     action = "append",      dest = "excludes",    default = [], help = "Tags to ignore. Same as --no, or -<tag>")
+    op.add_option('-N', '--no',          action = "append",      dest = "excludes",    default = [], help = "Tags to ignore. Same as --exclude, or -<tag>")  # same as above
+    op.add_option('-C', '--ignore-case', action = "store_true",  dest = "ignore_case", default = None, help = "Always search case-insensitive (overrides option in index)")
+    op.add_option('--get',               action = "store",       dest = "getconfig",   default = None, help = "Get global configuration parameter")
+    op.add_option('--set',               action = "store",       dest = "setconfig",   default = None, help = "Set global configuration parameter key=value")
+    op.add_option('--unset',             action = "store",       dest = "unsetconfig", default = None, help = "Unset global configuration parameter")
+    op.add_option('--clear',             action = "store",       dest = "unsetconfig", default = None, help = "Clear global configuration parameter. Same as --unset")  # TODO or let clear remove all presets?
+    op.add_option('-R', '--relaxed',     action = "store_false", dest = "strict",      default = True, help = "Relax safety measures")  # mapped to inverse "strict" flag
+    op.add_option('-n', '--simulate',    action = "store_true",  dest = "simulate",    default = False, help = "Don't write anything")  # TODO confirm nothing modified on FS
+    op.add_option('--dirs',              action = "store_true",  dest = "onlyfolders", default = False, help = "Only find directories that contain matches")
+    op.add_option('-v',                  action = "store_true",  dest = "verbose",     default = False, help = "Same as -l1. Also displays unit test details")
+    op.add_option('--stats',             action = "store_true",  dest = "stats",       default = False, help = "List index internals (combine with -l1, -l2)")
     _.options, _.args = op.parse_args()
     if _.options.log >= 2: debug("Options: " + str(_.options))
     if _.options.log >= 2: debug("Arguments: " + str(_.args))

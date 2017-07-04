@@ -250,12 +250,21 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["Potential matches found in 3 folders", "3 files found in 3 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -l2"))  # with exclude with files
 
   def testTest(_):
-    _.assertEqual("", call(PYTHON + " lib.py --test"))
+    _.assertAllIn(["passed all tests", "0 failed", "Test passed"], call(PYTHON + " lib.py --test -v"))
 
-  @unittest.SkipTest
+
   def testUnwalk(_):
+    def unwalk(_, idx = 0, path = ""):
+      ''' Walk entire tree from index (slow but proof of correctness). '''
+      if _.log >= 2: debug("unwalk " + str((idx, path)))
+      tag = _.tagdirs[idx]  # name of head element
+      children = (f[0] for f in filter(lambda a: a[1] == idx and a[0] != idx, dictviewitems(_.tagdir2parent)))  # using generator expression
+      if _.log >= 1: info(path + tag + SLASH)
+      for child in children: _.unwalk(child, path + tag + SLASH)
+
     def tmp():
       i = lib.Indexer(REPO)
+      i.unwalk = unwalk  # monkey-path function
       i.log = 1  # set log level
       i.load(os.path.join(REPO, lib.INDEX), True, False)
       i.unwalk()

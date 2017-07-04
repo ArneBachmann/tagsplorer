@@ -1,14 +1,16 @@
 Linux: [![Build Status](https://travis-ci.org/ArneBachmann/tagsplorer.svg?branch=master)](https://travis-ci.org/ArneBachmann/tagsplorer) Windows: [![Build status](https://ci.appveyor.com/api/projects/status/46axk9bixn4ab0d5/branch/master?svg=true)](https://ci.appveyor.com/project/ArneBachmann/tagsplorer/branch/master)  Test coverage: [![Coverage Status](https://coveralls.io/repos/github/ArneBachmann/tagsplorer/badge.svg?branch=master)](https://coveralls.io/github/ArneBachmann/tagsplorer?branch=master)
 
-# tagsPlorer
+
+# tagsPlorer #
 A quick and resource-efficient OS-independent tagging filetree extension tool and library written in Python, working with both Python versions 2 and 3.
 tagsPlorer is licensed under the [Mozilla Public License version 2.0](https://www.mozilla.org/en-US/MPL/2.0/), which can also be found in the [`LICENSE`](LICENSE) file.
 
 Each folder name of the indexed file tree is implicitly treated as a tag name, and additional tags can be set or excluded on singular files or file glob patterns. Contents of other folders in the file tree can virtually be mapped into others.
 The entire system is fully backwards-compatible with the common file tree metaphor present in most file systems.
 
-## Initial example
-If you happen to manage your data in a tree-like manner, as supported by most all currently used file systems, your data may look like that:
+
+## Initial example ##
+If you happen to manage your data in a tree-like manner, as state of the art by most any contemporary file systems, your data may look similar like that:
 
 ```
 /personal/money/tax/2016
@@ -26,57 +28,65 @@ tagsPlorer allows you to create virtual "views" over your files by asking for "a
 
 `tp.py .docx 2016` or `tp.py money 2017 .xlsx`
 
-## Problem statement
+
+## Problem statement ##
 Nowadays most operating systems and window managers still adhere to the "tree of files" metaphor, or try to employ some kind of integrated search engine to find and access existing files.
 Both approaches have strong drawbacks that could be solved by tagging files individually, and only when needed.
 
-### Problems with file trees
-Each file belongs to only one parent folder, which practically prohibits a file to be found under more than one category. This can be solved locally by using soft or hard links, if the OS supports them, or storing the same file several times in different folders. In that case, however, you either loose OS-independence, compatibility with version control systems becomes clunky and error-prone, or you have lots of duplication that again leads to human errors.
+### Problems with file trees ###
+Each file belongs to only one parent folder, which practically prohibits a file to be found under more than one category. This can be solved locally by using soft or hard links, if the operating and file system supports them, or storing the same file several times in different folders. In that case, however, you either loose OS-independence, or compatibility with version control systems becomes clunky and error-prone, or you have lots of duplication that might lead to human errors.
 
-### Problems with search engines
-There are (semantic) search engines that continuously crawl and oversee your file system, guessing and suggesting what you might want to access next. Here the problem lies in the system overhead and loss of control - you don't know if you are presented the right file versions, and if you search for the right terms, plus you loose oversight of your file system structure.
+### Problems with search engines ###
+Some desktop systems come with (semantic) search engines that continuously crawl and index your files, plus guessing and suggesting what you might want to access next. Here the problem lies in the system overhead and loss of control - you don't know if you are presented the right file versions, and if you search for the right terms, plus you loose oversight of your file system structure.
 
-## Solution: tagsPlorer to the rescue!
-tagsPlorer uses a simple concept which enables you to continue using simple and compatible file trees, keep all your data under version control of your choice, allows you to put files or entire folders into more than one (virtual) category, and still benefit from little manual maintenance or additional setup. The benefit will increase even more with graphical tools using this library and with tight integration into your OS of choice.
+## One solution: tagsPlorer to the rescue! ##
+tagsPlorer uses a simple concept which enables you to continue using simple and compatible file trees, keep all your data under version control of your choice, allows you to put files or entire folders into more than one (virtual) category, and still benefit from little manual maintenance or additional setup. The benefit will increase even more with graphical tools using this library and with tighter integration into the OS or desktop system of your choice.
 
-## History
+
+## History ##
 The author has been attempting to write a similar utility several times in the past, namely `taggify`, `tagtree`, and `tagtree2`.
-This is his latest take at this persistent problem of convenient data archival and retrieval by using space-efficient ahead of time indexing.
-There are similarities to the Linux `find` and `gre` utilites, which are performant but crawl the entire folder tree on every search, and don't support virtual folder mapping.
+This is his latest take at this persistent problem of convenient data archiving and retrieval by using space-efficient ahead-of-time indexing.
+There are similarities to the Linux `find` and `grep` utilites, which are performant but crawl the entire folder tree on every search, and don't support virtual folder mapping.
 
-# Usage
-*Hint:* Currently it's not possible to glob over folder names efficiently; trying to do so will need to walk all folders that are left in the filter process or will have no effect when preselection picks up a set of potential folder matches before that step.
 
-## Command-line interface
-We recommend invoking tagsPlorer with the [PyPy](http://pypy.org) Python distribution, as we found performance to be generally better.
+# Usage #
+*Hint:* Currently it's not possible to glob over folder names efficiently; trying to do so will require tagsPlorer to walk all folders that are left after an initial preselection process or will have no effect when preselection picks up a set of potential folder matches before that step.
+
+
+## Command-line interface ##
+We recommend invoking tagsPlorer with the [PyPy](http://pypy.org) Python distribution, as we found performance to be generally better. TODO check if still true.
 
 The current main and only user interface is `tp.py`, a thin yet convenient layer over the library's basic functions.
 Here is a short description of valid program options and arguments:
 
 * `--help`
 
-  Shows user options, same as detailed in this section
+  Shows user options, which are described in more detail in this section
 
 * `--version`
 
-  Shows tagsPlorer code base version string
+  Shows tagsPlorer code base version string and copyright notice
 
 * `--init [-r rootfolder]`
 
   Create an empty configuration in the current (or the relative or absolute one specified by the -r option) folder.
-  The location of a configuration file `.tagsplorer.cfg` marks the root path for an entire indexed file tree. No other configuration files higher up the parent hierarchy will be considered. This allows for nested sub-indices, which is however not recommended (similar to not nesting version control system checkouts)
+  
+  The location of a configuration file `.tagsplorer.cfg` marks the root path for an entire indexed file tree. No other configuration files higher up the parent hierarchy will be considered. This allows for nested sub-indices, which is however not recommended (similar to not nesting version control system checkouts).
+
+  Creating the root configuration will not index the folder tree. Use the `--update` command for that.
 
 `--update` or `-u`
 
   Update the file index by walking the entire folder tree from the root down to leaf folders.
   This creates or updates the `.tagsplorer.idx` index file with updated contents to match the current state of the files regarding the configuration specified.
-  As this file will be written over on every index run, there is no need to track outdated items, perform memory management or garbage collections inside the index, which simplifies the entire software model and mental model.
+  As this file will be written over on every index run, there is no need to track outdated items, perform memory management or garbage collections inside the index. This simplifies the entire software model.
 
-* `--search [[+]tag1[,tags2[,tags...]]] [[-]tag3[,tag4[,tags...]]] [-r rootfolder]` or `-s` or no option switch plus search terms appended
+* `--search [[+]tag1[,tags2[,tags...]]] [[-]tag3[,tag4[,tags...]]] [-r rootfolder]` or `-s` or *no* option switch plus search terms appended
 
   Perform a search (which corresponds to a "virtual folder" listing).
+  
   This is the main usage for tagsPlorer tools and accepts inclusive as well as exclusive search terms (tag, folder name, file name, file glob).
-  There can be any number of arguments, which optionally can also be specified in a comma-separated way (after one initial positives tag), or using the `-x` option with optional comma-separated further exclusive terms.
+  There can be any number of arguments, which optionally can also be specified in a comma-separated way (after at least one initial positive tag), or using the `-x` option with optional comma-separated further exclusive terms (no double negation allowed, i.e `-x a,-b` won't make b inclusive).
   Note, however, that the command line interface cannot distinguish between valid option switches (like -r <root>) and negative tag arguments (like -r to exclude all files tagged with "r"). Therefore, negative (exclusive) tag arguments must be specified after either a double-dash `--` or after a comma of a positive (inclusive) term.
 
 * `--exclude tag[,tag2[,tags...]]` or `-x`
@@ -128,14 +138,14 @@ Here is a short description of valid program options and arguments:
 
   List only matching folders instead matchng files in matching folders, plus allows glob matching on folder names (but only for the already reduced set of paths of remaining non-glob tags, or from all paths if none found at all).
 
-# Architecture and program semantics
-## Search algorithm
+# Architecture and program semantics #
+## Search algorithm ##
 In general, what the program does is simple boolean set operations. The index maps tags (= names, tokens, terms) to matching folders in the indexed folder tree, with the risk of false positives (it's an over-generic, optimistic index, linking folders with both inclusive or exclusive manual tag settings and tags mapped from other folders, plus file extension information).
 After determination of potential folders in a first search step, the found folders' contents are filtered by potential further tags and inclusive or exclusive file name patterns. This step always operates on the actual currently encountered files, not on any indexed and potentially outdated state, to ensure correctness of output filtered data.
 If a mapped folder is excluded by a negative tag, its contents can still be found by the name of the positive tags that receives the mapping. TODO check if true.
 
 
-## Configuration file
+## Configuration file ##
 Using the tagsPlorer's `-i` option, we can create an empty configuration file which also serves as the marker for the file tree's root (just like the existence of version control systems' `.svn` or `.git` folders mark their respective root folders).
 Usually, all access to the configuration file should be performed through the `tp.py` command line interface or directly through the `lib.py` library functions.
 The configuration file follows mainly the format and structure of Windows' INI-file, but without any interpolation or substitution logic (not using Python's built-in `ConfigParser`, to enable multiple keys).
@@ -199,18 +209,18 @@ In addition, it's possible to specify global settings under the root configurati
 
   Similar to `skip` this defines a global folder name to skip and not recurse into.
 
-## Tagging semantics
+## Tagging semantics ##
 TODO What happens if a file with a tag gets mapped into the current folder, where the same tag excludes that file? Or the other way around?
 This currently cannot happen, as all folders are processed individually and then get merged into a single view, with duplicates being removed. There is no real link to the originating folder for the folder list, as we have the concept of virtual (tag) folders in a unified view.
 
-## Design decisions regarding linking on the file system level
+## Design decisions regarding linking on the file system level ##
 If files are hard-linked between different locations in the file tree and are submitted to the version control system, they won't be linked when checking out at different locations, and modifying one instance will result on several linked copies being modified on the original file system when updated. This leads to all kinds of irritating errors or VCS conflicts.
 
 1. Option: tagsPlorer has to intercept update/checkout and re-establish file links according to its metadata (configuration). This is hard to guarantee.
 2. Option: Add ignore details to the used VCS (.gitignore or SVN ignore list) for all linked (or rather mapped) files. The danger here is of course to ignore files that later could be added manually, and not being able to distinguish between automatically ignored files, and those that the user wants to ignore on purpose.
 3. Option: As by the current design the snapshot `*.idx` file is not persisted in VCS (TODO add ignore automatically), all links can be recreated on first file tree walk (as option 1), even if linked files were earlier submitted as separate files, the folder walk would re-establish the link (potentially asking the user to confirm linking forcing to choose one master version, of issueing a warning for diverging file contents).
 
-## Other design decisions
+## Other design decisions ##
 * Configuration and index synchronisation
 
   * Most operations only modify the configuration file, updating its integrated timestamp
@@ -233,12 +243,12 @@ If files are hard-linked between different locations in the file tree and are su
 
 
 
-# Development
+# Development #
 
-## Git and Github workflows
+## Git and Github workflows ##
 The master branch should always run fine and contain the latest stable version (release). Currently we are pre-V1.0 therefore everything is still happening either on master or on other branches without announcement.
 Development activities are merged on the develop branch, and only merged to master for a release.
 
-# Known issues
+# Known issues #
 
 * It's possible to commit file names into Subversion from operating systems like Linux, that aren't allowed to checkout on Windows, e.g. `file.` with a trailing dot. Since this is no problem that tagsPlorer can solve, we ignore this potential problem. In the code, the only decision to make was whether to check for the DOT from first to last character, or only from first to second last, which can be seen as premature optimization and unnecessary.
