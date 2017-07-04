@@ -478,29 +478,43 @@ class Indexer(object):
     >>> i = Indexer("bla")
     >>> i.tagdirs =       ["", "a", "b", "c"]
     >>> i.tagdir2parent = [0,  0,   1,   1]  # same popsitions as in tagdirs
-    >>> print(" ".join(i.getPath(j) for j in range(3)))
-     /a /a/b /a/c
+    >>> c = {}
+    >>> print(repr(i.getPath(0, c)))
+    ''
+    >>> print(c)
+    {}
+    >>> print(i.getPath(1, c))
+    /a
+    >>> print(c)
+    {1: '/a'}
+    >>> print(i.getPath(3, c))
+    /a/c
+    >>> print(sorted(c.items()))
+    [(1, '/a'), (3, '/a/c')]
     '''
     assert idx < len(_.tagdirs) and idx >= 0  # otherwise hell on earth
     if idx == 0: return ""  # root path special case
     found = cache.get(idx, None)
     if found is not None: return found
     parent_idx = _.tagdir2parent[idx]  # get parent index from tree-structure
-    parent = dictget(cache, parent_idx, lambda: _.getPath(parent_idx, cache))  # recursive folder name resolution
+    parent = dictget(cache, parent_idx, lambda: _.getPath(parent_idx, cache)) if parent_idx != 0 else ""  # recursive folder name resolution
     new = parent + SLASH + _.tagdirs[idx]
     cache[idx] = new
     return new
 
-  def getPaths(_, ids, cache = {}):
+  def getPaths(_, ids, cache):
     ''' Returns a generator for all paths for the given list of ids, using intermediate caching.
         ids: iterable of tagdirs ids
         cache: dictionary for speeding up consecutive calls to _.getPath
         returns: generator that returns root-relative path strings
-    >>> i = Indexer("")
+    >>> i = Indexer("blupp")
     >>> i.tagdirs =       ["", "a", "b", "c"]
-    >>> i.tagdir2parent = [0,  0,   1,   1]  # same popsitions as in tagdirs
-    >>> print(i.getPaths(range(3)))
+    >>> i.tagdir2parent = [0,  0,   1,   1]  # same positions as in tagdirs
+    >>> c = {}
+    >>> print(" ".join(list(i.getPaths(range(4), c))))
      /a /a/b /a/c
+    >>> print(len(c))
+    3
     '''
     return (_.getPath(i, cache) for i in ids)
 
@@ -553,7 +567,7 @@ class Indexer(object):
     currentPathInGlobalIgnores = lambda path: (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs
     partOfAnyGlobalSkipPath = lambda path: any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])
     anyParentIsSkipped = lambda path: any([SKIP in dictget(_.cfg.paths, SLASH.join(path.split(SLASH)[:p + 1]), {}) for p in range(path.count(SLASH))])
-    _.allPaths = wrapExc(lambda: _.allPaths, lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))))
+    _.allPaths = wrapExc(lambda: _.allPaths, lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())), {})))
     if returnAll or len(include) == 0:
       if _.log >= 2: debug("Building list of all paths")
       alls = [path for path in _.allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})]  # all existing paths except globally ignored/skipped paths TODO add marker file logic below TODO move checks fo _.allPaths cache

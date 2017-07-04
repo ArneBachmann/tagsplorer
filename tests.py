@@ -256,21 +256,20 @@ class TestRepoTestCase(unittest.TestCase):
   def testUnwalk(_):
     def unwalk(_, idx = 0, path = ""):
       ''' Walk entire tree from index (slow but proof of correctness). '''
-      if _.log >= 2: debug("unwalk " + str((idx, path)))
       tag = _.tagdirs[idx]  # name of head element
-      children = (f[0] for f in filter(lambda a: a[1] == idx and a[0] != idx, dictviewitems(_.tagdir2parent)))  # using generator expression
-      if _.log >= 1: info(path + tag + SLASH)
-      for child in children: _.unwalk(child, path + tag + SLASH)
+      children = (f[0] for f in filter(lambda a: a[1] == idx and a[0] != idx, ((e, v) for e, v in enumerate(_.tagdir2parent))))  # using generator expression
+      if _.log >= 1: print(path + tag + lib.SLASH)
+      for child in children: _.unwalk(child, path + tag + lib.SLASH)
 
     def tmp():
+      lib.Indexer.unwalk = unwalk  # monkey-path function
       i = lib.Indexer(REPO)
-      i.unwalk = unwalk  # monkey-path function
       i.log = 1  # set log level
       i.load(os.path.join(REPO, lib.INDEX), True, False)
       i.unwalk()
     res = wrapChannels(tmp).replace("\r", "")
     logFile.write(res + "\n")
-    _.assertEqual(len(res.split("\n")), 32)
+    _.assertEqual(len(res.split("\n")), 63)
 
 @unittest.SkipTest
 def compressionTest_():
