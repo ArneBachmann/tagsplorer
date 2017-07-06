@@ -1,20 +1,22 @@
-# tagsPlorer command-line application  (C) 2016-2017  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer
-# This is the main entry point of the tagsPlorer utility
+''' tagsPlorer command-line application  (C) 2016-2017  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer '''
+
+# This is the main entry point of the tagsPlorer utility (the command line interface is the first and currently only interface available, except a web server implementation)
 # TODO find: don't display folder match if no files contained that match
 # TODO find: tax,2016,-.pdf says no folder match
+# TODO how to find a file "a" if "a" is already considered for a folder tag and removed during prefiltering? in findFiles add back removed tags when checking contents?
 
 
 import optparse
-from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports
+from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports that need't be repeated here
 from version import __version_info__, __version__  # used by setup.py
 
 # Version-dependent imports
-if sys.version_info.major == 3: from functools import reduce  # not built-in
+if sys.version_info.major == 3: from functools import reduce  # not built-in anymore, but not enough to create a dependency on six.py
+
+APPNAME = "tagsPlorer"
 
 
 # Little helper functions
-def xany(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if type(lizt) == list else list(lizt), False)  # short-circuit cross-2/3 implementation
-def xall(pred, lizt): return reduce(lambda a, b: a and pred(b), lizt if type(lizt) == list else list(lizt), True)
 def withoutFilesAndGlobs(tags): return [t for t in tags if not isglob(t) and os.extsep not in t[1:]]
 def caseCompare(a, b):
   ''' Advanced case-normalized comparison for better output.
@@ -100,10 +102,10 @@ def getRoot(options, args):
 
 
 class CatchExclusionsParser(optparse.OptionParser):
-  ''' Allows to process undefined options as non-option arguments. '''
+  ''' Allows to process undefined options as non-option arguments (e.g. --tag as an additional exclusive tag). '''
   def __init__(_):
     ihf = optparse.IndentedHelpFormatter(2, 60, 120)
-    optparse.OptionParser.__init__(_, prog = "tagsPlorer", usage = "python tp.py <tags or options>", version = "tagsPlorer  (C) Arne Bachmann  Release version " + __version__, formatter = ihf)  # , formatter = optparse.TitledHelpFormatter(),
+    optparse.OptionParser.__init__(_, prog = APPNAME, usage = "python tp.py <tags or options>", version = APPNAME + "  (C) Arne Bachmann  Release version " + __version__, formatter = ihf)  # , formatter = optparse.TitledHelpFormatter(),
   def _process_args(_, largs, rargs, values):
     while rargs:
       try: optparse.OptionParser._process_args(_, largs, rargs, values)
@@ -158,7 +160,7 @@ class Main(object):
     else:
       idx = Indexer(index); idx.log = _.options.log  # initiate indexer
       idx.load(indexFile)  # load search index
-    if _.options.ignore_case is not None: idx.cfg.case_sensitive = False
+    if _.options.ignore_case: idx.cfg.case_sensitive = False  # if false, don't touch setting (not the same as "not ignore_case")
     normalizer.setupCasematching(idx.cfg.case_sensitive)  # case option defaults to true, but can be overriden by --ignore-case
     poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))  # convert search terms to normalized case, if necessary
     if _.options.log >= 1: info("Effective filters +<%s> -<%s>" % (",".join(poss), ",".join(negs)))
@@ -175,6 +177,7 @@ class Main(object):
       for p in poss: paths[:] = [x for x in paths if not isglob(p) or normalizer.globmatch(safeRSplit(x, SLASH), p)]  # successively reduce paths down to matching positive tags, as in --dirs mode tags currently have to be folder names TODO later we should reflect actual mapping
       for n in negs: paths[:] = [x for x in paths if not isglob(n) or not normalizer.globmatch(safeRSplit(x, SLASH), n)]  # TODO is this too strict and ignores configured tags and the index entirely?
       if _.options.log >= 1: info("Found %d folders for +<%s> -<%s> in index" % (len(paths), ",".join(poss), ".".join(negs)))
+      paths[:] = removeCasePaths(paths)  # remove case doubles
       info("%d folders found for +<%s> -<%s>." % (len(paths), ",".join(poss), ".".join(negs)))
       try:
         if len(paths) > 0: printo("\n".join(paths))#idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
@@ -183,7 +186,7 @@ class Main(object):
     dcount, counter, skipped = 0, 0, []  # if not only folders, but also files
     for path, (files, skip) in ((path, idx.findFiles(path, poss, negs, not _.options.strict)) for path in paths):
       if skip: skipped.append(path); continue  # memorize to skip all folders with this prefix TODO is this always ordered correctly (breadth first)?
-      if any([path.startswith(skp) if skp != '' else (path == '') for skp in skipped]): continue  # is in skipped folder tree
+      if xany(lambda skp: path.startswith(skp) if skp != '' else (path == ''), skipped): continue  # is in skipped folder tree
       dcount += 1
       try:
         if len(files) > 0: printo("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
@@ -317,7 +320,7 @@ class Main(object):
             debug("    Entries %s (%s) map to: " % ("'" + _t + "'" if _t != '' else "/", ",".join([str(i) for i, x in enumerate(idx.tagdirs) if x == _t])) + ", ".join(["%s (%d)" % (idx.getPath(_i, _cache), _i) for _i in byMapping[_t]]))
     info("Configuration stats")
     info("  Number of tags:", len(idx.cfg.paths))
-    info("  Average number of entries per folder: %.2f" % (float(sum([len(_) for _ in idx.cfg.paths.values()])) / len(idx.cfg.paths)))
+    info("  Average number of entries per folder: %.2f" % (float(sum([len(_) for _ in dictviewvalues(idx.cfg.paths)])) / len(idx.cfg.paths)))
     # TODO show config file timestamp
 
 
@@ -335,12 +338,12 @@ class Main(object):
     op.add_option('-l', '--log',         action = "store",       dest = "log", type = int, default = 0, help = "Set log level (0=none, 1=debug, 2=trace)")
     op.add_option('-x', '--exclude',     action = "append",      dest = "excludes",    default = [], help = "Tags to ignore. Same as --no, or -<tag>")
     op.add_option('-N', '--no',          action = "append",      dest = "excludes",    default = [], help = "Tags to ignore. Same as --exclude, or -<tag>")  # same as above
-    op.add_option('-C', '--ignore-case', action = "store_true",  dest = "ignore_case", default = None, help = "Always search case-insensitive (overrides option in index)")
-    op.add_option('--get',               action = "store",       dest = "getconfig",   default = None, help = "Get global configuration parameter")
-    op.add_option('--set',               action = "store",       dest = "setconfig",   default = None, help = "Set global configuration parameter key=value")
-    op.add_option('--unset',             action = "store",       dest = "unsetconfig", default = None, help = "Unset global configuration parameter")
-    op.add_option('--clear',             action = "store",       dest = "unsetconfig", default = None, help = "Clear global configuration parameter. Same as --unset")  # TODO or let clear remove all presets?
-    op.add_option('-R', '--relaxed',     action = "store_false", dest = "strict",      default = True, help = "Relax safety measures")  # mapped to inverse "strict" flag
+    op.add_option('-C', '--ignore-case', action = "store_true",  dest = "ignore_case", default = False, help = "Always search case-insensitive (overrides option in index)")
+    op.add_option('--get',               action = "store",       dest = "getconfig",   default = None,  help = "Get global configuration parameter")
+    op.add_option('--set',               action = "store",       dest = "setconfig",   default = None,  help = "Set global configuration parameter key=value")
+    op.add_option('--unset',             action = "store",       dest = "unsetconfig", default = None,  help = "Unset global configuration parameter")
+    op.add_option('--clear',             action = "store",       dest = "unsetconfig", default = None,  help = "Clear global configuration parameter. Same as --unset")  # TODO or let clear remove all presets?
+    op.add_option('-R', '--relaxed',     action = "store_false", dest = "strict",      default = True,  help = "Relax safety measures")  # mapped to inverse "strict" flag
     op.add_option('-n', '--simulate',    action = "store_true",  dest = "simulate",    default = False, help = "Don't write anything")  # TODO confirm nothing modified on FS
     op.add_option('--dirs',              action = "store_true",  dest = "onlyfolders", default = False, help = "Only find directories that contain matches")
     op.add_option('-v',                  action = "store_true",  dest = "verbose",     default = False, help = "Same as -l1. Also displays unit test details")
@@ -349,7 +352,7 @@ class Main(object):
     if _.options.log >= 2: debug("Options: " + str(_.options))
     if _.options.log >= 2: debug("Arguments: " + str(_.args))
     _.args, excludes = splitCrit(_.args, lambda e: e[:2] != '--')  # remove "--" from "--mark", allows to use --mark to exclude this tag (unless it's an option switch)
-    _.options.excludes.extend([e[2:] for e in excludes])
+    _.options.excludes.extend([e[2:] for e in excludes])  # additional non-option flags are interpreted as further exclusive tags
     _.options.log = max(1 if _.options.verbose else 0, _.options.log)
     if _.options.index is not None and _.options.root is None: error("Index location specified (-i) without specifying root (-r)"); sys.exit(1)
     if _.options.log >= 1: info("Started at %s" % (time.strftime("%H:%M:%S")))

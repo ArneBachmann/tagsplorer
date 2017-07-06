@@ -4,6 +4,8 @@
 
 # markers in this file: TODO (open tasks) and HINT (to think about)
 
+# TODO move to standard logger, as the below logic doesn't speed up evaluation, since no lambda is given, but only always evaluated arguments
+
 
 import collections, copy, fnmatch, os, re, sys, time, zlib  # standard library
 if sys.version_info.major >= 3: from os import listdir
@@ -55,6 +57,9 @@ SEPA, SLASH, DOT = map(intern, (";", "/", os.extsep))
 
 
 # Functions
+def xany(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if hasattr(lizt, '__iter__') else list(lizt), False)  # short-circuit Python 2/3 implementation. could also use wrapExc(lambda: iter(lizt), lizt) instead. intentionally doesn't iterate over string characters. converts string and other data types to a one-element list instead
+
+def xall(pred, lizt): return reduce(lambda a, b: a and pred(b), lizt if hasattr(lizt, '__iter__') else list(lizt), True)
 
 def wrapExc(func, otherwise = None):
   ''' Wrap an exception and compute return value lazily if an exception is raised. Useful for recursive function application.
@@ -113,6 +118,12 @@ def splitCrit(lizt, pred):
   return reduce(lambda acc, next: (lappend(acc[0], next), acc[1]) if pred(next) else (acc[0], lappend(acc[1], next)), lizt, ([], []))
 def caseNormalize(s): return s.upper()
 
+def removeCasePaths(paths):
+  ''' Intelligently remove duplicate paths that differ only in case (of the last path component). '''
+  caseMapping = dd()
+  for path in paths: caseMapping[caseNormalize(path)].append(path)  # assign original and case-normalized version as values to the case-normalized key
+  return [l[1] if len(l) > 1 else l[0] for l in (list(sorted(ll)) for ll in dictviewvalues(caseMapping))]  # first entry [0] is always all-uppercase (lower ASCII character than lower case), therefore order is always ABC, Abc (abC, abc), and no more than two entries are expected
+
 
 # Classes
 class Normalizer(object):
@@ -127,6 +138,7 @@ class Normalizer(object):
     >>> print(n.globmatch("abc", "?Bc"))
     True
     '''
+    debug("Setting up case-%ssensitive matching" % "" if case_sensitive else "in")  # TODO make message depend on set log level
     _.filenorm = ident if case_sensitive else caseNormalize  # we can't use "str if case_sensitive else str.upper" because for unicode strings this fails, as the function reference comes from the str object
     _.globmatch = fnmatch.fnmatchcase if case_sensitive else lambda f, g: fnmatch.fnmatch(f.upper(), g.upper())  # fnmatch behavior depends on file system, therefore fixed here
 normalizer = Normalizer()  # to keep a static module-reference. TODO move to main instead?
@@ -169,7 +181,7 @@ class ConfigParser(object):
     for title, _map in sorted(dictviewitems(_.sections)):  # in added order
       if len(_map) == 0: continue  # this is probably not sufficient, as the map's contents may also be empty
       fd.write("[%s]\n" % (title))
-      for key, values in sorted(_map.items()):  # no need for iteritems, as supposedly small (max. size = 4)
+      for key, values in sorted(dictviewitems(_map)):  # no need for iteritems, as supposedly small (max. size = 4)
         if values is None: fd.write("%s=\n" % (key.lower()))  # skip or ignore
         else:
           for value in sorted(values): fd.write("%s=%s\n" % (key.lower(), value))  # tag or from
@@ -187,7 +199,7 @@ class Config(object):
 
   def load(_, filename, index_ts = None):
     ''' Load configuration from file, if timestamp differs from index' timestamp. '''
-    if _.log >= 2: debug("load " + str((filename, index_ts)))
+    if _.log >= 2: debug("Loading configuration %r" % ((filename, index_ts),))
     with open(filename, 'r') as fd:  # HINT: don't use rb, because in Python 3 this return bytes objects
       if _.log >= 1: info("Comparing configuration timestamp for " + filename)
       timestamp = float(fd.readline().rstrip())
@@ -202,7 +214,7 @@ class Config(object):
 
   def store(_, filename, timestamp = None):
     ''' Store configuration to file, prepending data by the timestamp, or the current time. '''
-    if _.log >= 2: debug("store " + str((filename, timestamp)))
+    if _.log >= 2: debug("Storing configuration %r" % ((filename, timestamp),))
     if timestamp is None: timestamp = getTs()  # for all cases we modify only config file (e.g. tag, untag, config)
     cp = ConfigParser(); cp.sections = _.paths
     with open(filename, "w") as fd:  # don't use wb for Python 3 compatibility
@@ -331,7 +343,7 @@ class Indexer(object):
       if config_too:
         if _.log >= 1: info("Updating configuration to match new index timestamp")
         _.cfg.store(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)  # update timestamp in configuration
-    if _.log >= 1: info("Wrote %d index bytes (%d tag entries -> %d mapped path entries)" % (os.stat(filename)[6], len(_.tagdirs), sum([len(p) for p in _.tagdir2paths.values()])))
+    if _.log >= 1: info("Wrote %d index bytes (%d tag entries -> %d mapped path entries)" % (os.stat(filename)[6], len(_.tagdirs), sum([len(p) for p in dictviewvalues(_.tagdir2paths)])))
 
   def walk(_, cfg = None):
     ''' Build index by recursively walking folder tree.
@@ -413,7 +425,7 @@ class Indexer(object):
       if len(tags) >= 1: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tags[-1]])].pop()  # TODO may leave empty list behind
     else:  # no ignore, so index extensions as additional tags, folders and files alike
       # 2a. index all folders' contents' names file extensions
-      debug("Indexing files in folder %r" % aDir[len(_.root):])
+      if _.log >= 1: debug("Indexing files in folder %r" % aDir[len(_.root):])
       for _file in (ff for ff in files if DOT in ff[1:]):  # index only file extensions (also for folders!) in this folder, without propagation to sub-folders TODO dot-first files could be ignored or handled differenly
         ext = _file[_file.rindex(DOT):]  # split off extension, even if "empty" extension (filename ending in dot)
         iext = caseNormalize(ext)
@@ -559,22 +571,25 @@ class Indexer(object):
     ''' Find intersection of all directories with matching tags.
         include: list of cleaned tag names to include
         exclude: list of cleaned tag names to exclude
-        returnAll: shortcut flag that simply returns all paths from index
-        returns: list of folder paths
+        returnAll: shortcut flag that simply returns all paths from index instead of finding and filtering results
+        returns: list of folder paths (case-normalized or both normalized and as is, depending on the case-sensitive option)
     '''
-    if _.log >= 2: debug("findFolders +<%s> -<%s> ALL=%s" % (",".join(include), ",".join(exclude), "Yes" if returnAll else "No"))
-    idirs, sdirs = dictget(dictget(_.cfg.paths, '', {}), IGNORED, []), dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored or skipped paths
-    currentPathInGlobalIgnores = lambda path: (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs
-    partOfAnyGlobalSkipPath = lambda path: any([wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((skp,) * 4), path).groups()[0].replace("/", "") == skp, False) for skp in sdirs])
-    anyParentIsSkipped = lambda path: any([SKIP in dictget(_.cfg.paths, SLASH.join(path.split(SLASH)[:p + 1]), {}) for p in range(path.count(SLASH))])
-    _.allPaths = wrapExc(lambda: _.allPaths, lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())), {})))
+    def re_sanitize(name): return name  # return "".join([c for c in ])  # TODO replace all occurences of special characters with a "."
+    def currentPathInGlobalIgnores(path, idirs): return (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs  # function definitions used only in this context
+    def partOfAnyGlobalSkipPath(path, sdirs): return xany(lambda skp: wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((re_sanitize(skp),) * 4), path).groups()[0].replace("/", "") == skp, False), sdirs)  # dynamic RE generation TODO sanitize path names?
+    def anyParentIsSkipped(path, paths): return xany(lambda p: SKIP in dictget(paths, SLASH.join(path.split(SLASH)[:p + 1]), {}), range(path.count(SLASH)))
+
+    if _.log >= 2: debug("findFolders +<%s> -<%s>%s" % (",".join(include), ",".join(exclude), " (Return all)" if returnAll else ""))
+    idirs, sdirs = dictget(dictget(_.cfg.paths, '', {}), IGNORED, []), dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored and skipped paths
+    if _.log >= 2: debug("Building list of all paths")
+    _.allPaths = wrapExc(lambda: _.allPaths, lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())), {})))  # try cache first, otherwise compute union of all paths and put into cache to speed up consecutive calls (e.g. when used in a server loop) TODO avoid this step?
     if returnAll or len(include) == 0:
-      if _.log >= 2: debug("Building list of all paths")
-      alls = [path for path in _.allPaths if not currentPathInGlobalIgnores(path) and not partOfAnyGlobalSkipPath(path) and not anyParentIsSkipped(path) and IGNORE not in dictget(_.cfg.paths, path, {})]  # all existing paths except globally ignored/skipped paths TODO add marker file logic below TODO move checks fo _.allPaths cache
-      alls = [a for a in alls if isdir(_.root + os.sep + a)]
-      if _.cfg.log >= 2: debug("findFolders: " + str(alls))
+      if _.log >= 2: debug("Pruning skipped and ignored paths")
+      alls = [path for path in _.allPaths if not currentPathInGlobalIgnores(path, idirs) and not partOfAnyGlobalSkipPath(path, sdirs) and not anyParentIsSkipped(path, _.cfg.paths) and IGNORE not in dictget(_.cfg.paths, path, {})]  # all existing paths except globally ignored/skipped paths TODO add marker file logic below TODO move checks fo _.allPaths cache
+      alls = [a for a in alls if isdir(_.root + os.sep + a)]  # perform true folder check TODO make this skippable to speed up? e.g. via --relaxed
+      if _.cfg.log >= 2: debug("findFolders: %r" % alls)
       if returnAll: return alls
-    paths, first, cache = set() if len(include) > 0 else alls, True, {}
+    paths, first, cache = set() if len(include) > 0 else alls, True, {}  # initialize filtering process
     for tag in include:  # positive restrictive matching
       if _.log >= 2: info("Filtering paths by inclusive tag '%s'" % tag)
       if isglob(tag):
@@ -590,7 +605,7 @@ class Indexer(object):
       elif tag.startswith(DOT):  # explicit file extension filtering
         new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index TODO same as below
       else:  # no glob, no extension: can be tag or file name
-        new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index
+        new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index, returns both cases
       if first: paths = new
       else: paths.intersection_update(new)
       first = False
@@ -603,14 +618,17 @@ class Indexer(object):
       else:
         paths.difference_update(new)  # reduce found paths
       first = False
-    # Now convert to return list (!)
-    paths = [p for p in paths if not currentPathInGlobalIgnores(p) and not partOfAnyGlobalSkipPath(p)]  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
-    if not _.cfg.case_sensitive:  # eliminate different case writings
-      caseMapping = dd()
-      for path in paths: caseMapping[caseNormalize(path)].append(path)
-      paths[:] = [l[1] if len(l) > 1 else l[0] for l in (list(sorted(ll)) for ll in caseMapping.values())]  # first entry [0] is always all-uppercase (lower ASCII character than lower case), therefore order is always ABC, Abc (abC, abc), and no more than two entries are expected
-    paths[:] = [p for p in paths if isdir(_.root + os.sep + p)]
-    if _.cfg.log >= 2: debug("findFolders: " + str(paths))
+    # Now convert to return list, which may differ from previously computed set of paths
+    if _.log >= 2: debug("Filtered down to %d paths" % len(paths))
+    paths = [p for p in paths if not currentPathInGlobalIgnores(p, idirs) and not partOfAnyGlobalSkipPath(p, sdirs)]  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
+    if not _.cfg.case_sensitive:  # eliminate different case writings, otherwise return both, although only one may physically exist on the file system
+      if _.log >= 2: debug("Found %d paths before removing duplicates" % len(paths))
+      paths[:] = removeCasePaths(paths)  # remove case doubles
+      if _.log >= 2: debug("Retained %d paths after removing duplicates" % len(paths))
+    else:
+      paths[:] = [p for p in paths if isdir(_.root + os.sep + p)]  # TODO this ensures on case-sensitive file systems that only correct case versions are retained
+      if _.log >= 2: debug("Retained %d paths after checking file system" % len(paths))
+    if _.cfg.log >= 2: debug("findFolders: %r" % paths)
     return paths
 
   def findFiles(_, aFolder, poss, negs = [], force = False):

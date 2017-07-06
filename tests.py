@@ -206,8 +206,9 @@ class TestRepoTestCase(unittest.TestCase):
       i.log = lib.WARN  # set log level
       i.load(os.path.join(REPO, lib.INDEX), True, False)
       print(i.findFolders(["folders", "folder2"]))
-    _.assertIn('/folders/folder2', wrapChannels(tmp))
-    _.assertEqual(3, len(wrapChannels(tmp).split("\n")))  # header and one line and newline
+    res = wrapChannels(tmp)
+    _.assertIn('/folders/folder2', res)
+    _.assertEqual(4, len(res.split("\n")))  # Info:    Reading index from _test-data/.tagsplorer.idx\nDebug:   Setting up case-sensitive matching\n['/folders/folder2']\n
     def tmp():
       i = lib.Indexer(REPO)
       i.log = lib.DEBUG  # set log level
@@ -269,7 +270,7 @@ class TestRepoTestCase(unittest.TestCase):
       i.unwalk()
     res = wrapChannels(tmp).replace("\r", "")
     logFile.write(res + "\n")
-    _.assertEqual(len(res.split("\n")), 63)
+    _.assertEqual(len(res.split("\n")), 64)
 
 @unittest.SkipTest
 def compressionTest_():
