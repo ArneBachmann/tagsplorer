@@ -4,6 +4,8 @@
 # TODO find: don't display folder match if no files contained that match
 # TODO find: tax,2016,-.pdf says no folder match
 # TODO how to find a file "a" if "a" is already considered for a folder tag and removed during prefiltering? in findFiles add back removed tags when checking contents?
+# TODO manually modifying .tagsplorer.cfg doesn't update index, and therefore unpickles outdated config from index
+# TODO add global default ignores .svn .git
 
 
 import optparse
@@ -117,7 +119,7 @@ class Main(object):
     ''' Set up empty index, defining a root folder. '''
     folder = getRoot(_.options, _.args)
     index = folder if not _.options.index else _.options.index
-    cfg = Config(); cfg.log = _.options.log
+    cfg = Config(_.options.log)
     if _.options.log >= 1: info("Creating root configuration at %s" % index)
     if not _.options.simulate:
       if _.options.strict and os.path.exists(os.path.join(index, CONFIG)):
@@ -133,7 +135,7 @@ class Main(object):
     folder = getRoot(_.options, _.args)
     index = folder if not _.options.index else _.options.index
     if _.options.log >= 1: info("Using configuration from %s" % index)
-    cfg = Config(); cfg.log = _.options.log
+    cfg = Config(_.options.log)
     cfg.load(os.path.join(index, CONFIG))
     if _.options.log >= 1: info("Updating index")
     idx = Indexer(folder); idx.log = _.options.log  # set log level
@@ -161,7 +163,7 @@ class Main(object):
       idx = Indexer(index); idx.log = _.options.log  # initiate indexer
       idx.load(indexFile)  # load search index
     if _.options.ignore_case: idx.cfg.case_sensitive = False  # if false, don't touch setting (not the same as "not ignore_case")
-    normalizer.setupCasematching(idx.cfg.case_sensitive)  # case option defaults to true, but can be overriden by --ignore-case
+#    normalizer.setupCasematching(idx.cfg.case_sensitive)  # case option defaults to true, but can be overriden by --ignore-case
     poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))  # convert search terms to normalized case, if necessary
     if _.options.log >= 1: info("Effective filters +<%s> -<%s>" % (",".join(poss), ",".join(negs)))
     if _.options.log >= 1: info("Searching for tags +<%s> -<%s> in %s" % (','.join(poss), ','.join(negs), os.path.abspath(idx.root)))
@@ -204,7 +206,7 @@ class Main(object):
     indexPath = folder if not _.options.index else _.options.index
 #    root = pathnorm(os.path.abspath(folder))
     if _.options.log >= 1: info("Using configuration from %s" % indexPath)
-    cfg = Config(); cfg.log = _.options.log
+    cfg = Config(_.options.log)
     cfg.load(os.path.join(indexPath, CONFIG))
     if get:
       if key in cfg.__dict__: info("Get global configuration entry: %s = %s" % (key, cfg.__dict__[key])); return
@@ -232,14 +234,14 @@ class Main(object):
     index = folder if not _.options.index else _.options.index
     root = pathnorm(os.path.abspath(folder))
     if _.options.log >= 1: info("Using configuration from %s" % index)
-    cfg = Config(); cfg.log = _.options.log  # need to load config early for case_sensitive flag
+    cfg = Config(_.options.log)  # need to load config early for case_sensitive flag
     cfg.load(os.path.join(index, CONFIG))
 
     filez = _.args  # process function arguments
     tags = safeSplit(_.options.tag)
     poss, negs = splitCrit(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
-    normalizer.setupCasematching(cfg.case_sensitive)  # TODO OK to use normalization in adding?
+#    normalizer.setupCasematching(cfg.case_sensitive)  # TODO OK to use normalization in adding?
     poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))
     if (len(poss) + len(negs)) == 0: error("No tag(s) given to assign for %s" % ", ".join(file)); return
     if xany(lambda p: p in negs, poss): error("Won't allow same tag in both inclusive and exclusiv file assignment: %s" % ', '.join(["'%s'" % p for p in poss if p in negs])); return
@@ -264,14 +266,14 @@ class Main(object):
     index = folder if not _.options.index else _.options.index
     root = pathnorm(os.path.abspath(folder))
     if _.options.log >= 1: info("Using configuration from %s" % index)
-    cfg = Config(); cfg.log = _.options.log  # need to load config early for case_sensitive flag
+    cfg = Config(_.options.log)  # need to load config early for case_sensitive flag
     cfg.load(os.path.join(index, CONFIG))
 
     filez = _.args  # process function arguments
     tags = safeSplit(_.options.untag)
     poss, negs = splitCrit(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
-    normalizer.setupCasematching(cfg.case_sensitive)
+#    normalizer.setupCasematching(cfg.case_sensitive)
     poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))  # TODO as in adding, OK to use?
     if (len(poss) + len(negs)) == 0: error("No tag(s) given to remove for %s" % ", ".join(file)); return
 
@@ -349,16 +351,16 @@ class Main(object):
     op.add_option('-v',                  action = "store_true",  dest = "verbose",     default = False, help = "Same as -l1. Also displays unit test details")
     op.add_option('--stats',             action = "store_true",  dest = "stats",       default = False, help = "List index internals (combine with -l1, -l2)")
     _.options, _.args = op.parse_args()
-    if _.options.log >= 2: debug("Options: " + str(_.options))
-    if _.options.log >= 2: debug("Arguments: " + str(_.args))
+    if _.options.log >= 2: debug("Raw options: " + str(_.options))
+    if _.options.log >= 2: debug("Raw arguments: " + str(_.args))
     _.args, excludes = splitCrit(_.args, lambda e: e[:2] != '--')  # remove "--" from "--mark", allows to use --mark to exclude this tag (unless it's an option switch)
     _.options.excludes.extend([e[2:] for e in excludes])  # additional non-option flags are interpreted as further exclusive tags
     _.options.log = max(1 if _.options.verbose else 0, _.options.log)
     if _.options.index is not None and _.options.root is None: error("Index location specified (-i) without specifying root (-r)"); sys.exit(1)
     if _.options.log >= 1: info("Started at %s" % (time.strftime("%H:%M:%S")))
     if _.options.log >= 1: debug("Running in debug mode.")
-    if _.options.log >= 2: debug("Parsed options: " + str(_.options))
-    if _.options.log >= 2: debug("Parsed arguments: " + str(_.args))
+    if _.options.log >= 2: debug("Updated options: " + str(_.options))
+    if _.options.log >= 2: debug("Updated arguments: " + str(_.args))
     if _.options.init: _.initIndex()
     elif _.options.update: _.updateIndex()
     elif _.options.tag: _.add()

@@ -127,7 +127,7 @@ def removeCasePaths(paths):
 
 # Classes
 class Normalizer(object):
-  def setupCasematching(_, case_sensitive):
+  def setupCasematching(_, case_sensitive, quiet = False):
     ''' Setup normalization.
     >>> n = Normalizer(); n.setupCasematching(True); print(n.filenorm("Abc"))
     Abc
@@ -138,7 +138,7 @@ class Normalizer(object):
     >>> print(n.globmatch("abc", "?Bc"))
     True
     '''
-    debug("Setting up case-%ssensitive matching" % "" if case_sensitive else "in")  # TODO make message depend on set log level
+    if not quiet: debug("Setting up case-%ssensitive matching" % ("" if case_sensitive else "in"))  # TODO make message depend on set log level
     _.filenorm = ident if case_sensitive else caseNormalize  # we can't use "str if case_sensitive else str.upper" because for unicode strings this fails, as the function reference comes from the str object
     _.globmatch = fnmatch.fnmatchcase if case_sensitive else lambda f, g: fnmatch.fnmatch(f.upper(), g.upper())  # fnmatch behavior depends on file system, therefore fixed here
 normalizer = Normalizer()  # to keep a static module-reference. TODO move to main instead?
@@ -190,26 +190,32 @@ class ConfigParser(object):
 
 class Config(object):
   ''' Contains all tag configuration. '''
-  def __init__(_):
-    _.log = 0  # level
+  def __init__(_, log, case_sensitive = not ON_WINDOWS):
+    _.log = log  # level
+    _.case_sensitive = case_sensitive  # dynamic default unless specified differently in the config file
     _.paths = {}  # map from relative dir path to dict of marker -> [entries]
-    _.case_sensitive = not ON_WINDOWS  # dynamic default unless specified differently in the config file
     _.reduce_case_storage = False  # default is always store case-noramlized plus true case
-    normalizer.setupCasematching(_.case_sensitive)  # default, overridden by load
+    normalizer.setupCasematching(case_sensitive, quiet = True)  # default, overridden by load
+
+  def printConfig(_):
+    ''' Display debugging info. '''
+    if _.log >= 1: debug("Config options: %r" % {"case_sensitive": _.case_sensitive, "reduce_case_storage": _.reduce_case_storage})
 
   def load(_, filename, index_ts = None):
     ''' Load configuration from file, if timestamp differs from index' timestamp. '''
     if _.log >= 2: debug("Loading configuration %r" % ((filename, index_ts),))
-    with open(filename, 'r') as fd:  # HINT: don't use rb, because in Python 3 this return bytes objects
+    with open(filename, 'r') as fd:  # HINT: don't use rb, because in Python 3 this returns bytes objects
       if _.log >= 1: info("Comparing configuration timestamp for " + filename)
       timestamp = float(fd.readline().rstrip())
       if (index_ts is not None) and timestamp == index_ts:
         if _.log >= 1: info("Skip loading configuration, because index is up to date")
-        return False  # no skew detected, allow using old index' interned configuration ("self" will be discarded)
+        _.printConfig()
+        return False  # no skew detected, allow using old index's interned configuration ("self" will be discarded)
       if _.log >= 1: info("Loading configuration from file system" + ("" if index_ts is None else " because index is outdated"))
       cp = ConfigParser(); dat = cp.load(fd); _.__dict__.update(dat)  # update with global options
       _.paths = cp.sections
-      normalizer.setupCasematching(_.case_sensitive)
+      normalizer.setupCasematching(_.case_sensitive)  # TODO remove and let caller handle this?
+      _.printConfig()
       return True
 
   def store(_, filename, timestamp = None):
@@ -324,11 +330,10 @@ class Indexer(object):
       if _.log >= 1: info("Reading index from " + filename)
       c = pickle.loads(zlib.decompress(fd.read()) if _.compressed else fd.read())
       _.cfg, _.timestamp, _.tagdirs, _.tagdir2parent, _.tagdir2paths = c.cfg, c.timestamp, c.tagdirs, c.tagdir2parent, c.tagdir2paths
-      cfg = Config(); cfg.log = _.log  # partially read existing configuration to compare with unpickled version, or read fully if timestamp differs
+      cfg = Config(_.log, _.cfg.case_sensitive)
       if (ignore_skew or cfg.load(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)) and recreate_index:
         if _.log >= 1: info("Recreating index considering configuration")
         _.cfg = cfg  # set more recent config and update
-        normalizer.setupCasematching(cfg.case_sensitive)  # update after loading current state from config file, otherwise keep interned value from pickled object
         _.walk()  # re-create this index
         _.store(filename)
 
@@ -390,21 +395,21 @@ class Indexer(object):
     marks = _.cfg.paths.get(aDir[len(_.root):], {})  # contains configuration for current folder
     # 1a: check folder's configuration
     if SKIP in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' and SLASH in aDir else '') in dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])):
-      if _.log >= 1: info("  Skip %s%s" % (aDir, '' if SKIP in marks else ' due to global skip setting'))
+      if _.log >= 1: debug("  Skip %s%s" % (aDir, '' if SKIP in marks else ' due to global skip setting'))
       return  # completely ignore sub-tree and break recursion
     elif IGNORE in marks or ((aDir[aDir.rindex(SLASH) + 1:] if aDir != '' and SLASH in aDir else '') in dictget(dictget(_.cfg.paths, '', {}), IGNORED, [])):  # former checks path cfg, latter checks global ignore TODO allow glob check?
-      if _.log >= 1: info("  Ignore %s%s" % (aDir, '' if IGNORE in marks else ' due to global ignore setting'))
+      if _.log >= 1: debug("  Ignore %s%s" % (aDir, '' if IGNORE in marks else ' due to global ignore setting'))
       ignore = True  # ignore this directory as tag, don't index contents
     # 1b: check folder's configuration
     elif TAG in marks:  # neither SKIP nor IGNORE in config: consider manual folder tagging
       for t in marks[TAG]:
-        if _.log >= 1: info("  Tag '%s' in %s" % (t, aDir))
+        if _.log >= 1: debug("  Tag '%s' in %s" % (t, aDir))
         tag, pos, neg = t.split(SEPA)  # tag name, includes, excludes
         i = lindex(_.tags, intern(tag), appendandreturnindex)  # find existing index of that tag, or create a new and return its index
         adds.append(i); _.tag2paths[i].append(parent)
     elif FROM in marks:  # consider tags from mapped folder
       for f in marks[FROM]:
-        if _.log >= 1: info("  Map from %s into %s" % (f, aDir))
+        if _.log >= 1: debug("  Map from %s into %s" % (f, aDir))
         other = pathnorm(os.path.abspath(os.path.join(aDir, f))[len(_.root):] if not f.startswith(SLASH) else os.path.join(_.root, f))
         _marks = _.cfg.paths.get(other, {})
         if TAG in _marks:
@@ -416,16 +421,16 @@ class Indexer(object):
     #  2.  process folder's file names
     files = wrapExc(lambda: listdir(aDir), lambda: [])  # read file list
     if SKPFILE in files:  # TODO what about file name case? should be no problem, as even Windows allows lower-case file names and should match here
-      if _.log >= 1: info("  Skip %r due to local skip file" % aDir[len(_.root):])
+      if _.log >= 1: debug("  Skip %r due to local skip file" % aDir[len(_.root):])
       return  # completely ignore sub-tree and break recursion here
     ignore = ignore or (IGNFILE in files)  # short-circuit logic: config setting or file marker
     if ignore:  # ignore this directory as tag, don't index its contents, but continue with children
-      if _.log >= 1: info("  Ignore %r due to local ignore setting" % aDir[len(_.root):])
-      if not _.cfg.reduce_case_storage and len(tags) >= 2 and caseNormalize(_.tagdirs[tags[-2]]) == _.tagdirs[tags[-1]]: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tags[-2]])].pop()  # in case parent caller added true case *and also* case-normalized version, remove latter. if reduce_storage, there was only one added anyway
+      if _.log >= 1: debug("  Ignore %r due to local ignore setting" % aDir[len(_.root):])
+      if not _.cfg.reduce_case_storage and len(tags) >= 2 and caseNormalize(_.tagdirs[tags[-2]]) == _.tagdirs[tags[-1]]: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tags[-2]])].pop()  # in case parent caller added true case *and also* case-normalized version, remove latter. if reduce_case_storage, there was only one added anyway
       if len(tags) >= 1: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tags[-1]])].pop()  # TODO may leave empty list behind
     else:  # no ignore, so index extensions as additional tags, folders and files alike
       # 2a. index all folders' contents' names file extensions
-      if _.log >= 1: debug("Indexing files in folder %r" % aDir[len(_.root):])
+      if _.log >= 1: info("Indexing files in folder %r" % aDir[len(_.root):])
       for _file in (ff for ff in files if DOT in ff[1:]):  # index only file extensions (also for folders!) in this folder, without propagation to sub-folders TODO dot-first files could be ignored or handled differenly
         ext = _file[_file.rindex(DOT):]  # split off extension, even if "empty" extension (filename ending in dot)
         iext = caseNormalize(ext)
@@ -442,7 +447,7 @@ class Indexer(object):
       idxs = []  # first element in "idx" is next index to use in recursion (future parent, current child), no matter if true-case or case-normalized mode is selected
       # 3a. add sub-folder name to "tagdirs" and "tagdir2parent"
       if not (ON_WINDOWS and _.cfg.reduce_case_storage):  # for Windows: only store true-case if not reducing storage, Linux: always store
-        if _.log >= 1: debug("Storing true-case folder name %r for %r" % (child, _.getPath(parent, {})))
+        if _.log >= 1: debug("Storing original folder name %r for %r" % (child, _.getPath(parent, {})))
         idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
         _.tagdirs.append(intern(child))  # now add the child folder name (duplicates allowed, because we build the tree structure here)
         _.tagdir2parent.append(parent)  # at at same index as tagdirs "next" position
@@ -621,13 +626,13 @@ class Indexer(object):
     # Now convert to return list, which may differ from previously computed set of paths
     if _.log >= 2: debug("Filtered down to %d paths" % len(paths))
     paths = [p for p in paths if not currentPathInGlobalIgnores(p, idirs) and not partOfAnyGlobalSkipPath(p, sdirs)]  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
-    if not _.cfg.case_sensitive:  # eliminate different case writings, otherwise return both, although only one may physically exist on the file system
+    if _.cfg.case_sensitive:  # eliminate different case writings, otherwise return both, although only one may physically exist on the file system
       if _.log >= 2: debug("Found %d paths before removing duplicates" % len(paths))
       paths[:] = removeCasePaths(paths)  # remove case doubles
       if _.log >= 2: debug("Retained %d paths after removing duplicates" % len(paths))
-    else:
-      paths[:] = [p for p in paths if isdir(_.root + os.sep + p)]  # TODO this ensures on case-sensitive file systems that only correct case versions are retained
-      if _.log >= 2: debug("Retained %d paths after checking file system" % len(paths))
+      #paths[:] = [p for p in paths if isdir(_.root + os.sep + p)]  # TODO same as logic above? this ensures on case-sensitive file systems that only correct case versions are retained
+#    else:
+#      if _.log >= 2: debug("Retained %d paths after checking file system" % len(paths))
     if _.cfg.log >= 2: debug("findFolders: %r" % paths)
     return paths
 
@@ -640,9 +645,9 @@ class Indexer(object):
         returns: 2-tuple (list [filenames] for given folder, bool: has a skip marker file - don't recurse into)
     '''
     if _.log >= 2: debug("findFiles " + str((aFolder, poss, negs, force)))
-    inPath = set(safeSplit(aFolder, SLASH))
-    if not _.cfg.case_sensitive: inPath.update(set([caseNormalize(f) for f in safeSplit(aFolder, SLASH)]))  # all path elements to remove from positive tags
-    remainder = set([p for p in poss if (p if _.cfg.case_sensitive else caseNormalize(p)) not in inPath])  # split folder path into tags and remove from remaining criteria, considering case-sensitivity unless deselected or case same as normalized variant
+    inPath = set(safeSplit(aFolder, SLASH))  # break path into folder names
+    if not _.cfg.case_sensitive: inPath.update(set([caseNormalize(f) for f in safeSplit(aFolder, SLASH)]))  # add case-normalized folder names
+    remainder = set([p for p in poss if (p if _.cfg.case_sensitive else caseNormalize(p)) not in inPath])  # split folder path into tags and remove from remaining criterions, considering case-sensitivity unless deselected or case same as normalized variant
     if _.log >= 1: info("Filtering folder %s%s" % (aFolder, (" by remaining tags: " + ((", ".join(remainder)) if len(remainder) > 0 else '') + DOT)))
     conf = _.cfg.paths.get(aFolder, {})  # if empty, files remain unchanged, we return all
     folders = [aFolder] + [pathnorm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])]  # list of original and all mapped folders
