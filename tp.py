@@ -157,8 +157,9 @@ class Main(object):
     else:
       idx = Indexer(index); idx.log = _.options.log  # initiate indexer
       idx.load(indexFile)  # load search index
-    if _.options.ignore_case: idx.cfg.case_sensitive = False  # if false, don't touch setting (not the same as "not ignore_case")
-#    normalizer.setupCasematching(idx.cfg.case_sensitive)  # case option defaults to true, but can be overriden by --ignore-case
+    if _.options.ignore_case:
+      idx.cfg.case_sensitive = False  # if false, don't touch setting (not the same as "not ignore_case")
+      normalizer.setupCasematching(idx.cfg.case_sensitive)  # case option defaults to true, but can be overriden by --ignore-case
     poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))  # convert search terms to normalized case, if necessary
     if _.options.log >= 1: info("Effective filters +<%s> -<%s>" % (",".join(poss), ",".join(negs)))
     if _.options.log >= 1: info("Searching for tags +<%s> -<%s> in %s" % (','.join(poss), ','.join(negs), os.path.abspath(idx.root)))
