@@ -4,8 +4,6 @@
 
 # markers in this file: TODO (open tasks) and HINT (to think about)
 
-# TODO move to standard logger, as the below logic doesn't speed up evaluation, since no lambda is given, but only always evaluated arguments
-
 
 import collections, copy, fnmatch, os, re, sys, time, zlib  # standard library
 if sys.version_info.major >= 3: from os import listdir
@@ -655,7 +653,7 @@ class Indexer(object):
 
     allfiles, willskip = set(), False  # contains files from current or mapped folders (without path, since "mapped", but could have local symlink - TODO
     for folder in folders:
-      if _.log >= 1: debug("Checking %sfolder %s" % ("root " if folder == "" else '', folder))
+      if _.log >= 1: debug("Checking %sfolder%s" % (("root ", "") if folder == "" else ('', " " + folder)))
       files = set(wrapExc(lambda: [f for f in listdir(_.root + folder) if isfile(_.root + folder + SLASH + f)], []))  # all from current folder, potential excecption: folder name (unicode etc.)
       if IGNFILE in files: continue  # skip is more difficult to handle than ignore, cf. return tuple here and code in tp.find() with return
       if folder == aFolder and SKPFILE in files:

@@ -101,9 +101,9 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testReduceCaseStorage(_):
     _.assertIn("Tags: 81" if not lib.ON_WINDOWS else "Tags: 85", runP("--stats"))
-    _.assertIn("2 files found", runP("Case -v"))
-    _.assertIn("0 files found", runP("case -v"))
-    _.assertIn("2 files found", runP("case -v -C"))
+    _.assertIn("2 files found", runP("Case -v"))  # contained in /cases/Case
+    _.assertIn("0 files found", runP("case -v"))  # wrong case writing, can't find
+    _.assertIn("2 files found", runP("case -v -C"))  # ignore case: should find
     _.assertIn("0 files found" if not lib.ON_WINDOWS else "2 files found", runP("CASE -v"))
     _.assertIn("Added global configuration entry", runP("--set reduce_case_storage=True -v"))
     runP("-u")  # trigger update index after config change (but should automatically do so anyway)

@@ -1,11 +1,6 @@
 ''' tagsPlorer command-line application  (C) 2016-2017  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer '''
 
 # This is the main entry point of the tagsPlorer utility (the command line interface is the first and currently only interface available, except a web server implementation)
-# TODO find: don't display folder match if no files contained that match
-# TODO find: tax,2016,-.pdf says no folder match
-# TODO how to find a file "a" if "a" is already considered for a folder tag and removed during prefiltering? in findFiles add back removed tags when checking contents?
-# TODO manually modifying .tagsplorer.cfg doesn't update index, and therefore unpickles outdated config from index
-# TODO add global default ignores .svn .git
 
 
 import optparse
@@ -314,7 +309,7 @@ class Main(object):
         byOccurrence[idx.tagdirs.count(t)].append(i)  # map number of tag occurrences in index to their tagdir indices
       _cache = {}
       for n, ts in sorted(byOccurrence.items()):  # TODO move above two lines into one dict comprehension
-        info("  %d occurences for entries %s " % (n, str(sorted(ts))))
+        info("  %d occurences for entries %s" % (n, str(sorted(ts))))
         if idx.log >= 2:  # TODO root element mapped to some paths, should not be! TODO all tags mapped to same folder
           byMapping = dd()
           for _t in ts: byMapping[idx.tagdirs[_t]].extend(idx.tagdir2paths[_t])  # aggregate all mappings

@@ -72,7 +72,7 @@ Here is a short description of valid program options and arguments:
 - `--init [-r rootfolder]`
 
   Create an empty configuration in the current (or the relative or absolute one specified by the -r option) folder.
-  
+
   The location of a configuration file `.tagsplorer.cfg` marks the root path for an entire indexed file tree. No other configuration files higher up the parent hierarchy will be considered. This allows for nested sub-indices, which is however not recommended (similar to not nesting version control system checkouts).
 
   Creating the root configuration will not index the folder tree. Use the `--update` command for that.
@@ -86,7 +86,7 @@ Here is a short description of valid program options and arguments:
 - `--search [[+]tag1[,tags2[,tags...]]] [[-]tag3[,tag4[,tags...]]] [-r rootfolder]` or `-s` or *no* option switch plus search terms appended
 
   Perform a search (which corresponds to a "virtual folder" listing).
-  
+
   This is the main operation for tagsPlorer tools and accepts inclusive as well as exclusive search terms (tag, folder name, file name, file extension, file glob).
   There can be any number of arguments, which optionally can also be specified in a comma-separated way (after at least one initial positive tag), or using the `-x` option with optional comma-separated further exclusive terms (no double negation allowed, i.e `-x a,-b` won't make b inclusive).
   Note, however, that the command line interface cannot distinguish between valid option switches (like -r <root>) and negative tag arguments (like -r to exclude all files tagged with "r"). Therefore, negative (exclusive) tag arguments must be specified after either a double-dash `--` or after a comma of a positive (inclusive) term.
@@ -168,7 +168,7 @@ The following list describes all potential settings:
     Defines a tag `name` for the file name(s) specified in `includes` string, excluding those specified in the `excludes` string. `name` should differ from the current folder name, to give a sensible added value. TODO add check plus force option.
 
     `includes` and `excludes` are comma-separated lists of file names and file globs.
-    
+
     The order of evaluation during search is always left-to-right; there is no deeper semantics prohibiting the user to add e.g. file names or stricter globs that are already included in other looser glob patterns (inclusive or exclusive) but warnings may be issued.
 
 -   `from=path`
