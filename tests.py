@@ -16,12 +16,6 @@ _log = logging.getLogger(__name__); debug, info, warn, error = _log.debug, _log.
 import lib
 import tp
 
-PYTHON = os.path.realpath(sys.executable) if not lib.ON_WINDOWS else '"' + os.path.realpath(sys.executable) + '"'
-REPO = '_test-data'
-SVN = tp.findRootFolder(None, '.svn') is not None
-
-logFile = None
-
 
 def call(argstr): so = subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE).communicate()[0]; return so.decode('ascii') if sys.version_info.major >= 3 else so
 
@@ -103,17 +97,17 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("1 files found", runP(".x -l2"))
 
   def testReduceCaseStorage(_):
-    _.assertIn("Tags: 81" if not lib.ON_WINDOWS else "Tags: 83", runP("--stats"))
+    _.assertIn("Tags: 85" if lib.ON_WINDOWS else "Tags: 81", runP("--stats"))
     _.assertIn("2 files found", runP("Case -v"))  # contained in /cases/Case
     _.assertIn("0 files found", runP("case -v"))  # wrong case writing, can't find
     _.assertIn("2 files found", runP("case -v -C"))  # ignore case: should find
-    _.assertIn("0 files found" if not lib.ON_WINDOWS else "2 files found", runP("CASE -v"))
+    _.assertIn("2 files found" if lib.ON_WINDOWS else "0 files found", runP("CASE -v"))
     _.assertIn("Added global configuration entry", runP("--set reduce_case_storage=True -v"))
     runP("-u")  # trigger update index after config change (but should automatically do so anyway)
     _.assertIn("Tags: 46", runP("--stats"))
-    _.assertIn("2 files found" if not lib.ON_WINDOWS else "0 files found", runP("Case -v"))  # update after config change
+    _.assertIn("0 files found" if lib.ON_WINDOWS else "2 files found", runP("Case -v"))  # update after config change
     _.assertIn("0 files found", runP("case -v"))  # update after config change
-    _.assertIn("0 files found" if not lib.ON_WINDOWS else "2 files found", runP("CASE -v"))
+    _.assertIn("2 files found" if lib.ON_WINDOWS else "0 files found", runP("CASE -v"))
 
   def testFilenameCaseSetting(_):
     ''' This test confirms that case setting works (only executed on Linux). '''
@@ -274,7 +268,7 @@ class TestRepoTestCase(unittest.TestCase):
       i.unwalk()
     res = wrapChannels(tmp).replace("\r", "")
     logFile.write(res + "\n")
-    _.assertEqual(len(res.split("\n")), 65 if lib.ON_WINDOWS else 63)  # TODO why?
+    _.assertEqual(len(res.split("\n")), 67 if lib.ON_WINDOWS else 63)  # TODO why?
 
 @unittest.SkipTest
 def compressionTest_():
@@ -297,9 +291,13 @@ def load_tests(loader, tests, ignore):
 
 if __name__ == '__main__':
   DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+  if not DEBUG: print("Error: Set environment variable DEBUG=True to run the test suite"); sys.exit(1)
   try: del sys.argv[sys.argv.index("--simulate-winfs")]; SIMFS = True
   except: SIMFS = os.environ.get("SIMULATE_WINFS", "false").lower() == "true"
-  if not DEBUG: print("Error: Set environment variable DEBUG=True to run the test suite"); sys.exit(1)
+  PYTHON = os.path.realpath(sys.executable) if SIMFS or not lib.ON_WINDOWS else '"' + os.path.realpath(sys.executable) + '"'
+  REPO = '_test-data'
+  SVN = tp.findRootFolder(None, '.svn') is not None
+  logFile = None
   print("Using VCS '%s'" % "SVN" if SVN else "Git")
   import unittest
   sys.unittesting = None  # flag to enable functions to know they are being tested (may help sometimes)
