@@ -4,35 +4,51 @@ matrix:
     - os: linux
       dist: trusty
       python: 2.7
-      env: SIMULATE_WINFS=false
+      env:
+        - SIMULATE_WINFS=false
+        - DISTRIBUTION=trusty
     - os: linux
       dist: trusty
       python: 2.7
-      env: SIMULATE_WINFS=true
+      env:
+        - SIMULATE_WINFS=true
+        - DISTRIBUTION=trusty
     - os: linux
       dist: trusty
       python: 3.5
-      env: SIMULATE_WINFS=false
+      env:
+        - SIMULATE_WINFS=false
+        - DISTRIBUTION=trusty
     - os: linux
       dist: trusty
       python: 3.5
-      env: SIMULATE_WINFS=true
+      env:
+        - SIMULATE_WINFS=true
+        - DISTRIBUTION=trusty
     - os: linux
       dist: precise
       python: 2.7
-      env: SIMULATE_WINFS=false
+      env:
+        - SIMULATE_WINFS=false
+        - DISTRIBUTION=precise
     - os: linux
       dist: precise
       python: 2.7
-      env: SIMULATE_WINFS=true
+      env:
+        - SIMULATE_WINFS=true
+        - DISTRIBUTION=precise
     - os: linux
       dist: precise
       python: 3.5
-      env: SIMULATE_WINFS=false
+      env:
+        - SIMULATE_WINFS=false
+        - DISTRIBUTION=precise
     - os: linux
       dist: precise
       python: 3.5
-      env: SIMULATE_WINFS=true
+      env:
+        - SIMULATE_WINFS=true
+        - DISTRIBUTION=precise
 #    - os: linux
 #      dist: precise
 #      python: pypy

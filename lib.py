@@ -591,7 +591,7 @@ class Indexer(object):
       if _.log >= 2: debug("Pruning skipped and ignored paths from %d" % len(_.allPaths))
       alls = [path for path in _.allPaths if not currentPathInGlobalIgnores(path, idirs) and not partOfAnyGlobalSkipPath(path, sdirs) and not anyParentIsSkipped(path, _.cfg.paths) and IGNORE not in dictget(_.cfg.paths, path, {})]  # all existing paths except globally ignored/skipped paths TODO add marker file logic below TODO move checks fo _.allPaths cache
       alls = [a for a in alls if isdir(_.root + os.sep + a)]  # perform true folder check TODO make this skippable to speed up? e.g. via --relaxed
-      if _.cfg >= 2: debug("Remaining %d paths" % len(alls))
+      if _.cfg.log >= 2: debug("Remaining %d paths" % len(alls))
       if _.cfg.log >= 2: debug("findFolders: %r" % alls)
       if returnAll: return alls
     paths, first, cache = set() if len(include) > 0 else alls, True, {}  # initialize filtering process
