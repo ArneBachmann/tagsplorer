@@ -9,7 +9,7 @@ import collections, copy, fnmatch, os, re, sys, time, zlib  # standard library
 if sys.version_info.major >= 3: from os import listdir
 else: from dircache import listdir
 if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "false").lower() == "true":
-  ON_WINDOWS = true; from simfs import *
+  ON_WINDOWS = True; from simfs import *
 else: ON_WINDOWS = sys.platform == 'win32'  # there exists a different detection schema for OS, but I don't remember. https://github.com/easybuilders/easybuild/wiki/OS_flavor_name_version
 
 DEBUG = 3; INFO = 2; WARN = 1; ERROR = 0  # log levels
