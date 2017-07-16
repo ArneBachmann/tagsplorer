@@ -8,8 +8,7 @@ import optparse
 import os
 import sys
 
-if "--simulate-winfs" in sys.argv:  # also recognized by optparse, which isn't in main thus issueing an error
-#  logging.basicConfig(level = logging.DEBUG if os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
+if "--simulate-winfs" in sys.argv or os.environ.get("SIMULATE_WINFS", "false").lower() == "true":  # don't move to optparse handling, which is not in __main__
   ON_WINDOWS = True; from simfs import *  # monkey-patch current namespace
 
 from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports that need't be repeated here
