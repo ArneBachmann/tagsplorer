@@ -10,8 +10,7 @@ import sys
 
 if "--simulate-winfs" in sys.argv:  # also recognized by optparse, which isn't in main thus issueing an error
 #  logging.basicConfig(level = logging.DEBUG if os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
-  from simfs import *  # monkey-patch current namespace
-  ON_WINDOWS = True
+  ON_WINDOWS = True; from simfs import *  # monkey-patch current namespace
 
 from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports that need't be repeated here
 from version import __version_info__, __version__  # used by setup.py

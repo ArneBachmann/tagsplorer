@@ -9,7 +9,7 @@ import collections, copy, fnmatch, os, re, sys, time, zlib  # standard library
 if sys.version_info.major >= 3: from os import listdir
 else: from dircache import listdir
 ON_WINDOWS = sys.platform == 'win32'  # there exists a different detection schema, but I don't remember
-if '--simulate-winfs' in sys.argv: from simfs import *
+if '--simulate-winfs' in sys.argv: ON_WINDOWS = true; from simfs import *
 
 DEBUG = 3; INFO = 2; WARN = 1; ERROR = 0  # log levels
 LOG = DEBUG if os.environ.get("DEBUG", "false").lower() == "true" else INFO  # maximum log level
