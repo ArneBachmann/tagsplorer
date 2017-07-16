@@ -1,6 +1,5 @@
 # tagsPlorer test suite  (C) Arne Bachmann https://github.com/ArneBachmann/tagsplorer
 # Test suite. Please export environment variable DEBUG=True
-# TODO check D: vs. D:\ logic
 
 import logging
 import os
