@@ -8,10 +8,11 @@
 import collections, copy, fnmatch, os, re, sys, time, zlib  # standard library
 if sys.version_info.major >= 3: from os import listdir
 else: from dircache import listdir
+ON_WINDOWS = sys.platform == 'win32'  # there exists a different detection schema, but I don't remember
+if '--simulate-winfs' in sys.argv: from simfs import *
 
 DEBUG = 3; INFO = 2; WARN = 1; ERROR = 0  # log levels
 LOG = DEBUG if os.environ.get("DEBUG", "false").lower() == "true" else INFO  # maximum log level
-ON_WINDOWS = sys.platform == 'win32'  # there exists a different detection schema, but I don't remember
 
 # Version-dependent imports
 trace, debug, info, warn, error = [lambda _: None] * 5
@@ -197,7 +198,7 @@ class Config(object):
 
   def printConfig(_):
     ''' Display debugging info. '''
-    if _.log >= 1: debug("Config options: %r" % {"case_sensitive": _.case_sensitive, "reduce_case_storage": _.reduce_case_storage})
+    if _.log >= 1: debug("Config options: %r" % {"case_sensitive": _.case_sensitive, "reduce_case_storage": _.reduce_case_storage, "on_windows": ON_WINDOWS})
 
   def load(_, filename, index_ts = None):
     ''' Load configuration from file, if timestamp differs from index' timestamp. '''

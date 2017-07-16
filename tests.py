@@ -2,12 +2,16 @@
 # Test suite. Please export environment variable DEBUG=True
 # TODO check D: vs. D:\ logic
 
+import logging
 import os
 import subprocess
 import sys
 import unittest
 import traceback
 StringIO = (__import__("StringIO" if sys.version_info.major < 3 else "io")).StringIO  # enables import via ternary expression
+
+_log = logging.getLogger(__name__); debug, info, warn, error = _log.debug, _log.info, _log.warn, _log.error; del _log
+
 
 # Custom modules
 import lib
@@ -24,7 +28,7 @@ def call(argstr): so = subprocess.Popen(argstr, shell = True, bufsize = 1000000,
 
 def runP(argstr):  # instead of script call via Popen, to allow for full coverage stats
   def tmp():
-    sys.argv = ["tp.py", "-r", REPO] + lib.safeSplit(argstr, " ")
+    sys.argv = ["tp.py", "-r", REPO] + (["--simulate-winfs"] if SIMFS else []) + lib.safeSplit(argstr, " ")
     logFile.write("TEST: " + " ".join(sys.argv) + " " + repr(argstr) + "\n")
     tp.Main().parse()  # initiates script run due to overriding sys.path above
   res = wrapChannels(tmp)
@@ -293,8 +297,10 @@ def load_tests(loader, tests, ignore):
 
 
 if __name__ == '__main__':
-  if not os.environ.get("DEBUG", "False").lower() == "true":
-    print("Error: Set environment variable DEBUG=True to run the test suite"); sys.exit(1)
+  DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+  try: del sys.argv[sys.argv.index("--simulate-winfs")]; SIMFS = True
+  except: SIMFS = os.environ.get("SIMULATE_WINFS", "false").lower() == "true"
+  if not DEBUG: print("Error: Set environment variable DEBUG=True to run the test suite"); sys.exit(1)
   print("Using VCS '%s'" % "SVN" if SVN else "Git")
   import unittest
   sys.unittesting = None  # flag to enable functions to know they are being tested (may help sometimes)

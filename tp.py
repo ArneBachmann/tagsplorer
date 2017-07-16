@@ -3,7 +3,16 @@
 # This is the main entry point of the tagsPlorer utility (the command line interface is the first and currently only interface available, except a web server implementation)
 
 
+import logging
 import optparse
+import os
+import sys
+
+if "--simulate-winfs" in sys.argv:  # also recognized by optparse, which isn't in main thus issueing an error
+#  logging.basicConfig(level = logging.DEBUG if os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
+  from simfs import *  # monkey-patch current namespace
+  ON_WINDOWS = True
+
 from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports that need't be repeated here
 from version import __version_info__, __version__  # used by setup.py
 
@@ -346,6 +355,7 @@ class Main(object):
     op.add_option('--dirs',              action = "store_true",  dest = "onlyfolders", default = False, help = "Only find directories that contain matches")
     op.add_option('-v',                  action = "store_true",  dest = "verbose",     default = False, help = "Same as -l1. Also displays unit test details")
     op.add_option('--stats',             action = "store_true",  dest = "stats",       default = False, help = "List index internals (combine with -l1, -l2)")
+    op.add_option('--simulate-winfs',    action = "store_true",  dest = "winfs",       default = True,  help = "Simulate case-insensitive file system")  # but option checked outside parser
     _.options, _.args = op.parse_args()
     if _.options.log >= 2: debug("Raw options: " + str(_.options))
     if _.options.log >= 2: debug("Raw arguments: " + str(_.args))
