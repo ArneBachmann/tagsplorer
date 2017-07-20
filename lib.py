@@ -23,7 +23,6 @@ if sys.version_info.major >= 3:
   dictviewkeys, dictviewvalues, dictviewitems = dict.keys, dict.values, dict.items  # returns generators operating on underlying data in Python 3
   cmp = lambda a, b: -1 if a < b else (1 if a > b else 0)
   def xreadlines(fd): return fd.readlines()
-  from functools import reduce  # not built-in anymore
 else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
   import cPickle as pickle
   lmap = map

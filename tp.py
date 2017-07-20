@@ -14,9 +14,6 @@ if "--simulate-winfs" in sys.argv or os.environ.get("SIMULATE_WINFS", "false").l
 from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports that need't be repeated here
 from version import __version_info__, __version__  # used by setup.py
 
-# Version-dependent imports
-if sys.version_info.major == 3: from functools import reduce  # not built-in anymore, but not enough to create a dependency on six.py
-
 _log = logging.getLogger(__name__); debug, info, warn, error = (lambda *s: func(" ".join([str(e) for e in s])) for func in [_log.debug, _log.info, _log.warn, _log.error]); del _log
 
 
