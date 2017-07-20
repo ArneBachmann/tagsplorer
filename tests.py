@@ -13,6 +13,7 @@ StringIO = (__import__("StringIO" if sys.version_info.major < 3 else "io")).Stri
 
 # Custom modules
 import lib
+import simfs
 import tp
 
 
@@ -310,10 +311,11 @@ def compressionTest_():
     print("Level %d: %f %d" % (j, timeit.Timer(lambda: i.load(lib.INDEX)).timeit(number = 20), s))
 
 def load_tests(loader, tests, ignore):
-  ''' The "_tests" suffix is the conventional way of telling unittest about a test case. '''
+  ''' Queried by unittest. '''
   import doctest
   tests.addTests(doctest.DocTestSuite(lib))
   tests.addTests(doctest.DocTestSuite(tp))
+  tests.addTests(doctest.DocTestSuite(simfs))
   return tests
 
 
@@ -328,5 +330,4 @@ if __name__ == '__main__':
   REPO = '_test-data'
   SVN = tp.findRootFolder(None, '.svn') is not None
   print("Using VCS '%s'" % "SVN" if SVN else "Git")
-  sys.unittesting = None  # flag to let functions to know they are being tested (may help in some cases)
-  unittest.main()
+  unittest.main()  # warnings = "ignore")

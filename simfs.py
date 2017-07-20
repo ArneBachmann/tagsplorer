@@ -1,8 +1,11 @@
 import logging
 import os
+import sys
 
 _log = logging.getLogger(__name__); debug, info, warn, error = _log.debug, _log.info, _log.warn, _log.error; del _log
 debug("Using virtual case-insensitive file system")
+
+if sys.version_info.major >= 3: unichr = chr
 
 
 # Patch existence function
@@ -13,10 +16,12 @@ def exists(path, get = False):
       get: if True, returns actual case-corrected path instead of boolean value
       returns: boolean (existence) or string for path
   >>> _saveUnlink("_x.X")
-  >>> with open("_x.X", "w"): pass  # write using context manager
+  >>> with open("_x.X", "w"):
+  ...   pass  # write using context manager
   >>> print(os.path.exists("_x.X"))
   True
-  >>> with open("_x.X", "w"): pass  # write over same file using context manager
+  >>> with open("_x.X", "w"):
+  ...   pass  # write over same file using context manager
   >>> print(os.path.exists("_x.X"))
   True
   >>> fd = open("_x.X", "w"); fd.write("123"); fd.close()  # write over same file using file handle
@@ -25,7 +30,8 @@ def exists(path, get = False):
   >>> fd = open("_X.x", "w"); fd.write("234"); fd.close()  # write over different case of file using file handle
   >>> print(os.path.exists("_X.x"))
   True
-  >>> with open("_X.X", "ab") as fd: fd.write("567")
+  >>> with open("_X.X", "a") as fd:
+  ...   l = fd.write("567")
   >>> fd = open("_x.x", "r"); contents = fd.read(); fd.close(); print(contents)
   234567
   >>> _saveUnlink("_x.X")
@@ -73,14 +79,20 @@ class Open(object):
 
   def __enter__(_):
     debug("Entering patched 'open' context manager")
-    return _open(exists(_.path, True), _.mode)
+    return _.fd
 
   def __exit__(_, *args):
     debug("Exiting patched 'open' context manager %r" % str(args))
+    try: _.fd.close()
+    except: pass
+    finally: del _.fd
 
   def read(_, *args, **kwargs): return _.fd.read(*args, **kwargs)
-  def write(_, *args, **kwargs): return _.fd.write(*args, **kwargs)
-  def close(_, *args, **kwargs): return _.fd.close(*args, **kwargs)
+  def write(_, *args, **kwargs): _.fd.write(*args, **kwargs)
+  def close(_, *args, **kwargs):
+    try: _.fd.close(*args, **kwargs)
+    except: pass
+    finally: del _.fd
 _open, open = open, Open
 
 # Patch chdir
@@ -90,9 +102,15 @@ def chdir(path):
 os.chdir = chdir
 
 
+def load_tests(loader, tests, ignore):
+  ''' Queried by unittest. '''
+  tests.addTests(doctest.DocTestSuite("simfs"))
+  return tests
+
+
 if __name__ == '__main__':
-  import doctest, sys
+  import doctest, sys, unittest
 #  import pdb; pdb.set_trace()
   logging.basicConfig(level = logging.DEBUG if "--debug" in sys.argv else logging.INFO, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
   if sys.platform == 'win32': print("Testing on Windows makes no sense, this is a Windows file system simulator"); exit(1)  # TODO maybe it does anyway?
-  doctest.testmod()
+  unittest.main()  # warnings = "ignore")
