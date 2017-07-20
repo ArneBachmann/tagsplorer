@@ -605,7 +605,7 @@ class Indexer(object):
       if _.log >= 2: info("Filtering paths by exclusive tag '%s'" % tag)
       potentialRemove = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # these paths can only be removed, if no manual tag or file extension or glob defined in config or "from" TODO what if positive extension looked for? already handled?
       new = _.removeIncluded(include, potentialRemove)  # remove paths with includes from "remove" list (adding back...)
-      if first:  # start with all all paths, except determined excluded paths
+      if first:  # start with all paths, except determined excluded paths
         paths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), cache)) - new  # get paths from index data structure
       else:
         paths.difference_update(new)  # reduce found paths
