@@ -3,6 +3,7 @@
 # This is the main entry point of the tagsPlorer utility (the command line interface is the first and currently only interface available, except a web server implementation)
 
 
+import logging
 import optparse
 import os
 import sys
@@ -15,6 +16,9 @@ from version import __version_info__, __version__  # used by setup.py
 
 # Version-dependent imports
 if sys.version_info.major == 3: from functools import reduce  # not built-in anymore, but not enough to create a dependency on six.py
+
+_log = logging.getLogger(__name__); debug, info, warn, error = (lambda *s: func(" ".join([str(e) for e in s])) for func in [_log.debug, _log.info, _log.warn, _log.error]); del _log
+
 
 APPNAME = "tagsPlorer"
 
@@ -351,7 +355,7 @@ class Main(object):
     op.add_option('-R', '--relaxed',     action = "store_false", dest = "strict",      default = True,  help = "Relax safety measures")  # mapped to inverse "strict" flag
     op.add_option('-n', '--simulate',    action = "store_true",  dest = "simulate",    default = False, help = "Don't write anything")  # TODO confirm nothing modified on FS
     op.add_option('--dirs',              action = "store_true",  dest = "onlyfolders", default = False, help = "Only find directories that contain matches")
-    op.add_option('-v',                  action = "store_true",  dest = "verbose",     default = False, help = "Same as -l1. Also displays unit test details")
+    op.add_option('-v', '--verbose',     action = "store_true",  dest = "verbose",     default = False, help = "Same as -l1. Also displays unit test details")
     op.add_option('--stats',             action = "store_true",  dest = "stats",       default = False, help = "List index internals (combine with -l1, -l2)")
     op.add_option('--simulate-winfs',    action = "store_true",  dest = "winfs",       default = True,  help = "Simulate case-insensitive file system")  # but option checked outside parser
     _.options, _.args = op.parse_args()
@@ -374,9 +378,10 @@ class Main(object):
     elif _.options.unsetconfig: _.config(unset = True)
     elif _.options.stats: _.stats()
     elif len(_.args) > 0 or _.options.find or _.options.excludes: _.find()  # default action is always find
-    else: error("No option given. Use '--help' to list all options.")
+    else: error("No option given. Use '--help' to list all options.")  # can this path ever been executed?
     if _.options.log >= 1: info("Finished at %s after %.1fs" % (time.strftime("%H:%M:%S"), time.time() - ts))
 
 
 if __name__ == '__main__':
+  logging.basicConfig(level = logging.DEBUG if '-v' in sys.argv or '--verbose' in sys.argv or '--debug' in sys.argv or os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
   Main().parse()

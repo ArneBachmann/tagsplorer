@@ -5,18 +5,16 @@
 # Markers in this file: TODO (open tasks) and HINT (to think about)
 
 
-import collections, copy, fnmatch, os, re, sys, time, zlib  # standard library
+import collections, copy, fnmatch, logging, os, re, sys, time, zlib  # standard library
 if sys.version_info.major >= 3: from os import listdir
 else: from dircache import listdir
 if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "false").lower() == "true":
   ON_WINDOWS = True; from simfs import *
 else: ON_WINDOWS = sys.platform == 'win32'  # there exists a different detection schema for OS, but I don't remember. https://github.com/easybuilders/easybuild/wiki/OS_flavor_name_version
+_log = logging.getLogger(__name__); debug, info, warn, error = (lambda *s: func(" ".join([str(e) for e in s])) for func in [_log.debug, _log.info, _log.warn, _log.error]); del _log
 
-DEBUG = 3; INFO = 2; WARN = 1; ERROR = 0  # log levels
-LOG = DEBUG if os.environ.get("DEBUG", "false").lower() == "true" else INFO  # maximum log level
 
 # Version-dependent imports
-trace, debug, info, warn, error = [lambda _: None] * 5
 if sys.version_info.major >= 3:
   import pickle  # instead of cPickle in the Python 2 family
   from sys import intern
@@ -26,21 +24,11 @@ if sys.version_info.major >= 3:
   cmp = lambda a, b: -1 if a < b else (1 if a > b else 0)
   def xreadlines(fd): return fd.readlines()
   from functools import reduce  # not built-in anymore
-  printe = eval("lambda s: print(s, file = sys.stderr)")
-  debug, info, warn, error = (eval("lambda *s: printe(\"%s\" + \" \".join([str(_) for _ in s]))" % mesg) if LOG >= levl else (lambda _: None) for mesg, levl in zip((_.ljust(8) + " " for _ in ("Debug:",  "Info:", "Warning:", "Error:")), (DEBUG, INFO, WARN, ERROR)))
 else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
   import cPickle as pickle
   lmap = map
   dictviewkeys, dictviewvalues, dictviewitems = dict.iterkeys, dict.itervalues, dict.iteritems
   def xreadlines(fd): return fd.xreadlines()
-  if LOG >= ERROR:
-    def error(*s): print >> sys.stderr, "Error:  ", " ".join([str(_) for _ in s])
-    if LOG >= WARN:
-      def warn(*s): print >> sys.stderr, "Warning:", " ".join([str(_) for _ in s])
-      if LOG >= INFO:
-        def info(*s): print >> sys.stderr, "Info:   ", " ".join([str(_) for _ in s])
-        if LOG >= DEBUG:
-          def debug(*s): print >> sys.stderr, "Debug:  ", " ".join([str(_) for _ in s])
 
 
 # Constants
@@ -126,11 +114,11 @@ def removeCasePaths(paths):
 class Normalizer(object):
   def setupCasematching(_, case_sensitive, quiet = False):
     ''' Setup normalization.
-    >>> n = Normalizer(); n.setupCasematching(True); print(n.filenorm("Abc"))
+    >>> n = Normalizer(); n.setupCasematching(True, quiet = True); print(n.filenorm("Abc"))
     Abc
     >>> print(n.globmatch("abc", "?Bc"))
     False
-    >>> n.setupCasematching(False); print(n.filenorm("Abc"))
+    >>> n.setupCasematching(False, quiet = True); print(n.filenorm("Abc"))
     ABC
     >>> print(n.globmatch("abc", "?Bc"))
     True
@@ -464,7 +452,6 @@ class Indexer(object):
       # 3b. recurse
       if not ignore:
         for tag in newtags + idxs: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tag])].extend(idxs)  # add subfolder reference(s) for all collected tags from root to child to tag name
-      trace(repr((newtags, _.tagdirs, _.tagdir2paths)))
       _._walk(aDir + SLASH + child, idxs[0], newtags + ([] if ignore else idxs))  # as parent, always use original case index, not case-normalized one (unless configured to reduce space)
 
   def mapTagsIntoDirsAndCompressIndex(_):
@@ -619,7 +606,7 @@ class Indexer(object):
       potentialRemove = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # these paths can only be removed, if no manual tag or file extension or glob defined in config or "from" TODO what if positive extension looked for? already handled?
       new = _.removeIncluded(include, potentialRemove)  # remove paths with includes from "remove" list (adding back...)
       if first:  # start with all all paths, except determined excluded paths
-        paths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())))) - new  # get paths from index data structure
+        paths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), cache)) - new  # get paths from index data structure
       else:
         paths.difference_update(new)  # reduce found paths
       first = False

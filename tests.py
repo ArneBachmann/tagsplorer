@@ -2,6 +2,7 @@
 # Test suite. Please export environment variable DEBUG=True
 # Export SKIP=true to avoid revert of test data prior to test run
 
+import logging
 import os
 import subprocess
 import sys
@@ -17,7 +18,7 @@ import tp
 
 def call(argstr): so = subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).communicate()[0]; return so.decode('ascii') if sys.version_info.major >= 3 else so
 
-def runP(argstr):  # instead of script call via Popen, to allow for full coverage stats
+def runP(argstr):  # instead of script call via Popen, to allow for full test coverage collection
   def tmp():
     sys.argv = ["tp.py", "-r", REPO] + (["--simulate-winfs"] if SIMFS else []) + lib.safeSplit(argstr, " ")
     logFile.write("TEST: " + " ".join(sys.argv) + " " + repr(argstr) + "\n")
@@ -31,6 +32,12 @@ def wrapChannels(func):
   oldv, oldo, olde = sys.argv, sys.stdout, sys.stderr
   buf = StringIO()
   sys.stdout = sys.stderr = buf
+  handler = logging.StreamHandler(buf)
+  logging.basicConfig(level = logging.DEBUG, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
+  _log = logging.getLogger(__name__); debug, info, warn, error = (lambda *s: func(" ".join([str(e) for e in s])) for func in [_log.debug, _log.info, _log.warn, _log.error])
+  _log.addHandler(handler)
+  lib.debug, lib.info, lib.warn, lib.error = debug, info, warn, error
+  tp.debug, tp.info, tp.warn, tp.error = debug, info, warn, error
   try: func()
   except Exception as E: buf.write(str(E) + "\n"); traceback.print_exc(file = buf)
   sys.argv, sys.stdout, sys.stderr = oldv, oldo, olde
@@ -38,7 +45,6 @@ def wrapChannels(func):
 
 def setUpModule():
   ''' Test suite setup: missing SKIP environment variable removes previous index and reverts config file. '''
-  lib.LOG = lib.DEBUG
   global logFile
   logFile = open(".testRun.log", "w")
 
@@ -199,7 +205,7 @@ class TestRepoTestCase(unittest.TestCase):
   def testFindFolder(_):
     def tmp():
       i = lib.Indexer(REPO)
-      i.log = lib.WARN  # set log level
+      i.log = 1  # set log level
       i.load(os.path.join(REPO, lib.INDEX), True, False)
       print(i.findFolders(["folders", "folder2"]))
     res = wrapChannels(tmp)
@@ -207,7 +213,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertEqual(3, len(res.split("\n")))  # Info:    Reading index from _test-data/.tagsplorer.idx\nDebug:   Setting up case-sensitive matching\n['/folders/folder2']\n
     def tmp():
       i = lib.Indexer(REPO)
-      i.log = lib.DEBUG  # set log level
+      i.log = 2  # set log level
       i.load(os.path.join(REPO, lib.INDEX), True, False)
       print(lib.wrapExc(lambda: set(i.getPaths(i.tagdir2paths[i.tagdirs.index("a")], cache)), lambda: set()))
     _.assertIn(repr(set()), wrapChannels(tmp))  # "a" not in index TODO but should be
@@ -241,8 +247,8 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("No option", runP(""))
 
   def testNegativeSearch(_):
-    _.assertAllIn(["Info:    4 folders found for +<a> -<>.",   "/a", "/a/a1", "/a/a2"], runP("-s a -l2 --dirs").split("\n"))  # only include only dirs
-    _.assertAllIn(["Info:    3 folders found for +<a> -<a1>.", "/a", "/a/a2"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
+    _.assertAllIn(["4 folders found for +<a> -<>.",   "/a", "/a/a1", "/a/a2"], runP("-s a -l2 --dirs").split("\n"))  # only include only dirs
+    _.assertAllIn(["3 folders found for +<a> -<a1>.", "/a", "/a/a2"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
     _.assertAllIn(["Potential matches found in 4 folders", "6 files found in 4 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -v"))  # only include with files
     _.assertAllIn(["Potential matches found in 3 folders", "3 files found in 3 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -l2"))  # with exclude with files
 
@@ -293,10 +299,10 @@ if __name__ == '__main__':
   try: del sys.argv[sys.argv.index("--simulate-winfs")]; SIMFS = True
   except: SIMFS = os.environ.get("SIMULATE_WINFS", "false").lower() == "true"
   PYTHON = os.path.realpath(sys.executable) if SIMFS or not lib.ON_WINDOWS else '"' + os.path.realpath(sys.executable) + '"'
+  logFile = None  # declare global variable
+#  logging.basicConfig(level = logging.DEBUG, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
   REPO = '_test-data'
   SVN = tp.findRootFolder(None, '.svn') is not None
-  logFile = None
   print("Using VCS '%s'" % "SVN" if SVN else "Git")
-  import unittest
   sys.unittesting = None  # flag to let functions to know they are being tested (may help in some cases)
   unittest.main()
