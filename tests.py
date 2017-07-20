@@ -34,7 +34,8 @@ def wrapChannels(func):
   sys.stdout = sys.stderr = buf
   handler = logging.StreamHandler(buf)
   logging.basicConfig(level = logging.DEBUG, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
-  _log = logging.getLogger(__name__); debug, info, warn, error = (lambda *s: func(" ".join([str(e) for e in s])) for func in [_log.debug, _log.info, _log.warn, _log.error])
+  _log = logging.getLogger(__name__)
+  debug, info, warn, error = map(lambda func: lambda *s: func(" ".join([str(e) for e in s])), [_log.debug, _log.info, _log.warn, _log.error])
   _log.addHandler(handler)
   lib.debug, lib.info, lib.warn, lib.error = debug, info, warn, error
   tp.debug, tp.info, tp.warn, tp.error = debug, info, warn, error
@@ -101,14 +102,14 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("1 files found", runP(".x -l2"))
 
   def testReduceCaseStorage(_):
-    _.assertIn("Tags: 83" if lib.ON_WINDOWS else "Tags: 79", runP("--stats"))
+    _.assertIn("Tags: 85" if lib.ON_WINDOWS else "Tags: 83", runP("--stats"))
     _.assertIn("2 files found", runP("Case -v"))  # contained in /cases/Case
     _.assertIn("0 files found", runP("case -v"))  # wrong case writing, can't find
     _.assertIn("2 files found", runP("case -v -C"))  # ignore case: should find
     _.assertIn("2 files found" if lib.ON_WINDOWS else "0 files found", runP("CASE -v"))
     _.assertIn("Added global configuration entry", runP("--set reduce_case_storage=True -v"))
     runP("-u")  # trigger update index after config change (but should automatically do so anyway)
-    _.assertIn("Tags: 45", runP("--stats"))
+    _.assertIn("Tags: 47", runP("--stats"))
     _.assertIn("0 files found" if lib.ON_WINDOWS else "2 files found", runP("Case -v"))  # update after config change
     _.assertIn("0 files found", runP("case -v"))  # update after config change
     _.assertIn("2 files found" if lib.ON_WINDOWS else "0 files found", runP("CASE -v"))
@@ -145,6 +146,25 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("__test = 234", ret)
     _.assertIn("Get global configuration", ret)
     _.assertIn("Removed global configuration entry", runP("--unset __test -l1"))
+
+  def testIllegalConfig(_):
+    class MyIO(StringIO):
+      def readlines(_):
+        return iter(_.read().split("\n"))
+      def xreadlines(_):
+        return _.readlines()
+    def tmp():
+      buf = MyIO("1494711739628\n[]\nfoo=bar\n")
+      cp = lib.ConfigParser()
+      cp.load(buf)
+    res = wrapChannels(tmp)
+    _.assertIn('Encountered illegal', res)
+    def tmp2():
+      buf = MyIO("1494711739628\n[]\nfoo\n")
+      cp = lib.ConfigParser()
+      cp.load(buf)
+    res = wrapChannels(tmp2)
+    _.assertIn('Key with no value', res)
 
   def testGlobalIgnoreDir(_):
     _.assertAllIn(["0 files found"], runP("-s filea.exta -v"))  # was "No folder match" earlier, but searching files reduces the "includes" list to [] which returns all paths now
@@ -221,6 +241,10 @@ class TestRepoTestCase(unittest.TestCase):
   def testStats(_):
     _.assertNotIn(" 0 occurrences", runP("--stats -v"))
 
+  @unittest.SkipTest
+  def testGlobs(_):
+    _.assertIn("1 files found", runP('"dot.*" -l1'))
+
   def testAddRemove(_):
     ''' Add a tag, check and remove. '''
     try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))
@@ -272,7 +296,7 @@ class TestRepoTestCase(unittest.TestCase):
       i.unwalk()
     res = wrapChannels(tmp).replace("\r", "")
     logFile.write(res + "\n")
-    _.assertEqual(len(res.split("\n")), 65 if lib.ON_WINDOWS else 61)  # TODO why?
+    _.assertEqual(len(res.split("\n")), 65 if lib.ON_WINDOWS else 63)  # TODO why?
 
 @unittest.SkipTest
 def compressionTest_():

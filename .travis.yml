@@ -7,48 +7,56 @@ matrix:
       env:
         - SIMULATE_WINFS=false
         - DISTRIBUTION=trusty
+        - PYVER=2
     - os: linux
       dist: trusty
       python: 2.7
       env:
         - SIMULATE_WINFS=true
         - DISTRIBUTION=trusty
+        - PYVER=2
     - os: linux
       dist: trusty
       python: 3.5
       env:
         - SIMULATE_WINFS=false
         - DISTRIBUTION=trusty
+        - PYVER=3
     - os: linux
       dist: trusty
       python: 3.5
       env:
         - SIMULATE_WINFS=true
         - DISTRIBUTION=trusty
+        - PYVER=3
     - os: linux
       dist: precise
       python: 2.7
       env:
         - SIMULATE_WINFS=false
         - DISTRIBUTION=precise
+        - PYVER=2
     - os: linux
       dist: precise
       python: 2.7
       env:
         - SIMULATE_WINFS=true
         - DISTRIBUTION=precise
+        - PYVER=2
     - os: linux
       dist: precise
       python: 3.5
       env:
         - SIMULATE_WINFS=false
         - DISTRIBUTION=precise
+        - PYVER=3
     - os: linux
       dist: precise
       python: 3.5
       env:
         - SIMULATE_WINFS=true
         - DISTRIBUTION=precise
+        - PYVER=3
 #    - os: linux
 #      dist: precise
 #      python: pypy
