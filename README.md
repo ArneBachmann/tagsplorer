@@ -21,7 +21,7 @@ If you happen to manage your data in a tree-like manner, as state of the art by 
 /personal/travel/2011/new york
 /work/projects/archive
 /work/projects/current/communication
- ```
+```
 
 This is just an example, but gives you the general idea. In each folder, you have files of varying types like office documents, media, or other.
 tagsPlorer allows you to create virtual "views" over your files by asking for "all Word documents from 2016", or "all money-related spreadsheets files from 2017" etc.:
@@ -219,6 +219,22 @@ In addition, it's possible to specify global settings under the root configurati
     Similar to `skip` this defines a global folder name to skip and not recurse into.
 
 
+## Internal storage format ##
+The indexer class contains the following data structures:
+
+- `tagdirs`: array-of-strings containing all encountered folder names during file system walk. Duplicates are not removed (to retain folder-parent relations). May contain case-normalized versions of folder names as well, or even only those (depending on internal configuration settings and operating system run on).
+
+    In a second indexing step, `tagdirs` is augmented with further non-folder tags defined in the configuration file or stemming from file extension information (see `tags` below).
+
+- `tagdir2parent`: array-of-integers containing indexes of each `tagdirs` entry to its parent folder entry (in `tagdirs`). Each entry corresponds to one entry in the `tagdirs` structure; both data could equally have been represented as an array-of-pair-of-string-and-integer (equivalent to `zip(tagdirs, tagdir2parents`)).
+- `tagdir2paths`: dict-from-integer-to-list-of-integer, mapping `tagdirs` indexes to lists of `tagdirs` indexes of the leaf folder name for all folders carrying that folder name. After indexing, this is converted into an array-of-lists-of-integer instead with index position corresponding to `tagdirs` positions. During indexing `tagdir2paths` makes use of default dictionary semantics for convenience.
+
+There are two further intermediate data structures used during indexing:
+
+- `tags`: array-of-strings containing all manually set tag names and file extensions, which gets mapped into the `tagdirs` structure after walking
+- `tag2paths`: dict-from-integer-to-list-of-integer, mapping `tags` indexes to lists of `tagdirs` indexes of the leaf folder name for all folders carrying that tag.
+
+
 ## Tagging semantics ##
 TODO What happens if a file with a tag gets mapped into the current folder, where the same tag excludes that file? Or the other way around?
 This currently cannot happen, as all folders are processed individually and then get merged into a single view, with duplicates being removed. There is no real link to the originating folder for the folder list, as we have the concept of virtual (tag) folders in a unified view.
@@ -237,7 +253,7 @@ If files are hard-linked between different locations in the file tree and are su
 
     - Most operations only modify the configuration file, updating its integrated timestamp
 
-    - Only search operations require an up-to-date index. If a time skew between the configuration file's timestamp and the interned configuration inside the index is detected, the index and all timestamps is updated by re-indexing all files.
+    - Only search operations require an up-to-date index. If a time skew between the configuration file's timestamp and the copy of the configuration file inside the index is detected, the index and all timestamps is updated by re-indexing all files.
 
 - The implementation of the simple switch for `case_sensitive` raised quite a lot of semantic questions. For one, should file extensions be treated differently from file names, and is there a benefit of ignoring case for extensions, but not for the actual names? Probably not. Secondly, if we store data case-normalized in the index, we lose the relationship to the actual writings of the indexed folder names, which might cause problems. This would only occur on a case_sensitive file system with `case_sensitive` set to `false`. As a conclusion, we might need to separate storage of tag dirs from other tags or file extensions, or modify search operation to case-normalize instead of doing this in the index, which would slow down the program. Current conclusion: Tough, would need mapping from case-normalized to actual naming on filesystem, or lower() comparisons all over the place :-( to be delayed
 

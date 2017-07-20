@@ -2,7 +2,7 @@
 # This is the tagging library to augment OS folder structures by tags (and provide virtual folder view plus queries over tags)
 # This code is written for maximum OS and Python version interoperability and should run fine on any Linux and Windows, in both Python 2 and Python 3
 
-# markers in this file: TODO (open tasks) and HINT (to think about)
+# Markers in this file: TODO (open tasks) and HINT (to think about)
 
 
 import collections, copy, fnmatch, os, re, sys, time, zlib  # standard library
@@ -25,8 +25,7 @@ if sys.version_info.major >= 3:
   dictviewkeys, dictviewvalues, dictviewitems = dict.keys, dict.values, dict.items  # returns generators operating on underlying data in Python 3
   cmp = lambda a, b: -1 if a < b else (1 if a > b else 0)
   def xreadlines(fd): return fd.readlines()
-  from functools import reduce  # not built-in
-  printo = eval("lambda s: print(s)")  # perfectly legal use of eval - supporting P2/P3
+  from functools import reduce  # not built-in anymore
   printe = eval("lambda s: print(s, file = sys.stderr)")
   debug, info, warn, error = (eval("lambda *s: printe(\"%s\" + \" \".join([str(_) for _ in s]))" % mesg) if LOG >= levl else (lambda _: None) for mesg, levl in zip((_.ljust(8) + " " for _ in ("Debug:",  "Info:", "Warning:", "Error:")), (DEBUG, INFO, WARN, ERROR)))
 else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
@@ -34,8 +33,6 @@ else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
   lmap = map
   dictviewkeys, dictviewvalues, dictviewitems = dict.iterkeys, dict.itervalues, dict.iteritems
   def xreadlines(fd): return fd.xreadlines()
-  printo = eval("lambda s: sys.stdout.write(str(s) + '\\n') and sys.stdout.flush()")
-  printe = eval("lambda s: sys.stderr.write(str(s) + '\\n') and sys.stderr.flush()")
   if LOG >= ERROR:
     def error(*s): print >> sys.stderr, "Error:  ", " ".join([str(_) for _ in s])
     if LOG >= WARN:
@@ -47,7 +44,7 @@ else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
 
 
 # Constants
-PICKLE_VERSION = 2  # since Python 3 comes with different protocol, we pin the protocol here
+PICKLE_VERSION = 2  # since Python 3 comes with different protocol, we pin the protocol to two
 CONFIG =  ".tagsplorer.cfg"  # main tag configuration file
 INDEX =   ".tagsplorer.idx"  # index file (re-built when timestamps differ)
 SKPFILE = ".tagsplorer.skp"  # marker file (can also be configured in configuration instead)
@@ -214,7 +211,7 @@ class Config(object):
       if _.log >= 1: info("Loading configuration from file system" + ("" if index_ts is None else " because index is outdated"))
       cp = ConfigParser(); dat = cp.load(fd); _.__dict__.update(dat)  # update with global options
       _.paths = cp.sections
-      normalizer.setupCasematching(_.case_sensitive)  # TODO remove and let caller handle this?
+      normalizer.setupCasematching(_.case_sensitive, _.log == 0)  # TODO remove and let caller handle this?
       _.printConfig()
       return True
 
@@ -348,7 +345,7 @@ class Indexer(object):
       if config_too:
         if _.log >= 1: info("Updating configuration to match new index timestamp")
         _.cfg.store(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)  # update timestamp in configuration
-    if _.log >= 1: info("Wrote %d index bytes (%d tag entries -> %d mapped path entries)" % (os.stat(filename)[6], len(_.tagdirs), sum([len(p) for p in dictviewvalues(_.tagdir2paths)])))
+    if _.log >= 1: info("Wrote %d index bytes (%d tag entries -> %d mapped path entries)" % (os.stat(filename)[6], len(_.tagdirs), sum([len(p) for p in _.tagdir2paths])))
 
   def walk(_, cfg = None):
     ''' Build index by recursively walking folder tree.
@@ -369,6 +366,8 @@ class Indexer(object):
     tags_num = len(_.tags)
     rm_num = _.mapTagsIntoDirsAndCompressIndex()  # unified with folder entries for simple lookup and filtering
     del _.tags, _.tag2paths  # remove temporary structures
+    empty = []
+    _.tagdir2paths = [_.tagdir2paths[i] if i in _.tagdir2paths else empty for i in range(max(_.tagdir2paths) + 1)]  # save variant of converting map values to list positions (as we don't know if all exist)
     if _.log >= 1: info("Indexed %d folders and %d tags/globs/extensions, pruned %d unused entries." % (tagdirs_num, tags_num, rm_num))
 
   def _walk(_, aDir, parent, tags = []):
@@ -484,7 +483,7 @@ class Indexer(object):
       _l = len(_.tagdir2paths[tag])  # get size of mapped paths
       _.tagdir2paths[tag] = frozenset(dirs)  # remove duplicates
       found += len(_.tagdir2paths[tag]) < _l  # check any removed TODO replace set by list makes test addremove pass, but should not
-    if found > 0: info("Removed duplicates from index for %d tags" % found)
+    if found > 0 and _.log >= 1: info("Removed duplicates from index for %d tags" % found)
     return len(rm)
 
   def getPath(_, idx, cache):
@@ -587,7 +586,7 @@ class Indexer(object):
     if _.log >= 2: debug("findFolders +<%s> -<%s>%s" % (",".join(include), ",".join(exclude), " (Return all)" if returnAll else ""))
     idirs, sdirs = dictget(dictget(_.cfg.paths, '', {}), IGNORED, []), dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored and skipped paths
     if _.log >= 2: debug("Building list of all paths")
-    _.allPaths = wrapExc(lambda: _.allPaths, lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())), {})))  # try cache first, otherwise compute union of all paths and put into cache to speed up consecutive calls (e.g. when used in a server loop) TODO avoid this step?
+    _.allPaths = wrapExc(lambda: _.allPaths, lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), {})))  # try cache first, otherwise compute union of all paths and put into cache to speed up consecutive calls (e.g. when used in a server loop) TODO avoid this step?
     if returnAll or len(include) == 0:
       if _.log >= 2: debug("Pruning skipped and ignored paths from %d" % len(_.allPaths))
       alls = [path for path in _.allPaths if not currentPathInGlobalIgnores(path, idirs) and not partOfAnyGlobalSkipPath(path, sdirs) and not anyParentIsSkipped(path, _.cfg.paths) and IGNORE not in dictget(_.cfg.paths, path, {})]  # all existing paths except globally ignored/skipped paths TODO add marker file logic below TODO move checks fo _.allPaths cache
@@ -620,7 +619,7 @@ class Indexer(object):
       potentialRemove = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # these paths can only be removed, if no manual tag or file extension or glob defined in config or "from" TODO what if positive extension looked for? already handled?
       new = _.removeIncluded(include, potentialRemove)  # remove paths with includes from "remove" list (adding back...)
       if first:  # start with all all paths, except determined excluded paths
-        paths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), dictviewvalues(_.tagdir2paths), set())))) - new  # get paths from index data structure
+        paths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())))) - new  # get paths from index data structure
       else:
         paths.difference_update(new)  # reduce found paths
       first = False

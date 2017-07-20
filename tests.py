@@ -1,7 +1,7 @@
 # tagsPlorer test suite  (C) Arne Bachmann https://github.com/ArneBachmann/tagsplorer
 # Test suite. Please export environment variable DEBUG=True
+# Export SKIP=true to avoid revert of test data prior to test run
 
-import logging
 import os
 import subprocess
 import sys
@@ -9,15 +9,13 @@ import unittest
 import traceback
 StringIO = (__import__("StringIO" if sys.version_info.major < 3 else "io")).StringIO  # enables import via ternary expression
 
-_log = logging.getLogger(__name__); debug, info, warn, error = _log.debug, _log.info, _log.warn, _log.error; del _log
-
 
 # Custom modules
 import lib
 import tp
 
 
-def call(argstr): so = subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE).communicate()[0]; return so.decode('ascii') if sys.version_info.major >= 3 else so
+def call(argstr): so = subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).communicate()[0]; return so.decode('ascii') if sys.version_info.major >= 3 else so
 
 def runP(argstr):  # instead of script call via Popen, to allow for full coverage stats
   def tmp():
@@ -290,7 +288,7 @@ def load_tests(loader, tests, ignore):
 
 
 if __name__ == '__main__':
-  DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+  DEBUG = os.environ.get("DEBUG", "False").lower() == "true"  # cannot use --debug as it is caught by the unittest handling
   if not DEBUG: print("Error: Set environment variable DEBUG=True to run the test suite"); sys.exit(1)
   try: del sys.argv[sys.argv.index("--simulate-winfs")]; SIMFS = True
   except: SIMFS = os.environ.get("SIMULATE_WINFS", "false").lower() == "true"
@@ -300,5 +298,5 @@ if __name__ == '__main__':
   logFile = None
   print("Using VCS '%s'" % "SVN" if SVN else "Git")
   import unittest
-  sys.unittesting = None  # flag to enable functions to know they are being tested (may help sometimes)
+  sys.unittesting = None  # flag to let functions to know they are being tested (may help in some cases)
   unittest.main()

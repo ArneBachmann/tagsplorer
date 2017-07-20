@@ -3,7 +3,6 @@
 # This is the main entry point of the tagsPlorer utility (the command line interface is the first and currently only interface available, except a web server implementation)
 
 
-import logging
 import optparse
 import os
 import sys
@@ -166,7 +165,7 @@ class Main(object):
       idx.load(indexFile)  # load search index
     if _.options.ignore_case:
       idx.cfg.case_sensitive = False  # if false, don't touch setting (not the same as "not ignore_case")
-      normalizer.setupCasematching(idx.cfg.case_sensitive)  # case option defaults to true, but can be overriden by --ignore-case
+      normalizer.setupCasematching(idx.cfg.case_sensitive, _.options.log == 0)  # case option defaults to true, but can be overriden by --ignore-case
     poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))  # convert search terms to normalized case, if necessary
     if _.options.log >= 1: info("Effective filters +<%s> -<%s>" % (",".join(poss), ",".join(negs)))
     if _.options.log >= 1: info("Searching for tags +<%s> -<%s> in %s" % (','.join(poss), ','.join(negs), os.path.abspath(idx.root)))
@@ -185,7 +184,7 @@ class Main(object):
       paths[:] = removeCasePaths(paths)  # remove case doubles
       info("%d folders found for +<%s> -<%s>." % (len(paths), ",".join(poss), ".".join(negs)))
       try:
-        if len(paths) > 0: printo("\n".join(paths))#idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
+        if len(paths) > 0: print("\n".join(paths))#idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
       except KeyboardInterrupt: pass  #idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
       return
     dcount, counter, skipped = 0, 0, []  # if not only folders, but also files
@@ -194,7 +193,7 @@ class Main(object):
       if xany(lambda skp: path.startswith(skp) if skp != '' else (path == ''), skipped): continue  # is in skipped folder tree
       dcount += 1
       try:
-        if len(files) > 0: printo("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
+        if len(files) > 0: print("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
       except KeyboardInterrupt: pass
     if _.options.log >= 1: info("%d files found in %d checked paths for +<%s> -<%s>." % (counter, dcount, ",".join(poss), ".".join(negs)))  # TODO dcount reflect mapped as well?
 
