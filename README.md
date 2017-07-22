@@ -59,6 +59,8 @@ There are similarities to the Linux `find` and `grep` utilites, which are perfor
 We recommend invoking tagsPlorer with the [PyPy](http://pypy.org) Python distribution, as we found performance to be generally better. TODO check if still true.
 
 The current main and only user interface is `tp.py`, a thin yet convenient layer over the library's basic functions.
+*Glob patterns* allow the use of `*` (to match any sequence of characters), `?` (to match any character), and the inclusive and exclusive character lists using `[abc]`.
+
 Here is a short description of valid program options and arguments:
 
 - `--help`

@@ -4,6 +4,7 @@
 
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -19,9 +20,9 @@ import tp
 
 def call(argstr): so = subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).communicate()[0]; return so.decode('ascii') if sys.version_info.major >= 3 else so
 
-def runP(argstr):  # instead of script call via Popen, to allow for full test coverage collection
+def runP(argstr, repo = None):  # instead of script call via Popen, to allow for full test coverage collection
   def tmp():
-    sys.argv = ["tp.py", "-r", REPO] + (["--simulate-winfs"] if SIMFS else []) + lib.safeSplit(argstr, " ")
+    sys.argv = ["tp.py", "-r", REPO if repo is None else repo] + (["--simulate-winfs"] if SIMFS else []) + lib.safeSplit(argstr, " ")
     logFile.write("TEST: " + " ".join(sys.argv) + " " + repr(argstr) + "\n")
     tp.Main().parse()  # initiates script run due to overriding sys.path above
   res = wrapChannels(tmp)
@@ -98,6 +99,28 @@ class TestRepoTestCase(unittest.TestCase):
     d = lib.dd()
     d[1].append(1)
     _.assertEqual([1], d[1])
+
+  def testGlobCheck(_):
+    _.assertFalse(lib.isglob(""))
+    _.assertTrue(lib.isglob("*"))
+    _.assertTrue(lib.isglob("???"))
+    _.assertTrue(lib.isglob("*a.c"))
+    _.assertTrue(lib.isglob("*a*.c"))
+    _.assertTrue(lib.isglob("*a*.c"))
+    _.assertTrue(lib.isglob("a??.c"))
+    _.assertTrue(lib.isglob("how.do?"))
+    _.assertTrue(lib.isglob("sbc.*"))
+    _.assertFalse(lib.isglob("sbc.a"))
+    _.assertFalse(lib.isglob("sbca"))
+
+  def testSafesplit(_):
+    _.assertEqual([], lib.safeSplit(""))
+    _.assertEqual([], lib.safeSplit(","))
+    _.assertEqual(["a"], lib.safeSplit("a"))
+    _.assertEqual(["a"], lib.safeSplit("a,"))
+    _.assertEqual(["a"], lib.safeSplit(",a"))
+    _.assertEqual(["a", "b"], lib.safeSplit("a,b"))
+    _.assertEqual(["a", "b"], lib.safeSplit("a;b", ";"))
 
   def testOnlySearchTerms(_):
     _.assertIn("1 files found", runP(".x -l2"))
@@ -203,7 +226,7 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testMappedOnlyFilename(_):
     ''' Find a certain filename, crawling entire tree. '''
-    _.assertIn("3 files found", runP("-s 2.2 -l1"))
+    _.assertIn("2 files found", runP("-s 2.2 -l1"))
 
   def testExtensionOnly(_):
     _.assertIn("No folder match", runP(".xyz -l2"))
@@ -245,6 +268,14 @@ class TestRepoTestCase(unittest.TestCase):
   @unittest.SkipTest
   def testGlobs(_):
     _.assertIn("1 files found", runP('"dot.*" -l1'))
+
+  def testInit(_):
+    _.assertAllIn(["Writing configuration to", "Wrote", "config bytes"], runP("-I -l2", repo = os.path.join("_test-data", "tmp")))
+    _.assertAllIn(["Index already exists", "--relaxed"], runP("-I -l2", repo = os.path.join("_test-data", "tmp")))
+    _.assertAllIn(["Writing configuration to", "Wrote", "config bytes"], runP("-I -l2 --relaxed", repo = os.path.join("_test-data", "tmp")))
+#    try: shutil.rmtree(os.path.join("_test-data", "tmp"))  # , onerror = lambda func, path, exc_info: _.fail("Could not remove temporarily created path in testInit(). Clean up before running tests again."))
+    try: os.unlink(os.path.join("_test-data", "tmp", ".tagsplorer.cfg")); os.rmdir(os.path.join("_test-data", "tmp"))
+    except Exception as E: _.fail(str(E))
 
   def testAddRemove(_):
     ''' Add a tag, check and remove. '''

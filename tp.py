@@ -14,14 +14,14 @@ if "--simulate-winfs" in sys.argv or os.environ.get("SIMULATE_WINFS", "false").l
 from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports that need't be repeated here
 from version import __version_info__, __version__  # used by setup.py
 
-_log = logging.getLogger(__name__); debug, info, warn, error = (lambda *s: func(" ".join([str(e) for e in s])) for func in [_log.debug, _log.info, _log.warn, _log.error]); del _log
+_log = Logger(logging.getLogger(__name__)); debug, info, warn, error = _log.debug, _log.info, _log.warn, _log.error
 
 
 APPNAME = "tagsPlorer"
 
 
 # Little helper functions
-def withoutFilesAndGlobs(tags): return [t for t in tags if not isglob(t) and os.extsep not in t[1:]]
+def withoutFilesAndGlobs(tags): return [t for t in tags if not isglob(t) and DOT not in t[1:]]
 def caseCompare(a, b):
   ''' Advanced case-normalized comparison for better output.
   >>> print(caseCompare("a", "a"))
@@ -127,6 +127,9 @@ class Main(object):
       if _.options.strict and os.path.exists(os.path.join(index, CONFIG)):
         error("Index already exists. Use --relaxed to override. Aborting.")
       else:
+        try: os.makedirs(index)
+        except Exception as E: pass
+        if not os.path.exists(index): error("Cannot create index for that folder. Write rights? Path errors?"); return
         cfg.store(os.path.join(index, CONFIG))
 
   def updateIndex(_):
@@ -170,10 +173,10 @@ class Main(object):
     poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))  # convert search terms to normalized case, if necessary
     if _.options.log >= 1: info("Effective filters +<%s> -<%s>" % (",".join(poss), ",".join(negs)))
     if _.options.log >= 1: info("Searching for tags +<%s> -<%s> in %s" % (','.join(poss), ','.join(negs), os.path.abspath(idx.root)))
-    paths = idx.findFolders(withoutFilesAndGlobs(poss), withoutFilesAndGlobs(negs))  # use only real folder tags
+    paths = idx.findFolders(poss, negs)  # TODO was: withoutFilesAndGlobs(poss), withoutFilesAndGlobs(negs))  # use only real folder tags
     if _.options.log >= 1: info("Potential matches found in %d folders" % (len(paths)))
     if _.options.log >= 2: [debug(path) for path in paths]  # optimistic: all folders "seem" to match all tags, but only some might actually be (due to excludes etc)
-    if len(paths) == 0 and xany(lambda x: isglob(x) or os.extsep in x, poss + negs):
+    if len(paths) == 0 and xany(lambda x: isglob(x) or DOT in x, poss + negs):
       if _.options.onlyfolders: warn("Nothing found."); return
       warn("No folder match; cannot filter on folder names. Checking entire folder tree")  # the logic is wrong: we ignore lots of tags while finding folders, and the continue filtering. better first filter on exts or all, then continue??
       paths = idx.findFolders([], [], True)  # return all folders names unfiltered (except ignore/skip without marker files)
@@ -253,7 +256,7 @@ class Main(object):
     for file in filez:
       repoRelative = file.startswith("/")
       while file.startswith("/"): file = file[1:]  # prune repo-relative marker(s)
-      if not (os.path.exists(os.path.join(folder, file) if repoRelative else file) or fnmatch.filter(listdir(folder if repoRelative else os.getcwd()), file)):
+      if not (os.path.exists(os.path.join(folder, file) if repoRelative else file) or normalizer.globfilter(listdir(folder if repoRelative else os.getcwd()), file)):
         warn("File or glob not found%s %s%s" % (", skipping" if _.options.strict else ", but added anyway", "/" if repoRelative else "./", file))
         if _.options.strict: continue
       parent, file = os.path.split(file)

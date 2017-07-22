@@ -1,3 +1,4 @@
+# TODO add fnmatch patching?
 import logging
 import os
 import sys

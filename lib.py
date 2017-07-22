@@ -5,13 +5,20 @@
 # Markers in this file: TODO (open tasks) and HINT (to think about)
 
 
-import collections, copy, fnmatch, logging, os, re, sys, time, zlib  # standard library
+import collections
+import copy
+import fnmatch
+import logging
+import os
+import re
+import sys
+import time
+import zlib  # standard library
 if sys.version_info.major >= 3: from os import listdir
 else: from dircache import listdir
 if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "false").lower() == "true":
   ON_WINDOWS = True; from simfs import *
 else: ON_WINDOWS = sys.platform == 'win32'  # there exists a different detection schema for OS, but I don't remember. https://github.com/easybuilders/easybuild/wiki/OS_flavor_name_version
-_log = logging.getLogger(__name__); debug, info, warn, error = (lambda *s: func(" ".join([str(e) for e in s])) for func in [_log.debug, _log.info, _log.warn, _log.error]); del _log
 
 
 # Version-dependent imports
@@ -29,7 +36,6 @@ else:  # is Python 2 (for old versions like e.g. 2.4 this might fail)
   dictviewkeys, dictviewvalues, dictviewitems = dict.iterkeys, dict.itervalues, dict.iteritems
   def xreadlines(fd): return fd.xreadlines()
 
-
 # Constants
 PICKLE_VERSION = 2  # since Python 3 comes with different protocol, we pin the protocol to two
 CONFIG =  ".tagsplorer.cfg"  # main tag configuration file
@@ -41,6 +47,8 @@ SEPA, SLASH, DOT = map(intern, (";", "/", os.extsep))
 
 
 # Functions
+def sjoin(*s): return " ".join(s)
+
 def xany(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if hasattr(lizt, '__iter__') else list(lizt), False)  # short-circuit Python 2/3 implementation. could also use wrapExc(lambda: iter(lizt), lizt) instead. intentionally doesn't iterate over string characters. converts string and other data types to a one-element list instead
 
 def xall(pred, lizt): return reduce(lambda a, b: a and pred(b), lizt if hasattr(lizt, '__iter__') else list(lizt), True)
@@ -78,8 +86,8 @@ pathnorm = (lambda s: s.replace("\\", SLASH)) if ON_WINDOWS else ident  # as lam
 def lappend(lizt, elem): (lizt.extend if type(elem) is list else lizt.append)(elem); return lizt   # functional list.append that returns self afterwards to avoid new array creation (lizt + [elem])
 def appendandreturnindex(lizt, elem): return len(lappend(lizt, elem)) - (len(elem) if type(elem) is list else 1)  # returns index of appended element or first index of elements added
 def isunderroot(root, folder): return os.path.commonprefix([root, folder]).startswith(root)
-def isglob(f): return '*' in f or '?' in f
-def getTs(): return ilong(time.time() * 1000.)
+def isglob(f): return '*' in f or '?' in f  # TODO add type hint str
+def getTsMs(): return ilong(time.time() * 1000.)  # timestamp in milliseconds
 def safeSplit(s, d = ","): return [_ for _ in s.split(d) if _ != '']  # remove empty strings that appear e.g. for "  ".split(" ") or "".split(" ")
 def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s
 def dd(tipe = list): return collections.defaultdict(tipe)
@@ -110,6 +118,13 @@ def removeCasePaths(paths):
 
 
 # Classes
+class Logger(object):
+  def __init__(_, log): _._log = log
+  def debug(_, *s): _._log.debug(sjoin(*s))
+  def info(_, *s): _._log.info(sjoin(*s))
+  def warn(_, *s): _._log.warn(sjoin(*s))
+  def error(_, *s): _._log.error(sjoin(*s))
+
 class Normalizer(object):
   def setupCasematching(_, case_sensitive, quiet = False):
     ''' Setup normalization.
@@ -122,9 +137,10 @@ class Normalizer(object):
     >>> print(n.globmatch("abc", "?Bc"))
     True
     '''
-    if not quiet: debug("Setting up case-%ssensitive matching" % ("" if case_sensitive else "in"))  # TODO make message depend on set log level
+    if not quiet: debug("Setting up case-%ssensitive matching" % ("" if case_sensitive else "in"))
     _.filenorm = ident if case_sensitive else caseNormalize  # we can't use "str if case_sensitive else str.upper" because for unicode strings this fails, as the function reference comes from the str object
     _.globmatch = fnmatch.fnmatchcase if case_sensitive else lambda f, g: fnmatch.fnmatch(f.upper(), g.upper())  # fnmatch behavior depends on file system, therefore fixed here
+    _.globfilter = fnmatch.filter if case_sensitive else lambda lizt, pat: [name for name in lizt if _.globmatch(name, pat)]
 normalizer = Normalizer()  # to keep a static module-reference. TODO move to main instead?
 
 class ConfigParser(object):
@@ -205,7 +221,7 @@ class Config(object):
   def store(_, filename, timestamp = None):
     ''' Store configuration to file, prepending data by the timestamp, or the current time. '''
     if _.log >= 2: debug("Storing configuration %r" % ((filename, timestamp),))
-    if timestamp is None: timestamp = getTs()  # for all cases we modify only config file (e.g. tag, untag, config)
+    if timestamp is None: timestamp = getTsMs()  # for all cases we modify only config file (e.g. tag, untag, config)
     cp = ConfigParser(); cp.sections = _.paths
     with open(filename, "w") as fd:  # don't use wb for Python 3 compatibility
       if _.log >= 1: info("Writing configuration to " + filename)
@@ -325,7 +341,7 @@ class Indexer(object):
     ''' Persist index in a file, including currently active configuration. '''
     if _.log >= 2: debug("store " + str((filename, config_too)))
     with open(filename, "wb") as fd:
-      nts = getTs()
+      nts = getTsMs()
       _.timestamp = _.timestamp + 0.001 if nts <= _.timestamp else nts  # assign new date, ensure always differing from old value
       if _.log >= 1: info("Writing index to " + filename)
       fd.write(zlib.compress(pickle.dumps(_, protocol = PICKLE_VERSION), _.compressed) if _.compressed else pickle.dumps(_, protocol = PICKLE_VERSION))  # WARN: make sure not to have callables on the pickled objects!
@@ -584,31 +600,22 @@ class Indexer(object):
     for tag in include:  # positive restrictive matching
       if _.log >= 2: info("Filtering paths by inclusive tag '%s'" % tag)
       if isglob(tag):
-        if DOT in tag:  # [:-1]:  # contains an extension in non-final position (in final should not be possible)
-          ext = normalizer.filenorm(tag[tag.index(DOT):])
-          if isglob(ext):  # glob search with glob extension
-            new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), fnmatch.filter(_.tagdirs, ext), set())  # filters all extensions in index by glob (e.g. .c??). update returns updated same object instead of a | set() or a.union(set())
-          else:  # glob search with fixed extension
-            new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(ext)], cache)), lambda: set())  # exception is unknown index in getPath()
-        else:  # no extension: cannot filter folder; ignore glob altogether
-          warn("Preliminarily ignoring glob <%s> while filtering folders (no file extension in glob)" % tag)
-          new = set()  # ignore glob in folder filtering altogether
-      elif tag.startswith(DOT):  # explicit file extension filtering
-        new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index TODO same as below
+        new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), normalizer.globfilter(_.tagdirs, tag), set())  # filters all extensions in index by extension's glob (e.g. .c??) TODO if * will find everything TODO use set.update() or did this cause trouble?
+      elif DOT in tag:
+        new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(normalizer.filenorm(tag[tag.index(DOT):]))], cache)), lambda: set())  # directly from index
       else:  # no glob, no extension: can be tag or file name
-        new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index, returns both cases
-      if first: paths = new
+        new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # directly from index, can also be a DOT-leading file/folder name
+      if first: paths = new; first = False
       else: paths.intersection_update(new)
-      first = False
     for tag in exclude:  # we don't excluded globs here, because we would also exclude potential candidates (because index is over-specified)
       if _.log >= 2: info("Filtering paths by exclusive tag '%s'" % tag)
       potentialRemove = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), lambda: set())  # these paths can only be removed, if no manual tag or file extension or glob defined in config or "from" TODO what if positive extension looked for? already handled?
       new = _.removeIncluded(include, potentialRemove)  # remove paths with includes from "remove" list (adding back...)
       if first:  # start with all paths, except determined excluded paths
         paths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), cache)) - new  # get paths from index data structure
+        first = False
       else:
         paths.difference_update(new)  # reduce found paths
-      first = False
     # Now convert to return list, which may differ from previously computed set of paths
     if _.log >= 2: debug("Filtered down to %d paths" % len(paths))
     paths = [p for p in paths if not currentPathInGlobalIgnores(p, idirs) and not partOfAnyGlobalSkipPath(p, sdirs)]  # check "global ignore dir" condition, then check on all "global skip dir" condition, which includes all sub folders as well TODO remove filtering, as should be reflected by index anyway (in contrast to above getall?))
@@ -633,8 +640,8 @@ class Indexer(object):
     if _.log >= 2: debug("findFiles " + str((aFolder, poss, negs, force)))
     inPath = set(safeSplit(aFolder, SLASH))  # break path into folder names
     if not _.cfg.case_sensitive: inPath.update(set([caseNormalize(f) for f in safeSplit(aFolder, SLASH)]))  # add case-normalized folder names
-    remainder = set([p for p in poss if (p if _.cfg.case_sensitive else caseNormalize(p)) not in inPath])  # split folder path into tags and remove from remaining criterions, considering case-sensitivity unless deselected or case same as normalized variant
-    if _.log >= 1: info("Filtering folder %s%s" % (aFolder, (" by remaining tags: " + ((", ".join(remainder)) if len(remainder) > 0 else '') + DOT)))
+    remainder = set([p for p in poss if not normalizer.globfilter(inPath, p)])  # split folder path into tags and remove from remaining criterions, considering case-sensitivity unless deselected or case same as normalized variant
+    if _.log >= 1: info("Filtering folder %s%s" % (aFolder, " by remaining tags: " + (", ".join(remainder) if len(remainder) > 0 else '<none>')))
     conf = _.cfg.paths.get(aFolder, {})  # if empty, files remain unchanged, we return all
     folders = [aFolder] + [pathnorm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])]  # list of original and all mapped folders
     if _.log >= 1 and len(folders) > 1: info("Mapped folders to check: %s" % os.pathsep.join(folders[1:]))
@@ -666,10 +673,10 @@ class Indexer(object):
             found = True
             news = set(files)  # collect all files subsumed under the tag that should remain
             for i in safeSplit(inc):  # if tag manually specified, only keep those included files
-              if isglob(i): news.intersection_update(set(fnmatch.filter(files, i)))  # is glob
+              if isglob(i): news.intersection_update(set(normalizer.globfilter(files, i)))  # is glob
               else: news = set([i] if i in files and (force or isfile(_.root + folder + SLASH + i)) else [])  # is a file: add only if exists, otherwise add nothing
             for e in safeSplit(exc):  # if tag is manually specified, exempt these files (add back)
-              if isglob(e): news.update(set(fnmatch.filter(news, e)))
+              if isglob(e): news.update(set(normalizer.globfilter(news, e)))
               else: news.discard(e)  # add file to keep
             keep.intersection_update(news)
             break
@@ -678,7 +685,7 @@ class Indexer(object):
       remo = set()  # start with none to remove, than enlarge set
       for tag in negs:
         if tag.startswith(DOT): remo.update(set([f for f in files if f[-len(tag):] == tag])); continue  # filter by file extension
-        elif isglob(tag) or tag in files: remo.update(set(fnmatch.filter(files, tag))); continue  # filter globs and direct file names TODO case/normalization here?
+        elif isglob(tag) or tag in files: remo.update(set(normalizer.globfilter(files, tag))); continue  # filter globs and direct file names TODO case/normalization here?
         found = False  # marker for the case that none of the provided extension/glob/file tags matched: check tags in configuration
         for value in tags:
           if value is None: remo = set(); found = True; break  # None means no config found, no further matching needed
@@ -687,10 +694,10 @@ class Indexer(object):
             found = True
             news = set()  # collect all file that should be excluded
             for i in safeSplit(inc):
-              if isglob(i): news.update(set(fnmatch.filter(files, i)))  # is glob
+              if isglob(i): news.update(set(normalizer.globfilter(files, i)))  # is glob
               else: news.update(set([i] if i in files and (force or isfile(_.root + folder + SLASH + i)) else []))  # is no glob: add, only if exists
             for e in safeSplit(exc):
-              if isglob(e): news.difference_update(set(fnmatch.filter(news, e)))
+              if isglob(e): news.difference_update(set(normalizer.globfilter(news, e)))
               else: news.add(e)  # add file to remove
             remo.update(news)
             break
@@ -701,6 +708,8 @@ class Indexer(object):
     result = ([ff for ff in set([caseMapping.get(f, f) for f in allfiles])], willskip)  # In contrast to findFolder, no file existence checks (necessary)
     if _.log >= 2: debug("findFiles: " + str(result))
     return result
+
+_log = Logger(logging.getLogger(__name__)); debug, info, warn, error = _log.debug, _log.info, _log.warn, _log.error  # _log is not exported
 
 
 if __name__ == '__main__':
