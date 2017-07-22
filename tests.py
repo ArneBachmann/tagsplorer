@@ -273,7 +273,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["Writing configuration to", "Wrote", "config bytes"], runP("-I -l2", repo = os.path.join("_test-data", "tmp")))
     _.assertAllIn(["Index already exists", "--relaxed"], runP("-I -l2", repo = os.path.join("_test-data", "tmp")))
     _.assertAllIn(["Writing configuration to", "Wrote", "config bytes"], runP("-I -l2 --relaxed", repo = os.path.join("_test-data", "tmp")))
-#    try: shutil.rmtree(os.path.join("_test-data", "tmp"))  # , onerror = lambda func, path, exc_info: _.fail("Could not remove temporarily created path in testInit(). Clean up before running tests again."))
+#    try: shutil.rmtree(os.path.join("_test-data", "tmp"))  # , onerror = lambda func, path, exc_info: _.fail("Could not remove temporarily created path in testInit(). Clean up before running tests again."))  # TODO fails on python3 with "TypeError: remove() got an unexpected keyword argument 'dir_fd'"
     try: os.unlink(os.path.join("_test-data", "tmp", ".tagsplorer.cfg")); os.rmdir(os.path.join("_test-data", "tmp"))
     except Exception as E: _.fail(str(E))
 
@@ -308,9 +308,15 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["Potential matches found in 4 folders", "6 files found in 4 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -v"))  # only include with files
     _.assertAllIn(["Potential matches found in 3 folders", "3 files found in 3 checked paths", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -l2"))  # with exclude with files
 
-  def testTest(_):
+  def testTestLib(_):
     _.assertAllIn(["passed all tests", "0 failed", "Test passed"], call(PYTHON + " lib.py --test -v"))
 
+  def testExtensionAndTag(_):
+    _.assertAllIn(["/b/b1/file3.ext1", "1 files found"], runP("b .ext1 -v"))
+    _.assertAllIn(["No folder match", "/ignore_skip/marker-files/a/1/1.2", "1 files found"], runP("a .2 -v"))  # no match due to skip file marker
+
+  def testNegativeExtension(_):
+    _.assertAllIn(["/a/a2/file3.ext3", "1 files found"], runP("a,-.ext1,-.ext2 -v"))
 
   def testUnwalk(_):
     def unwalk(_, idx = 0, path = ""):

@@ -199,7 +199,7 @@ class Main(object):
       try:
         if len(files) > 0: print("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
       except KeyboardInterrupt: pass
-    if _.options.log >= 1: info("%d files found in %d checked paths for +<%s> -<%s>." % (counter, dcount, ",".join(poss), ".".join(negs)))  # TODO dcount reflect mapped as well?
+    if _.options.log >= 1: info("%d files found in %d checked paths for +<%s> -<%s>." % (counter, dcount, ",".join(poss), ",".join(negs)))  # TODO dcount reflect mapped as well?
 
   def config(_, unset = False, get = False):
     ''' Define, retrieve or remove a global configuration parameter. '''
