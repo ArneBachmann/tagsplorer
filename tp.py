@@ -309,6 +309,7 @@ class Main(object):
       return
     idx = Indexer(index); idx.log = _.options.log  # initiate indexer
     idx.load(indexFile)
+    _.options.relative = True  # better not to output full paths here
     info("Indexer stats")
     info("  Compression level:", idx.compressed)
     info("  Timestamp:", idx.timestamp)
@@ -385,5 +386,5 @@ class Main(object):
 
 
 if __name__ == '__main__':
-  logging.basicConfig(level = logging.DEBUG if '-v' in sys.argv or '--verbose' in sys.argv or '--debug' in sys.argv or os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s.%(funcName)s.%(lineno)d | %(message)s")
+  logging.basicConfig(level = logging.DEBUG if '-v' in sys.argv or '--verbose' in sys.argv or '--debug' in sys.argv or os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s:%(lineno)d | %(message)s")
   Main().parse()

@@ -47,7 +47,7 @@ SEPA, SLASH, DOT = map(intern, (";", "/", os.extsep))
 
 
 # Functions
-def sjoin(*s): return " ".join(s)
+def sjoin(*s): return " ".join([str(e) for e in s])
 
 def xany(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if hasattr(lizt, '__iter__') else list(lizt), False)  # short-circuit Python 2/3 implementation. could also use wrapExc(lambda: iter(lizt), lizt) instead. intentionally doesn't iterate over string characters. converts string and other data types to a one-element list instead
 
@@ -136,6 +136,15 @@ class Normalizer(object):
     ABC
     >>> print(n.globmatch("abc", "?Bc"))
     True
+    >>> print(n.globfilter(["ab1", "Ab2"], "a??"))
+    ['ab1', 'Ab2']
+    >>> print(n.globfilter(["dot.folder"], "DOT*"))  # regression test
+    ['dot.folder']
+    >>> print(n.globfilter(["ab", "Ab"], "a?"))  # TODO what about duplicates in normalized results? Is this possible?
+    ['ab', 'Ab']
+    >>> n.setupCasematching(True, quiet = True)
+    >>> print(n.globfilter(["ab1", "Ab2"], "a*"))
+    ['ab1']
     '''
     if not quiet: debug("Setting up case-%ssensitive matching" % ("" if case_sensitive else "in"))
     _.filenorm = ident if case_sensitive else caseNormalize  # we can't use "str if case_sensitive else str.upper" because for unicode strings this fails, as the function reference comes from the str object
@@ -441,13 +450,13 @@ class Indexer(object):
         if not _.cfg.reduce_case_storage and iext != ext:  # differs from normalized version: store normalized as well
           i = lindex(_.tags, intern(iext), appendandreturnindex)  # add file extension to local dir's tags only
           adds.append(i); _.tag2paths[i].append(parent)  # add current dir to index of that extension
-    # TODO don't use adds reference? never used?
     # 3.  prepare recursion
     newtags = [t for t in ((tags[:-2] if len(tags) >=2 and caseNormalize(_.tagdirs[tags[-2]]) == _.tagdirs[tags[-1]] else tags[:-1]) if ignore else tags)]  # if ignore: propagate all tags except current folder name variant(s) to children TODO reuse "tags" reference from here on instead
     children = (f[len(aDir) + (1 if not aDir.endswith(SLASH) else 0):] for f in filter(isdir, (os.path.join(aDir, ff) for ff in files)))  # only consider folders. ternary condition is necessary for the backslash in "D:\" = "D:/", a Windows root dir special case
     for child in children:  # iterate sub-folders using above generator expression
       idxs = []  # first element in "idx" is next index to use in recursion (future parent, current child), no matter if true-case or case-normalized mode is selected
       # 3a. add sub-folder name to "tagdirs" and "tagdir2parent"
+      if child == "dot.folder": import pdb; pdb.set_trace()
       if not (ON_WINDOWS and _.cfg.reduce_case_storage):  # for Windows: only store true-case if not reducing storage, Linux: always store
         if _.log >= 1: debug("Storing original folder name %r for %r" % (child, _.getPath(parent, {})))
         idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure

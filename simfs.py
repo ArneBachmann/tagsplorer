@@ -70,6 +70,15 @@ def _saveUnlink(path):
   try: _unlink(path)
   except: pass
 
+_isdir = os.path.isdir
+def isdir(path): return _isdir(exists(path, True))  # in Coconut: def os.path.isdir = ...
+os.path.isdir = isdir
+
+_islink = os.path.islink
+def islink(path): return _islink(exists(path, True))  # in Coconut: def os.path.isdir = ...
+os.path.isdir = islink
+
+
 # Patch open function
 class Open(object):
   def __init__(_, path, mode):
