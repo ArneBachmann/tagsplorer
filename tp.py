@@ -21,7 +21,6 @@ APPNAME = "tagsPlorer"
 
 
 # Little helper functions
-def withoutFilesAndGlobs(tags): return [t for t in tags if not isglob(t) and DOT not in t[1:]]
 def caseCompare(a, b):
   ''' Advanced case-normalized comparison for better output.
   >>> print(caseCompare("a", "a"))
@@ -173,7 +172,7 @@ class Main(object):
     poss, negs = map(lambda l: lmap(normalizer.filenorm, l), (poss, negs))  # convert search terms to normalized case, if necessary
     if _.options.log >= 1: info("Effective filters +<%s> -<%s>" % (",".join(poss), ",".join(negs)))
     if _.options.log >= 1: info("Searching for tags +<%s> -<%s> in %s" % (','.join(poss), ','.join(negs), os.path.abspath(idx.root)))
-    paths = idx.findFolders(poss, negs)  # TODO was: withoutFilesAndGlobs(poss), withoutFilesAndGlobs(negs))  # use only real folder tags
+    paths = idx.findFolders(poss, negs)
     if _.options.log >= 1: info("Potential matches found in %d folders" % (len(paths)))
     if _.options.log >= 2: [debug(path) for path in paths]  # optimistic: all folders "seem" to match all tags, but only some might actually be (due to excludes etc)
     if len(paths) == 0 and xany(lambda x: isglob(x) or DOT in x, poss + negs):
@@ -197,7 +196,7 @@ class Main(object):
       if xany(lambda skp: path.startswith(skp) if skp != '' else (path == ''), skipped): continue  # is in skipped folder tree
       dcount += 1
       try:
-        if len(files) > 0: print("\n".join(idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
+        if len(files) > 0: print("\n".join((idx.root if not _.options.relative else '') + path + SLASH + file for file in files)); counter += len(files)  # incremental output
       except KeyboardInterrupt: pass
     if _.options.log >= 1: info("%d files found in %d checked paths for +<%s> -<%s>." % (counter, dcount, ",".join(poss), ",".join(negs)))  # TODO dcount reflect mapped as well?
 
@@ -358,6 +357,7 @@ class Main(object):
     op.add_option('-v', '--verbose',     action = "store_true",  dest = "verbose",     default = False, help = "Same as -l1. Also displays unit test details")
     op.add_option('--stats',             action = "store_true",  dest = "stats",       default = False, help = "List index internals (combine with -l1, -l2)")
     op.add_option('--simulate-winfs',    action = "store_true",  dest = "winfs",       default = True,  help = "Simulate case-insensitive file system")  # but option checked outside parser
+    op.add_option('--relative',          action = "store_true",  dest = "relative",    default = False, help = "Output files with root-relative paths only")  # instead of real file system paths
     _.options, _.args = op.parse_args()
     if _.options.log >= 2: debug("Raw options: " + str(_.options))
     if _.options.log >= 2: debug("Raw arguments: " + str(_.args))
@@ -383,5 +383,5 @@ class Main(object):
 
 
 if __name__ == '__main__':
-  logging.basicConfig(level = logging.DEBUG if '-v' in sys.argv or '--verbose' in sys.argv or '--debug' in sys.argv or os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
+  logging.basicConfig(level = logging.DEBUG if '-v' in sys.argv or '--verbose' in sys.argv or '--debug' in sys.argv or os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s.%(funcName)s.%(lineno)d | %(message)s")
   Main().parse()

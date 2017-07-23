@@ -574,9 +574,9 @@ class Indexer(object):
     return set(retain)
 
   def findFolders(_, include, exclude = [], returnAll = False):
-    ''' Find intersection of all directories with matching tags.
-        include: list of cleaned tag names to include
-        exclude: list of cleaned tag names to exclude
+    ''' Find intersection of all directories with matching tags, from over-generic index.
+        include: list of tag names to include
+        exclude: list of tag names to exclude
         returnAll: shortcut flag that simply returns all paths from index instead of finding and filtering results
         returns: list of folder paths (case-normalized or both normalized and as is, depending on the case-sensitive option)
     '''
@@ -631,7 +631,7 @@ class Indexer(object):
 
   def findFiles(_, aFolder, poss, negs = [], force = False):
     ''' Determine files for the given folder.
-        aFolder: folder to filter files in
+        aFolder: root-relative folder to filter files in
         poss: (potentially case-normalized) positive tags, file extensions, file names or glob patternss to consider, or an empty list (falls back to considering all files to ensure negative tags work at all)
         negs: negative assertions, same options as for 'poss'
         force: don't perform true file existence checks, might return false positives for special files or directories (usually no problem)
