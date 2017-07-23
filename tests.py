@@ -74,13 +74,18 @@ class TestRepoTestCase(unittest.TestCase):
     ''' Helper assert. '''
     [_.assertIn(a, where) for a in lizt]
 
+  def testSjoin(_):
+    _.assertEqual("", lib.sjoin())
+    _.assertEqual("", lib.sjoin(""))
+    _.assertEqual("", lib.sjoin("", ""))
+    _.assertEqual("a b", lib.sjoin("a", "b"))
+
   def testFunctions(_):
     def x(a):
       if a == None: raise Exception("should not have been processed")
       return a == 3
     _.assertTrue(tp.xany(x, [1, 2, 3, None]))
     _.assertTrue(tp.xall(x, [3, 3, 3]))
-#    _.assertEqual(["abc", ".ext", "d"], tp.withoutFilesAndGlobs(["abc", ".ext", "a?v.c", "ab.c", "*x*", "d"]))
     _.assertTrue(lib.isfile("tests.py"))
     _.assertFalse(lib.isdir("tests.py"))
     _.assertFalse(lib.isfile(os.getcwd()))

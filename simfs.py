@@ -76,7 +76,7 @@ os.path.isdir = isdir
 
 _islink = os.path.islink
 def islink(path): return _islink(exists(path, True))  # in Coconut: def os.path.isdir = ...
-os.path.isdir = islink
+os.path.islink = islink
 
 
 # Patch open function

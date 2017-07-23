@@ -125,6 +125,7 @@ class Logger(object):
   def warn(_, *s): _._log.warn(sjoin(*s))
   def error(_, *s): _._log.error(sjoin(*s))
 
+
 class Normalizer(object):
   def setupCasematching(_, case_sensitive, quiet = False):
     ''' Setup normalization.
@@ -456,7 +457,6 @@ class Indexer(object):
     for child in children:  # iterate sub-folders using above generator expression
       idxs = []  # first element in "idx" is next index to use in recursion (future parent, current child), no matter if true-case or case-normalized mode is selected
       # 3a. add sub-folder name to "tagdirs" and "tagdir2parent"
-      if child == "dot.folder": import pdb; pdb.set_trace()
       if not (ON_WINDOWS and _.cfg.reduce_case_storage):  # for Windows: only store true-case if not reducing storage, Linux: always store
         if _.log >= 1: debug("Storing original folder name %r for %r" % (child, _.getPath(parent, {})))
         idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
