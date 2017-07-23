@@ -47,7 +47,7 @@ SEPA, SLASH, DOT = map(intern, (";", "/", os.extsep))
 
 
 # Functions
-def sjoin(*s): return " ".join([str(e) for e in s])
+def sjoin(*s): return " ".join([str(e) for e in s if e != ''])
 
 def xany(pred, lizt): return reduce(lambda a, b: a or pred(b), lizt if hasattr(lizt, '__iter__') else list(lizt), False)  # short-circuit Python 2/3 implementation. could also use wrapExc(lambda: iter(lizt), lizt) instead. intentionally doesn't iterate over string characters. converts string and other data types to a one-element list instead
 
