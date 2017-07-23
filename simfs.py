@@ -3,10 +3,10 @@ import logging
 import os
 import sys
 
-_log = logging.getLogger(__name__); debug, info, warn, error = _log.debug, _log.info, _log.warn, _log.error; del _log
-debug("Using virtual case-insensitive file system")
+_log = logging.getLogger(__name__)
+_log.debug("Using virtual case-insensitive file system")
 
-if sys.version_info.major >= 3: unichr = chr
+if sys.version_info.major >= 3: unichr = chr; import io; file = io.IOBase
 
 
 # Patch existence function
@@ -41,9 +41,9 @@ def exists(path, get = False):
   >>> print(os.path.exists("_x.X"))
   False
   '''
-  debug("Patched os.path.exists")
-  if type(path) not in (str, bytes, unichr): return os.path.exists(path)
-  if path in (None, ""): return os.path.exists(path)
+  _log.debug("Patched os.path.exists")
+  if type(path) is file or type(path) not in (str, bytes, unichr): return _exists(path)  # delegate or force original Exception
+  if path in (None, ""): return _exists(path)
   steps = path.split(os.sep)
   if steps[0] == "": steps[0] = os.sep # absolute
   else: steps.insert(0, ".")
@@ -82,17 +82,17 @@ os.path.islink = islink
 # Patch open function
 class Open(object):
   def __init__(_, path, mode):
-    debug("calling patched 'open' function")
+    _log.debug("calling patched 'open' function")
     _.path = path
     _.mode = mode
     _.fd = _open(exists(path, True), mode)
 
   def __enter__(_):
-    debug("Entering patched 'open' context manager")
+    _log.debug("Entering patched 'open' context manager")
     return _.fd
 
   def __exit__(_, *args):
-    debug("Exiting patched 'open' context manager %r" % str(args))
+    _log.debug("Exiting patched 'open' context manager %r" % str(args))
     try: _.fd.close()
     except: pass
     finally: del _.fd

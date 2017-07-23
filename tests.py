@@ -371,5 +371,5 @@ if __name__ == '__main__':
 #  logging.basicConfig(level = logging.DEBUG, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
   REPO = '_test-data'
   SVN = tp.findRootFolder(None, '.svn') is not None
-  print("Using VCS '%s'" % "SVN" if SVN else "Git")
+  print("Using VCS '%s' to revert test data" % "SVN" if SVN else "Git")
   unittest.main()  # warnings = "ignore")
