@@ -47,9 +47,11 @@ def commaArgsIntoList(lizt):
   ['a', 'b']
   >>> print(commaArgsIntoList(["ab"]))
   ['ab']
+  >>> print(commaArgsIntoList(["ab,"]))
+  ['ab']
   '''
   assert type(lizt) is list
-  return reduce(lambda a, b: a + ([b] if "," not in b else b.split(",")), lizt, [])
+  return [x for x in reduce(lambda a, b: a + ([b] if "," not in b else b.split(",")), lizt, []) if x != ""]
 
 def removeTagPrefixes(poss, negs):
   '''
