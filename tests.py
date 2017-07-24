@@ -67,6 +67,7 @@ class TestRepoTestCase(unittest.TestCase):
     except: pass  # if earlier tests finished without errors
     if SVN:  call("svn revert %s" % (REPO + os.sep + lib.CONFIG))  # for subversion
     else: call("git checkout %s/%s" % (REPO, lib.CONFIG))  # for git
+    runP("--set case_sensitive=True -v")
     runP("-u")  # initial indexing, invisible
 
   def assertAllIn(_, lizt, where):

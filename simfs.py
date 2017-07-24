@@ -1,12 +1,18 @@
-# TODO add fnmatch patching?
+import doctest
 import logging
 import os
 import sys
+import unittest
 
 _log = logging.getLogger(__name__)
 _log.debug("Using virtual case-insensitive file system")
 
-if sys.version_info.major >= 3: unichr = chr; import io; file = io.IOBase
+if sys.version_info.major >= 3:
+  import io
+  file = io.IOBase
+  unichr = chr
+else:
+  import dircache  # in addition to os.listdir
 
 
 # Patch existence function
@@ -41,45 +47,71 @@ def exists(path, get = False):
   >>> print(os.path.exists("_x.X"))
   False
   '''
-  _log.debug("Patched os.path.exists")
-  if type(path) is file or type(path) not in (str, bytes, unichr): return _exists(path)  # delegate or force original Exception
-  if path in (None, ""): return _exists(path)
+  _log.debug("Patched os.path.exists %r" % path)
+  if type(path) is file: return _exists(path)  # file handle
+  if not isinstance(path, (str, bytes, unichr)):
+    if not get: return _exists(path)  # delegate or force original Exception
+    raise ValueError("Unknown argument type %r" % type(path))
+  if path is None or path == "": return _exists(path) if not get else path
   steps = path.split(os.sep)
   if steps[0] == "": steps[0] = os.sep # absolute
-  else: steps.insert(0, ".")
+  elif steps[0] != os.curdir: steps.insert(0, os.curdir)
+  i = 1
+  while "" in steps[i:]: i = steps.index("", i); steps.pop(i)
   path2 = ""
   files = {steps[0].upper(): steps[0]}  # initial mapping
   for step in steps:
-    try: path2 += (os.sep if step not in (os.sep, ".") else "") + files[step.upper()]
-    except Exception as E:  # key not found error expected:
-      return False if not get else path2 + (os.sep if step not in (os.sep, ".") else "") + step  # file name not in last folder: doesn't exist (yet)
-    try: files = {f.upper(): f for f in os.listdir(path2)}
-    except Exception as E:  # Error 20 not a directory expected if last step is a file name
-      try:
-        with _open(path2, "r") as fd: return True if not get else path2
-      except Exception as E:
-        _log.error(str(E))
-      return False if not get else path  # cannot open file
+    if step == os.pardir:
+      if os.sep in path2: path2 = path2[:path2.rindex(os.sep)]; continue  # remove intermediate "..""
+      else: path2 = os.pardir  # if ".."" is first entry
+    try: path2 += (os.sep if step not in (os.sep, os.curdir) and path2 != os.sep else "") + files[step.upper()]
+    except KeyError as E:  # file entry not found
+      return False if not get else path2 + (os.sep if step not in (os.sep, os.curdir) and path2 != os.sep else "") + step  # file name not in last folder: doesn't exist (yet)
+#    if _isfile(path2): return True if not get else path2  # TODO calls os.stat which was already patched
+    try: files = {f.upper(): f for f in _listdir(path2)}; continue
+    except IOError as E: pass
+    except OSError as E: pass
+    try:
+      with _open(path2, "rb") as fd: return True if not get else path2
+    except: False if not get else path2
   return True if not get else path2
 os.path.exists = exists  # monkey-patch function
 
 # Path file removal
-_unlink = os.unlink
-_remove = os.remove
-def remove(path):
-  return _remove(exists(path, True))
-os.unlink = os.remove = remove
+_unlink, _remove = os.unlink, os.remove  # could be the same, but just in case
+def __unlink(path): return _unlink(exists(path, True))
+def __remove(path): return _remove(exists(path, True))
+os.unlink, os.remove = __unlink, __remove
+
 def _saveUnlink(path):
   try: _unlink(path)
   except: pass
 
 _isdir = os.path.isdir
-def isdir(path): return _isdir(exists(path, True))  # in Coconut: def os.path.isdir = ...
-os.path.isdir = isdir
+def __isdir(path): return _isdir(exists(path, True))  # in Coconut: def os.path.isdir = ...
+os.path.isdir = __isdir
+
+_isfile = os.path.isfile
+def __isfile(path): return _isfile(exists(path, True))
+os.path.isfile = __isfile
 
 _islink = os.path.islink
-def islink(path): return _islink(exists(path, True))  # in Coconut: def os.path.isdir = ...
-os.path.islink = islink
+def __islink(path): return _islink(exists(path, True))
+os.path.islink = __islink
+
+_stat, _lstat = os.stat, os.lstat
+def __stat(path): return _stat(exists(path, True))
+def __lstat(path): return _lstat(exists(path, True))
+os.stat, os.lstat = __stat, __lstat
+
+_listdir = os.listdir
+def __listdir(path): return _listdir(exists(path, True))
+os.listdir = __listdir
+if sys.version_info.major < 3:
+  _dircache = dircache.listdir
+  def __dircache(path): return _dircache(exists(path, True))
+  dircache.listdir = __dircache
+
 
 
 # Patch open function
@@ -108,11 +140,32 @@ class Open(object):
     finally: del _.fd
 _open, open = open, Open
 
-# Patch chdir
 _chdir = os.chdir
-def chdir(path):
-  return _chdir(exists(path, True))
-os.chdir = chdir
+def __chdir(path): return _chdir(exists(path, True))
+os.chdir = __chdir
+
+
+class TestRepoTestCase(unittest.TestCase):
+  def testStuff(_):
+    _.assertIsNot(_exists, os.path.exists)
+    _.assertTrue(_exists("_test-data/d/a.b"))
+    _.assertTrue(_exists("./_test-data/d/a.b"))
+    _.assertTrue(os.path.exists("./_test-data/d/a.b"))
+    _.assertTrue(os.path.exists("./_test-data/D/a.b"))
+    _.assertFalse(os.path.exists("./_test-data/D/a.c"))
+    _.assertEqual(0, os.stat("_test-data/D/A.B")[6])
+    _.assertEqual(0, os.lstat("_test-datA/d/A.B")[6])
+    _.assertTrue(os.path.isdir("_test-data"))
+    _.assertFalse(os.path.isdir("_test-data/d/A.B"))
+    _.assertFalse(os.path.isdir("_test-data/d/A.c"))  # even if file doesn't exist
+    _.assertTrue(os.path.isfile("_test-data/d/A.b"))
+    _.assertFalse(os.path.isfile("_test-data/d/A.c"))  # even if file doesn't exist
+    _.assertFalse(os.path.islink("_test-data/d"))
+    _.assertFalse(os.path.islink("_test-data/d/a.b"))
+    with open("_test-data/d/tmp", "w") as fd: pass  # touch
+    os.unlink("_test-data/d/tmp")
+    _.assertFalse(os.path.exists("_test-data/d/tmp"))
+
 
 
 def load_tests(loader, tests, ignore):
@@ -122,7 +175,6 @@ def load_tests(loader, tests, ignore):
 
 
 if __name__ == '__main__':
-  import doctest, sys, unittest
 #  import pdb; pdb.set_trace()
   logging.basicConfig(level = logging.DEBUG if "--debug" in sys.argv else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s:%(lineno)d | %(message)s")
   if sys.platform == 'win32': print("Testing on Windows makes no sense, this is a Windows file system simulator"); exit(1)  # TODO maybe it does anyway?

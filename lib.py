@@ -17,7 +17,7 @@ import zlib  # standard library
 if sys.version_info.major >= 3: from os import listdir
 else: from dircache import listdir
 if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "False").lower() == "true":
-  ON_WINDOWS = True; from simfs import *
+  ON_WINDOWS = True; SIMFS = True; from simfs import *
 else: ON_WINDOWS = sys.platform == 'win32'  # there exists a different detection schema for OS, but I don't remember. https://github.com/easybuilders/easybuild/wiki/OS_flavor_name_version
 
 
@@ -80,7 +80,7 @@ def lindex(lizt, value, otherwise = lambda _lizt, _value: None):
 
 ilong = eval("lambda s: int(s)") if sys.version_info.major >= 3 else eval("lambda s: long(s)")
 def ident(_): return _  # definition to be conditionally used instead of a more complex transformation
-def isdir(f): return os.path.isdir(f) and not os.path.ismount(f)
+def isdir(f): return os.path.isdir(f) and not os.path.islink(f) and not os.path.ismount(f)  # TODO is this really benefitial?
 def isfile(f): return wrapExc(lambda: os.path.isfile(f) and not os.path.ismount(f) and not os.path.isdir(f), lambda: False)  # on error "no file"
 pathnorm = (lambda s: s.replace("\\", SLASH)) if ON_WINDOWS else ident  # as lambda to allow dynamic definition
 def lappend(lizt, elem): (lizt.extend if type(elem) is list else lizt.append)(elem); return lizt   # functional list.append that returns self afterwards to avoid new array creation (lizt + [elem])
@@ -658,7 +658,7 @@ class Indexer(object):
     allfiles, willskip = set(), False  # contains files from current or mapped folders (without path, since "mapped", but could have local symlink - TODO
     for folder in folders:
       if _.log >= 1: debug("Checking %sfolder%s" % (("root ", "") if folder == "" else ('', " " + folder)))
-      files = set(wrapExc(lambda: [f for f in listdir(_.root + folder) if isfile(_.root + folder + SLASH + f)], []))  # all from current folder, potential excecption: folder name (unicode etc.)
+      files = set(wrapExc(lambda: [f for f in listdir(_.root + folder) if isfile(_.root + folder + SLASH + f)], []))  # all from current folder, potential exception: folder name (unicode etc.)
       if IGNFILE in files: continue  # skip is more difficult to handle than ignore, cf. return tuple here and code in tp.find() with return
       if folder == aFolder and SKPFILE in files:
         willskip = True
