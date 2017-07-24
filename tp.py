@@ -9,7 +9,7 @@ import os
 import sys
 
 if "--simulate-winfs" in sys.argv or os.environ.get("SIMULATE_WINFS", "False").lower() == "true":  # don't move to optparse handling, which is not in __main__
-  ON_WINDOWS = True; from simfs import *  # monkey-patch current namespace
+  from simfs import *  # monkey-patch current namespace
 
 from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports that need't be repeated here
 from version import __version_info__, __version__  # used by setup.py

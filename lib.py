@@ -16,7 +16,7 @@ import time
 import zlib  # standard library
 if sys.version_info.major >= 3: from os import listdir
 else: from dircache import listdir
-if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "false").lower() == "true":
+if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "False").lower() == "true":
   ON_WINDOWS = True; from simfs import *
 else: ON_WINDOWS = sys.platform == 'win32'  # there exists a different detection schema for OS, but I don't remember. https://github.com/easybuilders/easybuild/wiki/OS_flavor_name_version
 
@@ -80,7 +80,7 @@ def lindex(lizt, value, otherwise = lambda _lizt, _value: None):
 
 ilong = eval("lambda s: int(s)") if sys.version_info.major >= 3 else eval("lambda s: long(s)")
 def ident(_): return _  # definition to be conditionally used instead of a more complex transformation
-def isdir(f): return os.path.isdir(f) and not os.path.islink(f) and not os.path.ismount(f)
+def isdir(f): return os.path.isdir(f) and not os.path.ismount(f)
 def isfile(f): return wrapExc(lambda: os.path.isfile(f) and not os.path.ismount(f) and not os.path.isdir(f), lambda: False)  # on error "no file"
 pathnorm = (lambda s: s.replace("\\", SLASH)) if ON_WINDOWS else ident  # as lambda to allow dynamic definition
 def lappend(lizt, elem): (lizt.extend if type(elem) is list else lizt.append)(elem); return lizt   # functional list.append that returns self afterwards to avoid new array creation (lizt + [elem])
