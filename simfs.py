@@ -47,17 +47,20 @@ def exists(path, get = False):
   steps = path.split(os.sep)
   if steps[0] == "": steps[0] = os.sep # absolute
   else: steps.insert(0, ".")
-  path = ""
+  path2 = ""
   files = {steps[0].upper(): steps[0]}  # initial mapping
   for step in steps:
-    try: path += (os.sep if step not in (os.sep, ".") else "") + files[step.upper()]
-    except Exception as E:
-      return False if not get else path + (os.sep if step not in (os.sep, ".") else "") + step  # file name not in last folder: doesn't exist (yet)
-    try: files = {f.upper(): f for f in os.listdir(path)}
-    except Exception as E:
-      with _open(path, "r") as fd: return True if not get else path
-      return False  # cannot open file
-  return True if not get else path
+    try: path2 += (os.sep if step not in (os.sep, ".") else "") + files[step.upper()]
+    except Exception as E:  # key not found error expected:
+      return False if not get else path2 + (os.sep if step not in (os.sep, ".") else "") + step  # file name not in last folder: doesn't exist (yet)
+    try: files = {f.upper(): f for f in os.listdir(path2)}
+    except Exception as E:  # Error 20 not a directory expected if last step is a file name
+      try:
+        with _open(path2, "r") as fd: return True if not get else path2
+      except Exception as E:
+        _log.error(str(E))
+      return False if not get else path  # cannot open file
+  return True if not get else path2
 os.path.exists = exists  # monkey-patch function
 
 # Path file removal
@@ -121,6 +124,6 @@ def load_tests(loader, tests, ignore):
 if __name__ == '__main__':
   import doctest, sys, unittest
 #  import pdb; pdb.set_trace()
-  logging.basicConfig(level = logging.DEBUG if "--debug" in sys.argv else logging.INFO, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
+  logging.basicConfig(level = logging.DEBUG if "--debug" in sys.argv else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s:%(lineno)d | %(message)s")
   if sys.platform == 'win32': print("Testing on Windows makes no sense, this is a Windows file system simulator"); exit(1)  # TODO maybe it does anyway?
   unittest.main()  # warnings = "ignore")

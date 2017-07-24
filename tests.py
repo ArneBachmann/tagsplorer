@@ -357,7 +357,7 @@ def load_tests(loader, tests, ignore):
   import doctest
   tests.addTests(doctest.DocTestSuite(lib))
   tests.addTests(doctest.DocTestSuite(tp))
-  tests.addTests(doctest.DocTestSuite(simfs))
+  if SIMFS: tests.addTests(doctest.DocTestSuite(simfs))
   return tests
 
 
@@ -366,6 +366,7 @@ if __name__ == '__main__':
   if not DEBUG: print("Error: Set environment variable DEBUG=True to run the test suite"); sys.exit(1)
   try: del sys.argv[sys.argv.index("--simulate-winfs")]; SIMFS = True
   except: SIMFS = os.environ.get("SIMULATE_WINFS", "false").lower() == "true"
+  if SIMFS: print("Using case-normalization simulation")
   PYTHON = os.path.realpath(sys.executable) if SIMFS or not lib.ON_WINDOWS else '"' + os.path.realpath(sys.executable) + '"'
   logFile = None  # declare global variable
 #  logging.basicConfig(level = logging.DEBUG, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
