@@ -10,7 +10,6 @@ _log.debug("Using virtual case-insensitive file system")
 if sys.version_info.major >= 3:
   import io
   file = io.IOBase
-  unichr = chr
 else:
   import dircache  # in addition to os.listdir
 
@@ -49,7 +48,7 @@ def exists(path, get = False):
   '''
   _log.debug("Patched os.path.exists %r" % path)
   if type(path) is file: return _exists(path)  # file handle
-  if not isinstance(path, (str, bytes, unichr)):
+  if not isinstance(path, (str, bytes)):
     if not get: return _exists(path)  # delegate or force original Exception
     raise ValueError("Unknown argument type %r" % type(path))
   if path is None or path == "": return _exists(path) if not get else path
