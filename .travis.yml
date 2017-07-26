@@ -7,56 +7,112 @@ matrix:
       env:
         - SIMULATE_WINFS=false
         - UBUNTU=trusty
-        - PYVER=2
+        - PYVER=CP2
     - os: linux
       dist: trusty
       python: 2.7
       env:
         - SIMULATE_WINFS=true
         - UBUNTU=trusty
-        - PYVER=2
+        - PYVER=CP2
     - os: linux
       dist: trusty
       python: 3.5
       env:
         - SIMULATE_WINFS=false
         - UBUNTU=trusty
-        - PYVER=3
+        - PYVER=CP3
     - os: linux
       dist: trusty
       python: 3.5
       env:
         - SIMULATE_WINFS=true
         - UBUNTU=trusty
-        - PYVER=3
+        - PYVER=CP3
+    - os: linux
+      dist: trusty
+      python: pypy
+      env:
+        - SIMULATE_WINFS=false
+        - UBUNTU=trusty
+        - PYVER=PP2
+    - os: linux
+      dist: trusty
+      python: pypy
+      env:
+        - SIMULATE_WINFS=true
+        - UBUNTU=trusty
+        - PYVER=PP2
+    - os: linux
+      dist: trusty
+      python: pypy3
+      env:
+        - SIMULATE_WINFS=false
+        - UBUNTU=trusty
+        - PYVER=PP3
+    - os: linux
+      dist: trusty
+      python: pypy3
+      env:
+        - SIMULATE_WINFS=true
+        - UBUNTU=trusty
+        - PYVER=PP3
     - os: linux
       dist: precise
       python: 2.7
       env:
         - SIMULATE_WINFS=false
         - UBUNTU=precise
-        - PYVER=2
+        - PYVER=CP2
     - os: linux
       dist: precise
       python: 2.7
       env:
         - SIMULATE_WINFS=true
         - UBUNTU=precise
-        - PYVER=2
+        - PYVER=CP2
     - os: linux
       dist: precise
       python: 3.5
       env:
         - SIMULATE_WINFS=false
         - UBUNTU=precise
-        - PYVER=3
+        - PYVER=CP3
     - os: linux
       dist: precise
       python: 3.5
       env:
         - SIMULATE_WINFS=true
         - UBUNTU=precise
-        - PYVER=3
+        - PYVER=CP3
+    - os: linux
+      dist: precise
+      python: pypy
+      env:
+        - SIMULATE_WINFS=false
+        - UBUNTU=precise
+        - PYVER=PP2
+    - os: linux
+      dist: precise
+      python: pypy
+      env:
+        - SIMULATE_WINFS=true
+        - UBUNTU=precise
+        - PYVER=PP2
+    - os: linux
+      dist: precise
+      python: pypy3
+      env:
+        - SIMULATE_WINFS=false
+        - UBUNTU=precise
+        - PYVER=PP3
+    - os: linux
+      dist: precise
+      python: pypy3
+      env:
+        - SIMULATE_WINFS=true
+        - UBUNTU=precise
+        - PYVER=PP3
 #    - os: linux
 #      dist: precise
 #      python: pypy
