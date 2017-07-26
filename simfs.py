@@ -11,14 +11,16 @@ if sys.version_info.major >= 3:
   import io
   file = io.IOBase
   _types = (str, bytes)
+  _RIGHTS = 0o777
 else:  # Python 2
   import dircache  # in addition to os.listdir
   _types = (str, bytes, unicode)
+  RIGHTS = 0755
 
 
 # Patch existence function
 _exists = os.path.exists
-def exists(path, get = False):
+def exists(path, get = False):  # TODO move path determination to own function and base exists on that
   ''' Case-normalized exists.
       path: file system path to check for existence
       get: if True, returns actual case-corrected path instead of boolean value
@@ -68,14 +70,16 @@ def exists(path, get = False):
     try: path2 += (os.sep if step not in (os.sep, os.curdir) and path2 != os.sep else "") + files[step.upper()]
     except KeyError as E:  # file entry not found
       return False if not get else path2 + (os.sep if step not in (os.sep, os.curdir) and path2 != os.sep else "") + step  # file name not in last folder: doesn't exist (yet)
-#    if _isfile(path2): return True if not get else path2  # TODO calls os.stat which was already patched
     try: files = {f.upper(): f for f in _listdir(path2)}; continue
-    except IOError as E: pass
-    except OSError as E: pass
-    try:
-      with _open(path2, "rb") as fd: return True if not get else path2
-    except: False if not get else path2
-  return False if not get else path2
+    except IOError as E:
+      try:
+        with _open(path2, "rb") as fd: return True if not get else path2  # cannot stat
+      except: return False if not get else path2
+    except OSError as E:
+      try:
+        with _open(path2, "rb") as fd: return True if not get else path2
+      except: return False if not get else path2
+  return True if not get else path2
 os.path.exists = exists  # monkey-patch function
 
 # Path file removal
@@ -145,13 +149,26 @@ _chdir = os.chdir
 def __chdir(path): return _chdir(exists(path, True))
 os.chdir = __chdir
 
+_mkdir = os.mkdir
+def __mkdir(path, mode = _RIGHTS): return _mkdir(exists(path, True), mode)
+os.mkdir = __mkdir
+
+_rmdir = os.rmdir
+def __rmdir(path): return _rmdir(exists(path, True))
+os.rmdir = __rmdir
+
+_makedirs = os.makedirs
+def __makedirs(path, mode = _RIGHTS, exist_ok = False): return _makedirs(exists(path, True), **({"mode": mode} if sys.version_info.major < 3 else {"mode": mode, "exist_ok": exist_ok}))
+os.makedirs = __makedirs
+
 
 class TestRepoTestCase(unittest.TestCase):
   def testStuff(_):
     _.assertIsNot(_exists, os.path.exists)
+    _.assertTrue(os.path.exists("./_test-data"))  # directory check
     _.assertTrue(_exists("_test-data/d/a.b"))
     _.assertTrue(_exists("./_test-data/d/a.b"))
-    _.assertTrue(os.path.exists("./_test-data/d/a.b"))
+    _.assertTrue(os.path.exists("./_test-data/d/a.b"))  # file check
     _.assertTrue(os.path.exists("./_test-data/D/a.b"))
     _.assertFalse(os.path.exists("./_test-data/D/a.c"))
     _.assertEqual(0, os.stat("_test-data/D/A.B")[6])
@@ -166,6 +183,19 @@ class TestRepoTestCase(unittest.TestCase):
     with open("_test-data/d/tmp", "w") as fd: pass  # touch
     os.unlink("_test-data/d/tmp")
     _.assertFalse(os.path.exists("_test-data/d/tmp"))
+    try: os.makedirs("_test-data/tmp/2")
+    except Exception as E: _.fail(str(E))
+    _.assertTrue(os.path.exists("_test-data/tmp/2"))
+    try: os.makedirs("_test-data/tmp/2"); _.fail("Should have thrown OSError")
+    except OSError as E: pass
+    _.assertTrue(os.path.exists("_test-data/tmp/2"))
+    os.rmdir("_test-data/tmp/2")
+    os.rmdir("_test-data/tmp")
+    _.assertFalse(os.path.exists("_test-data/tmp"))
+    os.mkdir("_test-data/tmp2")
+    _.assertTrue(os.path.exists("_test-data/tmp2"))
+    os.rmdir("_test-data/tmp2")
+    _.assertFalse(os.path.exists("./_test-data/tmp2"))
 
 
 
@@ -177,6 +207,6 @@ def load_tests(loader, tests, ignore):
 
 if __name__ == '__main__':
 #  import pdb; pdb.set_trace()
-  logging.basicConfig(level = logging.DEBUG if "--debug" in sys.argv else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s:%(lineno)d | %(message)s")
+  logging.basicConfig(level = logging.DEBUG if os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s:%(lineno)d | %(message)s")
   if sys.platform == 'win32': print("Testing on Windows makes no sense, this is a Windows file system simulator"); exit(1)  # TODO maybe it does anyway?
   unittest.main()  # warnings = "ignore")

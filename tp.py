@@ -18,6 +18,7 @@ _log = Logger(logging.getLogger(__name__)); debug, info, warn, error = _log.debu
 
 
 APPNAME = "tagsPlorer"  # or something clunky like "virtdirview"
+RIGHTS = eval("0755" if sys.version_info.major < 3 else "0o755")
 
 
 # Little helper functions
@@ -128,8 +129,8 @@ class Main(object):
       if _.options.strict and os.path.exists(os.path.join(index, CONFIG)):
         error("Index already exists. Use --relaxed to override. Aborting.")
       else:
-        try: os.makedirs(index)
-        except Exception as E: pass
+        try: os.makedirs(os.path.abspath(index), mode = RIGHTS)  # because makedirs gets confused by os.pardir (..), according to documentation
+        except OSError as E: debug("Cannot create directory, probably already exists? %r" % E)
         if not os.path.exists(index): error("Cannot create index for that folder. Write rights? Path errors?"); return
         cfg.store(os.path.join(index, CONFIG))
 
