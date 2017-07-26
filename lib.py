@@ -91,6 +91,7 @@ def getTsMs(): return ilong(time.time() * 1000.)  # timestamp in milliseconds
 def safeSplit(s, d = ","): return [_ for _ in s.split(d) if _ != '']  # remove empty strings that appear e.g. for "  ".split(" ") or "".split(" ")
 def safeRSplit(s, d): return s[s.rindex(d) + 1:] if d in s else s
 def dd(tipe = list): return collections.defaultdict(tipe)
+def even(a): return (a // 2) * 2 == a
 def dictget(dikt, key, default):
   ''' Improved dict.get(key, default).
   >>> a = {}; b = a.get(0, 0); print((a, b))  # normal dict get
@@ -395,7 +396,7 @@ class Indexer(object):
           2a. index all folders' file and sub-folder file names' extensions
           3.  prepare recursion
           3a. add sub-folder name to "tagdirs" and "tagdir2parent"
-          3b. recurse
+          4.  recurse
         aDir: path relative to root (always with preceding and no trailing forward slash)
         parent: the parent folder's index in the index (usually the one in the original case)
         tags: list of aggregated tags (folder names) of parent directories: indexes of
@@ -432,15 +433,11 @@ class Indexer(object):
 
     #  2.  process folder's file names
     files = wrapExc(lambda: listdir(aDir), lambda: [])  # read file list
-    if SKPFILE in files:  # TODO what about file name case? should be no problem, as even Windows allows lower-case file names and should match here
+    if SKPFILE in files:  # HINT use always lower case file name? should be no problem, as even Windows allows lower-case file names and should match here
       if _.log >= 1: debug("  Skip %r due to local skip file" % aDir[len(_.root):])
       return  # completely ignore sub-tree and break recursion here
     ignore = ignore or (IGNFILE in files)  # short-circuit logic: config setting or file marker
-    if ignore:  # ignore this directory as tag, don't index its contents, but continue with children
-      if _.log >= 1: debug("  Ignore %r due to local ignore setting" % aDir[len(_.root):])
-      if not _.cfg.reduce_case_storage and len(tags) >= 2 and caseNormalize(_.tagdirs[tags[-2]]) == _.tagdirs[tags[-1]]: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tags[-2]])].pop()  # in case parent caller added true case *and also* case-normalized version, remove latter. if reduce_case_storage, there was only one added anyway
-      if len(tags) >= 1: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tags[-1]])].pop()  # TODO may leave empty list behind
-    else:  # no ignore, so index extensions as additional tags, folders and files alike
+    if not ignore:
       # 2a. index all folders' contents' names file extensions
       if _.log >= 1: info("Indexing files in folder %r" % aDir[len(_.root):])
       for _file in (ff for ff in files if DOT in ff[1:]):  # index only file extensions (also for folders!) in this folder, without propagation to sub-folders TODO dot-first files could be ignored or handled differenly
@@ -451,32 +448,32 @@ class Indexer(object):
         if not _.cfg.reduce_case_storage and iext != ext:  # differs from normalized version: store normalized as well
           i = lindex(_.tags, intern(iext), appendandreturnindex)  # add file extension to local dir's tags only
           adds.append(i); _.tag2paths[i].append(parent)  # add current dir to index of that extension
+
     # 3.  prepare recursion
-    newtags = [t for t in ((tags[:-2] if len(tags) >=2 and caseNormalize(_.tagdirs[tags[-2]]) == _.tagdirs[tags[-1]] else tags[:-1]) if ignore else tags)]  # if ignore: propagate all tags except current folder name variant(s) to children TODO reuse "tags" reference from here on instead
+    newtags = [t for t in ((tags[:-2] if len(tags) >= 2 and caseNormalize(_.tagdirs[tags[-2]]) == _.tagdirs[tags[-1]] else tags[:-1]) if ignore else tags)]  # if ignore: propagate all tags except current folder name variant(s) to children TODO reuse "tags" reference from here on instead
     children = (f[len(aDir) + (1 if not aDir.endswith(SLASH) else 0):] for f in filter(isdir, (os.path.join(aDir, ff) for ff in files)))  # only consider folders. ternary condition is necessary for the backslash in "D:\" = "D:/", a Windows root dir special case
     for child in children:  # iterate sub-folders using above generator expression
       idxs = []  # first element in "idx" is next index to use in recursion (future parent, current child), no matter if true-case or case-normalized mode is selected
       # 3a. add sub-folder name to "tagdirs" and "tagdir2parent"
-      if not (ON_WINDOWS and _.cfg.reduce_case_storage):  # for Windows: only store true-case if not reducing storage, Linux: always store
-        if _.log >= 1: debug("Storing original folder name %r for %r" % (child, _.getPath(parent, {})))
-        idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
-        _.tagdirs.append(intern(child))  # now add the child folder name (duplicates allowed, because we build the tree structure here)
-        _.tagdir2parent.append(parent)  # at at same index as tagdirs "next" position
-        assert len(_.tagdirs) == len(_.tagdir2parent)
-      iname = caseNormalize(child)
-      if ON_WINDOWS or (iname != child and not _.cfg.reduce_case_storage):  # Linux: only store case-normalized if not reducing storage, Windows: always store
-        if _.log >= 1: debug("Storing case-normalized folder name %r for %r" % (iname, _.getPath(parent, {})))
-        idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
-        _.tagdirs.append(intern(iname))  # now add the child folder name
-        _.tagdir2parent.append(parent)  # at at same index as tagdirs
-        assert len(_.tagdirs) == len(_.tagdir2parent)
-      assert len(idxs) in (1, 2)
-      del iname  # prior to recursion
-      if _.log >= 2: debug("Tagging folder %r with tags +<%s> *<%s>" % (child, ",".join([_.tagdirs[x] for x in (newtags + idxs)]), ",".join([_.tags[x] for x in adds])))  # TODO can contain root (empty string)
-      # 3b. recurse
-      if not ignore:
+      for token in [r for r in re.split(r"[\s\-_]", child) if r not in ("", child)] + [child]:
+        if not (ON_WINDOWS and _.cfg.reduce_case_storage):  # for Windows: only store true-case if not reducing storage, Linux: always store
+          if _.log >= 1: debug("Storing original folder name %r for %r" % (token, _.getPath(parent, {})))
+          idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
+          _.tagdirs.append(intern(token))  # now add the child folder name (duplicates allowed, because we build the tree structure here)
+          _.tagdir2parent.append(parent)  # at at same index as tagdirs "next" position
+          assert len(_.tagdirs) == len(_.tagdir2parent)
+        iname = caseNormalize(token)
+        if ON_WINDOWS or (iname != token and not _.cfg.reduce_case_storage):  # Linux: only store case-normalized if not reducing storage, Windows: always store
+          if _.log >= 1: debug("Storing case-normalized folder name %r for %r" % (iname, _.getPath(parent, {})))
+          idxs.append(len(_.tagdirs))
+          _.tagdirs.append(intern(iname))
+          _.tagdir2parent.append(parent)
+      assert len(_.tagdirs) == len(_.tagdir2parent)
+      if _.log >= 2: debug("Tagging folder %r with tags +<%s> *<%s>" % (iname, ",".join([_.tagdirs[x] for x in (newtags + idxs)]), ",".join([_.tags[x] for x in adds])))  # TODO can contain root (empty string)
+      # 4. recurse
+      if not ignore:  # indexing of current folder
         for tag in newtags + idxs: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tag])].extend(idxs)  # add subfolder reference(s) for all collected tags from root to child to tag name
-      _._walk(aDir + SLASH + child, idxs[0], newtags + ([] if ignore else idxs))  # as parent, always use original case index, not case-normalized one (unless configured to reduce space)
+      _._walk(aDir + SLASH + child, idxs[-2] if len(idxs) > 0 and even(len(idxs)) else idxs[-1], newtags + ([] if ignore else idxs))  # as parent, always use original case index, not case-normalized one (unless configured to reduce space)
 
   def mapTagsIntoDirsAndCompressIndex(_):
     ''' After recursion finished, map extensions or manually set tags into the tagdir structure to save space. '''

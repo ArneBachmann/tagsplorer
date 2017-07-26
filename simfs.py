@@ -11,7 +11,7 @@ if sys.version_info.major >= 3:
   import io
   file = io.IOBase
   _types = (str, bytes)
-else:
+else:  # Python 2
   import dircache  # in addition to os.listdir
   _types = (str, bytes, unicode)
 
@@ -75,7 +75,7 @@ def exists(path, get = False):
     try:
       with _open(path2, "rb") as fd: return True if not get else path2
     except: False if not get else path2
-  return True if not get else path2
+  return False if not get else path2
 os.path.exists = exists  # monkey-patch function
 
 # Path file removal
