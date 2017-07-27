@@ -132,14 +132,14 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("1 files found", runP(".x -l2"))
 
   def testReduceCaseStorage(_):
-    _.assertIn("Tags: 87" if lib.ON_WINDOWS else "Tags: 91", runP("--stats"))
+    _.assertIn("Tags: 87" if lib.ON_WINDOWS else "Tags: 95", runP("--stats"))
     _.assertIn("2 files found", runP("Case -v"))  # contained in /cases/Case
     _.assertIn("0 files found", runP("case -v"))  # wrong case writing, can't find
     _.assertIn("2 files found", runP("case -v -C"))  # ignore case: should find
 #    _.assertIn("2 files found" if lib.ON_WINDOWS else "0 files found", runP("CASE -v"))  # TODO
     _.assertIn("Added global configuration entry", runP("--set reduce_case_storage=True -v"))
     runP("-u")  # trigger update index after config change (but should automatically do so anyway)
-    _.assertIn("Tags: 51", runP("--stats"))
+    _.assertIn("Tags: 53", runP("--stats"))
     _.assertIn("0 files found" if lib.ON_WINDOWS else "2 files found", runP("Case -v"))  # update after config change
     _.assertIn("0 files found", runP("case -v"))  # update after config change
 #    _.assertIn("2 files found" if lib.ON_WINDOWS else "0 files found", runP("CASE -v"))  # TODO
@@ -272,7 +272,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertNotIn(" 0 occurrences", runP("--stats -v"))
 
   def testTokenization(_):
-    _.assertAllIn(["1 files found", "_test-data/dot.folder/one"], runP("folder"))
+    _.assertAllIn(["1 files found", "_test-data/dot.folder/one"], runP("folder -v"))
 
   @unittest.SkipTest
   def testGlobs(_):
@@ -343,7 +343,7 @@ class TestRepoTestCase(unittest.TestCase):
       i.unwalk()
     res = wrapChannels(tmp).replace("\r", "")
     logFile.write(res + "\n")
-    _.assertEqual(len(res.split("\n")), 67 if lib.ON_WINDOWS else 71)  # TODO why?
+    _.assertEqual(len(res.split("\n")), 67 if lib.ON_WINDOWS else 63)  # TODO why?
 
 @unittest.SkipTest
 def compressionTest_():
