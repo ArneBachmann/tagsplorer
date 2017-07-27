@@ -470,7 +470,6 @@ class Indexer(object):
         _.tagdirs.append(intern(iname))
         _.tagdir2parent.append(parent)
       tokens = [r for r in TOKENIZER.split(child) if r not in ("", child)]
-      if child == "dot.folder": import pdb; pdb.set_trace()
       for token in tokens:  # HINT: for folders, we also split at dots ("extension") TODO document this difference (also stores .folder extension for the folder)
         if _.log >= 2: debug("Storing original tokenized name %r for %r" % (token, _.getPath(parent, cache)))
         i = lindex(_.tags, intern(token), appendandreturnindex)
@@ -657,7 +656,6 @@ class Indexer(object):
     '''
     if _.log >= 2: debug("findFiles " + str((aFolder, poss, negs, force)))
     inPath = set(safeSplit(aFolder, SLASH))  # break path into folder names
-    if "folder" in poss: import pdb; pdb.set_trace()
     inPath.update(reduce(lambda prev, step: prev + TOKENIZER.split(step), inPath, []))  # add tokenized path steps
     if not _.cfg.case_sensitive: inPath.update(set([caseNormalize(f) for f in safeSplit(aFolder, SLASH)]))  # add case-normalized folder names
     remainder = set([p for p in poss if not normalizer.globfilter(inPath, p)])  # split folder path into tags and remove from remaining criterions, considering case-sensitivity unless deselected
