@@ -271,6 +271,9 @@ class TestRepoTestCase(unittest.TestCase):
   def testStats(_):
     _.assertNotIn(" 0 occurrences", runP("--stats -v"))
 
+  def testTokenization(_):
+    _.assertAllIn(["1 files found", "_test-data/dot.folder/one"], runP("folder"))
+
   @unittest.SkipTest
   def testGlobs(_):
     _.assertIn("1 files found", runP('"dot.*" -l1'))

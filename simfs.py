@@ -15,7 +15,7 @@ if sys.version_info.major >= 3:
 else:  # Python 2
   import dircache  # in addition to os.listdir
   _types = (str, bytes, unicode)
-  _RIGHTS = 0755
+  _RIGHTS = 0777
 
 
 # Patch existence function

@@ -44,6 +44,7 @@ SKPFILE = ".tagsplorer.skp"  # marker file (can also be configured in configurat
 IGNFILE = ".tagsplorer.ign"  # marker file (dito)
 IGNORE, SKIP, TAG, FROM, SKIPD, IGNORED, GLOBAL = map(intern, ("ignore", "skip", "tag", "from", "skipd", "ignored", "global"))  # config file options
 SEPA, SLASH, DOT = map(intern, (";", "/", os.extsep))
+TOKENIZER = re.compile(r"[\s\-_\.]")
 
 
 # Functions
@@ -453,23 +454,34 @@ class Indexer(object):
     newtags = [t for t in ((tags[:-2] if len(tags) >= 2 and caseNormalize(_.tagdirs[tags[-2]]) == _.tagdirs[tags[-1]] else tags[:-1]) if ignore else tags)]  # if ignore: propagate all tags except current folder name variant(s) to children TODO reuse "tags" reference from here on instead
     children = (f[len(aDir) + (1 if not aDir.endswith(SLASH) else 0):] for f in filter(isdir, (os.path.join(aDir, ff) for ff in files)))  # only consider folders. ternary condition is necessary for the backslash in "D:\" = "D:/", a Windows root dir special case
     for child in children:  # iterate sub-folders using above generator expression
-      idxs = []  # first element in "idx" is next index to use in recursion (future parent, current child), no matter if true-case or case-normalized mode is selected
       # 3a. add sub-folder name to "tagdirs" and "tagdir2parent"
-      for token in [r for r in re.split(r"[\s\-_]", child) if r not in ("", child)] + [child]:
-        if not (ON_WINDOWS and _.cfg.reduce_case_storage):  # for Windows: only store true-case if not reducing storage, Linux: always store
-          if _.log >= 1: debug("Storing original folder name %r for %r" % (token, _.getPath(parent, {})))
-          idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
-          _.tagdirs.append(intern(token))  # now add the child folder name (duplicates allowed, because we build the tree structure here)
-          _.tagdir2parent.append(parent)  # at at same index as tagdirs "next" position
-          assert len(_.tagdirs) == len(_.tagdir2parent)
-        iname = caseNormalize(token)
-        if ON_WINDOWS or (iname != token and not _.cfg.reduce_case_storage):  # Linux: only store case-normalized if not reducing storage, Windows: always store
-          if _.log >= 1: debug("Storing case-normalized folder name %r for %r" % (iname, _.getPath(parent, {})))
-          idxs.append(len(_.tagdirs))
-          _.tagdirs.append(intern(iname))
-          _.tagdir2parent.append(parent)
+      cache = {}
+      idxs = []  # first element in "idx" is next index to use in recursion (future parent, current child), no matter if true-case or case-normalized mode is selected
+      if not (ON_WINDOWS and _.cfg.reduce_case_storage):  # for Windows: only store true-case if not reducing storage, Linux: always store
+        if _.log >= 1: debug("Storing original folder name %r for %r" % (child, _.getPath(parent, cache)))
+        idxs.append(len(_.tagdirs))  # for this child folder, add one new element at next index's position (no matter if name already exists in index (!), because it always has a different parent). it's not a fully normalized index, more a tree structure
+        _.tagdirs.append(intern(child))  # now add the child folder name (duplicates allowed, because we build the tree structure here)
+        _.tagdir2parent.append(parent)  # at at same index as tagdirs "next" position
+        assert len(_.tagdirs) == len(_.tagdir2parent)
+      iname = caseNormalize(child)
+      if ON_WINDOWS or (iname != child and not _.cfg.reduce_case_storage):  # Linux: only store case-normalized if not reducing storage, Windows: always store
+        if _.log >= 1: debug("Storing case-normalized folder name %r for %r" % (iname, _.getPath(parent, cache)))
+        idxs.append(len(_.tagdirs))
+        _.tagdirs.append(intern(iname))
+        _.tagdir2parent.append(parent)
+      tokens = [r for r in TOKENIZER.split(child) if r not in ("", child)]
+      if child == "dot.folder": import pdb; pdb.set_trace()
+      for token in tokens:  # HINT: for folders, we also split at dots ("extension") TODO document this difference (also stores .folder extension for the folder)
+        if _.log >= 2: debug("Storing original tokenized name %r for %r" % (token, _.getPath(parent, cache)))
+        i = lindex(_.tags, intern(token), appendandreturnindex)
+        adds.append(i); _.tag2paths[i].append(idxs[-2] if len(idxs) > 0 and even(len(idxs)) else idxs[-1])
+        itoken = caseNormalize(token)
+        if not _.cfg.reduce_case_storage and itoken != token:
+          if _.log >= 2: debug("Storing case-normalized tokenized name %r for %r" % (itoken, _.getPath(parent, cache)))
+          i = lindex(_.tags, intern(itoken), appendandreturnindex)
+          adds.append(i); _.tag2paths[i].append(idxs[-2] if len(idxs) > 0 and even(len(idxs)) else idxs[-1])
       assert len(_.tagdirs) == len(_.tagdir2parent)
-      if _.log >= 2: debug("Tagging folder %r with tags +<%s> *<%s>" % (iname, ",".join([_.tagdirs[x] for x in (newtags + idxs)]), ",".join([_.tags[x] for x in adds])))  # TODO can contain root (empty string)
+      if _.log >= 2: debug("Tagging folder %r with tags +<%s> *<%s>" % (iname, ",".join([_.tagdirs[x] for x in (newtags + idxs)]), ",".join([_.tags[x] for x in adds])))  # TODO can contain root (empty string) HINT adds is only collected for displaying this message
       # 4. recurse
       if not ignore:  # indexing of current folder
         for tag in newtags + idxs: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tag])].extend(idxs)  # add subfolder reference(s) for all collected tags from root to child to tag name
@@ -645,8 +657,10 @@ class Indexer(object):
     '''
     if _.log >= 2: debug("findFiles " + str((aFolder, poss, negs, force)))
     inPath = set(safeSplit(aFolder, SLASH))  # break path into folder names
+    if "folder" in poss: import pdb; pdb.set_trace()
+    inPath.update(reduce(lambda prev, step: prev + TOKENIZER.split(step), inPath, []))  # add tokenized path steps
     if not _.cfg.case_sensitive: inPath.update(set([caseNormalize(f) for f in safeSplit(aFolder, SLASH)]))  # add case-normalized folder names
-    remainder = set([p for p in poss if not normalizer.globfilter(inPath, p)])  # split folder path into tags and remove from remaining criterions, considering case-sensitivity unless deselected or case same as normalized variant
+    remainder = set([p for p in poss if not normalizer.globfilter(inPath, p)])  # split folder path into tags and remove from remaining criterions, considering case-sensitivity unless deselected
     if _.log >= 1: info("Filtering folder %s%s" % (aFolder, " by remaining tags: " + (", ".join(remainder) if len(remainder) > 0 else '<none>')))
     conf = _.cfg.paths.get(aFolder, {})  # if empty, files remain unchanged, we return all
     folders = [aFolder] + [pathnorm(os.path.abspath(os.path.join(_.root + aFolder, mapped)))[len(_.root):] if not mapped.startswith(SLASH) else os.path.join(_.root, mapped) for mapped in conf.get(FROM, [])]  # list of original and all mapped folders

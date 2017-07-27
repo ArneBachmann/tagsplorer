@@ -331,7 +331,7 @@ class Main(object):
             debug("    Entries %s (%s) map to: " % ("'" + _t + "'" if _t != '' else "/", ",".join([str(i) for i, x in enumerate(idx.tagdirs) if x == _t])) + ", ".join(["%s (%d)" % (idx.getPath(_i, _cache), _i) for _i in byMapping[_t]]))
     info("Configuration stats")
     info("  Number of tags:", len(idx.cfg.paths))
-    debug([len(_) for _ in dictviewvalues(idx.cfg.paths)])
+    debug(" ", [len(_) for _ in dictviewvalues(idx.cfg.paths)])
     info("  Average number of entries per folder: %.2f" % (float(sum([len(_) for _ in dictviewvalues(idx.cfg.paths)])) / len(idx.cfg.paths)))
     # TODO show config file timestamp
 
