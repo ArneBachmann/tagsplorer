@@ -100,7 +100,7 @@ Here is a short description of valid program options and arguments:
 - `--tag [+][-]tag[,[+][-]tag2[,tags...]] file[,file2[,files...]]` or `-t`
 
   Action that defines a (set of) (inclusive or exclusive) tag(s) for the following file name(s) or glob pattern(s).
-  This information is stored in the root folder configuration file `.tagsplorer.cfg` and is respected in the index upon next search (-s) or manually triggered file tree walk (-u).
+  This information is stored in the root folder configuration file `.tagsplorer.cfg` and is respected in the index upon next search (-s) or manually triggered file tree walk (-u). TODO leading slash is root-absolute or fs-absolute?
 
 - `--untag` [+][-]tag[,tag2[,tags...]] file[,file2[,files...]] or `--del`
 

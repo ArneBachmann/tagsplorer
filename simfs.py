@@ -11,20 +11,24 @@ if sys.version_info.major >= 3:
   import io
   file = io.IOBase
   _types = (str, bytes)
-  _RIGHTS = 0o777
 else:  # Python 2
   import dircache  # in addition to os.listdir
   _types = (str, bytes, unicode)
-  _RIGHTS = 0777
+_RIGHTS = eval("0o777" if sys.version_info.major >= 3 else "0777")
 
 
-# Patch existence function
-_exists = os.path.exists
-def exists(path, get = False):  # TODO move path determination to own function and base exists on that
-  ''' Case-normalized exists.
-      path: file system path to check for existence
-      get: if True, returns actual case-corrected path instead of boolean value
-      returns: boolean (existence) or string for path
+def _saveUnlink(path):
+  try: _unlink(path)
+  except: pass
+
+def _saveRmdir(path):
+  try: shutil.rmtree(_realPath(path))
+  except: pass
+
+def _realPath(path):
+  ''' Central function that determines the actual file name case for the given folder or file path.
+      path: file system path to analyse
+      returns: string for real path as written in the file system
   >>> _saveUnlink("_x.X")
   >>> with open("_x.X", "w"):
   ...   pass  # write using context manager
@@ -50,12 +54,9 @@ def exists(path, get = False):  # TODO move path determination to own function a
   >>> print(os.path.exists("_x.X"))
   False
   '''
-  _log.debug("Patched os.path.exists %r" % path)
-  if type(path) is file: return _exists(path)  # file handle
-  if not isinstance(path, _types):
-    if not get: return _exists(path)  # delegate or force original Exception
-    raise ValueError("Unknown argument type %r" % type(path))
-  if path is None or path == "": return _exists(path) if not get else path
+  _log.debug("_realPath %r" % path)
+  if not isinstance(path, _types): raise ValueError("Unknown argument type %r" % type(path))
+  if path is None or path == "": return path
   steps = path.split(os.sep)
   if steps[0] == "": steps[0] = os.sep # absolute
   elif steps[0] != os.curdir: steps.insert(0, os.curdir)
@@ -69,52 +70,48 @@ def exists(path, get = False):  # TODO move path determination to own function a
       else: path2 = os.pardir  # if ".."" is first entry
     try: path2 += (os.sep if step not in (os.sep, os.curdir) and path2 != os.sep else "") + files[step.upper()]
     except KeyError as E:  # file entry not found
-      return False if not get else path2 + (os.sep if step not in (os.sep, os.curdir) and path2 != os.sep else "") + step  # file name not in last folder: doesn't exist (yet)
-    try: files = {f.upper(): f for f in _listdir(path2)}; continue
-    except IOError as E:
+      files = {}  # ensures no other steps will be found
+      path2 += (os.sep if step not in (os.sep, os.curdir) and path2 != os.sep else "") + step  # file name not in last folder: doesn't exist (yet)
+      continue
+    try: files = {f.upper(): f for f in _listdir(path2)}; continue  # create step's real-case file map
+    except (IOError, OSError) as E:
       try:
-        with _open(path2, "rb") as fd: return True if not get else path2  # cannot stat
-      except: return False if not get else path2
-    except OSError as E:
-      try:
-        with _open(path2, "rb") as fd: return True if not get else path2
-      except: return False if not get else path2
-  return True if not get else path2
-os.path.exists = exists  # monkey-patch function
+        with _open(path2, "rb") as fd: return path2  # cannot stat
+      except: return path2
+  return path2
 
-# Path file removal
+_exists = os.path.exists
+def __exists(path): return _exists(path)  # also for file handles
+os.path.exists = __exists  # monkey-patch function
+
 _unlink, _remove = os.unlink, os.remove  # could be the same, but just in case
-def __unlink(path): return _unlink(exists(path, True))
-def __remove(path): return _remove(exists(path, True))
+def __unlink(path): return _unlink(_realPath(path))
+def __remove(path): return _remove(_realPath(path))
 os.unlink, os.remove = __unlink, __remove
 
-def _saveUnlink(path):
-  try: _unlink(path)
-  except: pass
-
 _isdir = os.path.isdir
-def __isdir(path): return _isdir(exists(path, True))  # in Coconut: def os.path.isdir = ...
+def __isdir(path): return _isdir(_realPath(path))  # in Coconut: def os.path.isdir = ...
 os.path.isdir = __isdir
 
 _isfile = os.path.isfile
-def __isfile(path): return _isfile(exists(path, True))
+def __isfile(path): return _isfile(_realPath(path))
 os.path.isfile = __isfile
 
 _islink = os.path.islink
-def __islink(path): return _islink(exists(path, True))
+def __islink(path): return _islink(_realPath(path))
 os.path.islink = __islink
 
 _stat, _lstat = os.stat, os.lstat
-def __stat(path): return _stat(exists(path, True))
-def __lstat(path): return _lstat(exists(path, True))
+def __stat(path): return _stat(_realPath(path))
+def __lstat(path): return _lstat(_realPath(path))
 os.stat, os.lstat = __stat, __lstat
 
 _listdir = os.listdir
-def __listdir(path): return _listdir(exists(path, True))
+def __listdir(path): return _listdir(_realPath(path))
 os.listdir = __listdir
 if sys.version_info.major < 3:
   _dircache = dircache.listdir
-  def __dircache(path): return _dircache(exists(path, True))
+  def __dircache(path): return _dircache(_realPath(path))
   dircache.listdir = __dircache
 
 
@@ -125,7 +122,7 @@ class Open(object):
     _log.debug("calling patched 'open' function")
     _.path = path
     _.mode = mode
-    _.fd = _open(exists(path, True), mode)
+    _.fd = _open(_realPath(path), mode)
 
   def __enter__(_):
     _log.debug("Entering patched 'open' context manager")
@@ -146,19 +143,19 @@ class Open(object):
 _open, open = open, Open
 
 _chdir = os.chdir
-def __chdir(path): return _chdir(exists(path, True))
+def __chdir(path): return _chdir(_realPath(path))
 os.chdir = __chdir
 
 _mkdir = os.mkdir
-def __mkdir(path, mode = _RIGHTS): return _mkdir(exists(path, True), mode)
+def __mkdir(path, mode = _RIGHTS): return _mkdir(_realPath(path), mode)
 os.mkdir = __mkdir
 
 _rmdir = os.rmdir
-def __rmdir(path): return _rmdir(exists(path, True))
+def __rmdir(path): return _rmdir(_realPath(path))
 os.rmdir = __rmdir
 
 _makedirs = os.makedirs
-def __makedirs(path, mode = _RIGHTS, exist_ok = False): return _makedirs(exists(path, True), **({"mode": mode} if sys.version_info.major < 3 else {"mode": mode, "exist_ok": exist_ok}))
+def __makedirs(path, mode = _RIGHTS, exist_ok = False): return _makedirs(_realPath(path), **({"mode": mode} if sys.version_info.major < 3 else {"mode": mode, "exist_ok": exist_ok}))
 os.makedirs = __makedirs
 
 
