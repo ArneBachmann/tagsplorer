@@ -21,6 +21,8 @@ def call(argstr): so = subprocess.Popen(argstr, shell = True, bufsize = 1000000,
 
 def runP(argstr, repo = None):  # instead of script call via Popen, to allow for full test coverage collection
   def tmp():
+    global _log
+    tp._log = _log
     sys.argv = ["tp.py", "-r", REPO if repo is None else repo] + (["--simulate-winfs"] if SIMFS else []) + lib.safeSplit(argstr, " ")
     logFile.write("TEST: " + " ".join(sys.argv) + " " + repr(argstr) + "\n")
     tp.Main().parse()  # initiates script run due to overriding sys.path above
@@ -30,6 +32,7 @@ def runP(argstr, repo = None):  # instead of script call via Popen, to allow for
   return res
 
 def wrapChannels(func):
+  global _log
   oldv, oldo, olde = sys.argv, sys.stdout, sys.stderr
   buf = StringIO()
   sys.stdout = sys.stderr = buf
@@ -132,7 +135,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("1 files found", runP(".x -l2"))
 
   def testReduceCaseStorage(_):
-    _.assertIn("Tags: 87" if lib.ON_WINDOWS else "Tags: 95", runP("--stats"))
+    _.assertIn("Tags: 99  " if lib.ON_WINDOWS else "Tags: 95", runP("--stats"))
     _.assertIn("2 files found", runP("Case -v"))  # contained in /cases/Case
     _.assertIn("0 files found", runP("case -v"))  # wrong case writing, can't find
     _.assertIn("2 files found", runP("case -v -C"))  # ignore case: should find
@@ -200,7 +203,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["0 files found"], runP("-s filea.exta -v"))  # was "No folder match" earlier, but searching files reduces the "includes" list to [] which returns all paths now
     _.assertNotIn("filea.exta", runP("-s filea.exta"))
 
-  def testGlobalSkipDir(_):
+  def testGlobalSkipDir(_):  # should skip /c/c2 which contains "filec.extb"
     _.assertIn("0 files found", runP("-s filec.extb -v"))  # should not been found due to skipd setting
     _.assertNotIn("filec.extb", runP("-s filec.extb"))
 
@@ -325,7 +328,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["No folder match", "/ignore_skip/marker-files/a/1/1.2", "1 files found"], runP("a .2 -v"))  # no match due to skip file marker
 
   def testNegativeExtension(_):
-    _.assertAllIn(["/a/a2/file3.ext3", "1 files found"], runP("a,-.ext1,-.ext2 -v"))
+    _.assertAllIn(["/a/a2/file3.ext3", "4 files found" if lib.ON_WINDOWS else "1 files found"], runP("a,-.ext1,-.ext2 -v"))
 
   def testUnwalk(_):
     def unwalk(_, idx = 0, path = ""):
@@ -375,7 +378,7 @@ if __name__ == '__main__':
   if SIMFS: print("Using case-normalization simulation")
   PYTHON = os.path.realpath(sys.executable) if SIMFS or not lib.ON_WINDOWS else '"' + os.path.realpath(sys.executable) + '"'  # case for linux-simulates-winfs
   logFile = None  # declare global variable
-#  logging.basicConfig(level = logging.DEBUG, stream = sys.stderr, format = "%(asctime)-25s %(levelname)-8s %(name)-12s | %(message)s")
+  _log = None
   REPO = '_test-data'
   SVN = tp.findRootFolder(None, '.svn') is not None
   print("Using VCS '%s' to revert test data" % "SVN" if SVN else "Git")

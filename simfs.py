@@ -14,7 +14,7 @@ if sys.version_info.major >= 3:
 else:  # Python 2
   import dircache  # in addition to os.listdir
   _types = (str, bytes, unicode)
-_RIGHTS = eval("0o777" if sys.version_info.major >= 3 else "0777")
+_RIGHTS = eval("0777" if sys.version_info.major < 3 else "0o777")
 
 
 def _saveUnlink(path):

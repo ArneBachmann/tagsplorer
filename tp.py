@@ -11,10 +11,8 @@ import sys
 if "--simulate-winfs" in sys.argv or os.environ.get("SIMULATE_WINFS", "False").lower() == "true":  # don't move to optparse handling, which is not in __main__
   from simfs import *  # monkey-patch current namespace
 
-from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imports that need't be repeated here
+from lib import *  # direct namespace import is necessary to enable correct unpickling; also pulls in all other imported libraries to avoid repeated import here
 from version import __version_info__, __version__  # used by setup.py
-
-_log = Logger(logging.getLogger(__name__)); debug, info, warn, error = _log.debug, _log.info, _log.warn, _log.error
 
 
 APPNAME = "tagsPlorer"  # or something clunky like "virtdirview"
@@ -192,7 +190,7 @@ class Main(object):
       try:
         if len(paths) > 0: print("\n".join(paths))#idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
       except KeyboardInterrupt: pass  #idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
-      return
+      return  # no file filtering requested
     dcount, counter, skipped = 0, 0, []  # if not only folders, but also files
     for path, (files, skip) in ((path, idx.findFiles(path, poss, negs, not _.options.strict)) for path in paths):
       if skip: skipped.append(path); continue  # memorize to skip all folders with this prefix TODO is this always ordered correctly (breadth first)?
@@ -367,10 +365,11 @@ class Main(object):
     if _.options.log >= 2: debug("Raw arguments: " + str(_.args))
     _.args, excludes = splitCrit(_.args, lambda e: e[:2] != '--')  # remove "--" from "--mark", allows to use --mark to exclude this tag (unless it's an option switch)
     _.options.excludes.extend([e[2:] for e in excludes])  # additional non-option flags are interpreted as further exclusive tags
-    _.options.log = max(1 if _.options.verbose else 0, _.options.log)
+    _.options.log = max(1 if _.options.verbose else 0, _.options.log)  # --debug wasn't chose non purpose, to allow users searching for exclusive tags "debug". Use environment variable instead
     if _.options.index is not None and _.options.root is None: error("Index location specified (-i) without specifying root (-r)"); sys.exit(1)
     if _.options.log >= 1: info("Started at %s" % (time.strftime("%H:%M:%S")))
-    if _.options.log >= 1: debug("Running in debug mode.")
+    if _log.getEffectiveLevel() <= logging.DEBUG: info("Running in debug mode.")
+    if _.options.log >= 1: info("Running in verbose mode.")
     if _.options.log >= 2: debug("Updated options: " + str(_.options))
     if _.options.log >= 2: debug("Updated arguments: " + str(_.args))
     if _.options.init: _.initIndex()
@@ -387,5 +386,6 @@ class Main(object):
 
 
 if __name__ == '__main__':
-  logging.basicConfig(level = logging.DEBUG if '-v' in sys.argv or '--verbose' in sys.argv or '--debug' in sys.argv or os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s:%(lineno)d | %(message)s")
+  logging.basicConfig(level = logging.DEBUG if os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s:%(lineno)d | %(message)s")
+  _log = Logger(logging.getLogger(__name__)); debug, info, warn, error = _log.debug, _log.info, _log.warn, _log.error
   Main().parse()

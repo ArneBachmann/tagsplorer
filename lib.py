@@ -45,6 +45,7 @@ IGNFILE = ".tagsplorer.ign"  # marker file (dito)
 IGNORE, SKIP, TAG, FROM, SKIPD, IGNORED, GLOBAL = map(intern, ("ignore", "skip", "tag", "from", "skipd", "ignored", "global"))  # config file options
 SEPA, SLASH, DOT = map(intern, (";", "/", os.extsep))
 TOKENIZER = re.compile(r"[\s\-_\.]")
+RE_SANITIZER = re.compile(r"[\.\[\]\(\)\^\$\+\*\?\{\}]")
 
 
 # Functions
@@ -117,6 +118,11 @@ def removeCasePaths(paths):
   caseMapping = dd()
   for path in paths: caseMapping[caseNormalize(path)].append(path)  # assign original and case-normalized version as values to the case-normalized key
   return [l[1] if len(l) > 1 else l[0] for l in (list(sorted(ll)) for ll in dictviewvalues(caseMapping))]  # first entry [0] is always all-uppercase (lower ASCII character than lower case), therefore order is always ABC, Abc (abC, abc), and no more than two entries are expected
+
+def currentPathInGlobalIgnores(path, idirs): return (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs  # function definitions used only in this local context
+def re_sanitize(name): return RE_SANITIZER.sub(".", name)
+def partOfAnyGlobalSkipPath(path, sdirs): return xany(lambda skp: wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((re_sanitize(skp),) * 4), path).groups()[0].replace("/", "") == skp, False), sdirs)  # dynamic RE generation TODO sanitize path names?
+def anyParentIsSkipped(path, paths): return xany(lambda p: SKIP in dictget(paths, SLASH.join(path.split(SLASH)[:p + 1]), {}), range(path.count(SLASH)))  # e.g. /a checks once at [:1] "/".join(["", "a"])
 
 
 # Classes
@@ -217,7 +223,7 @@ class Config(object):
     ''' Load configuration from file, if timestamp differs from index' timestamp. '''
     if _.log >= 2: debug("Loading configuration %r" % ((filename, index_ts),))
     with open(filename, 'r') as fd:  # HINT: don't use rb, because in Python 3 this returns bytes objects
-      if _.log >= 1: info("Comparing configuration timestamp for " + filename)
+      if _.log >= 1: info("Comparing configuration timestamp for " + filename)  # TODO root-normalize path to save output letters
       timestamp = float(fd.readline().rstrip())
       if (index_ts is not None) and timestamp == index_ts:
         if _.log >= 1: info("Skip loading configuration, because index is up to date")
@@ -597,18 +603,14 @@ class Indexer(object):
         returnAll: shortcut flag that simply returns all paths from index instead of finding and filtering results
         returns: list of folder paths (case-normalized or both normalized and as is, depending on the case-sensitive option)
     '''
-    def re_sanitize(name): return name  # return "".join([c for c in ])  # TODO replace all occurences of special characters with a "."
-    def currentPathInGlobalIgnores(path, idirs): return (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs  # function definitions used only in this context
-    def partOfAnyGlobalSkipPath(path, sdirs): return xany(lambda skp: wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((re_sanitize(skp),) * 4), path).groups()[0].replace("/", "") == skp, False), sdirs)  # dynamic RE generation TODO sanitize path names?
-    def anyParentIsSkipped(path, paths): return xany(lambda p: SKIP in dictget(paths, SLASH.join(path.split(SLASH)[:p + 1]), {}), range(path.count(SLASH)))
 
     if _.log >= 2: debug("findFolders +<%s> -<%s>%s" % (",".join(include), ",".join(exclude), " (Return all)" if returnAll else ""))
     idirs, sdirs = dictget(dictget(_.cfg.paths, '', {}), IGNORED, []), dictget(dictget(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored and skipped paths
-    if _.log >= 2: debug("Building list of all paths")
-    _.allPaths = wrapExc(lambda: _.allPaths, lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), {})))  # try cache first, otherwise compute union of all paths and put into cache to speed up consecutive calls (e.g. when used in a server loop) TODO avoid this step?
-    if returnAll or len(include) == 0:
+    if _.log >= 2: debug("Building list of all paths. Global ignores/skips: %r -- %r" % (idirs, sdirs))
+    _.allPaths = wrapExc(lambda: _.allPaths, lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), {})))  # try cache first, otherwise compute union of all paths and put into cache to speed up consecutive calls (e.g. when used in a server loop) TODO avoid this step? make lazy? run parallel?
+    if returnAll or len(include) == 0:  # for only exclusive tags, we first need all candidates and then strip down
       if _.log >= 2: debug("Pruning skipped and ignored paths from %d" % len(_.allPaths))
-      alls = [path for path in _.allPaths if not currentPathInGlobalIgnores(path, idirs) and not partOfAnyGlobalSkipPath(path, sdirs) and not anyParentIsSkipped(path, _.cfg.paths) and IGNORE not in dictget(_.cfg.paths, path, {})]  # all existing paths except globally ignored/skipped paths TODO add marker file logic below TODO move checks fo _.allPaths cache
+      alls = [path for path in _.allPaths if not currentPathInGlobalIgnores(path, idirs) and not partOfAnyGlobalSkipPath(path, sdirs) and not anyParentIsSkipped(path, _.cfg.paths) and IGNORE not in dictget(_.cfg.paths, path, {})]  # all existing paths except globally ignored/skipped paths TODO add marker file logic below?
       alls = [a for a in alls if isdir(_.root + os.sep + a)]  # perform true folder check TODO make this skippable to speed up? e.g. via --relaxed
       if _.cfg.log >= 2: debug("Remaining %d paths" % len(alls))
       if _.cfg.log >= 2: debug("findFolders: %r" % alls)
@@ -731,5 +733,5 @@ _log = Logger(logging.getLogger(__name__)); debug, info, warn, error = _log.debu
 
 
 if __name__ == '__main__':
-  ''' This code is just for testing. Run in svn/projects by tagsplorer/lib.py '''
-  if len(sys.argv) > 1 and sys.argv[1] == '--test': import doctest; doctest.testmod()
+  ''' This main section is just for testing. '''
+  if '--test' in sys.argv[1]: import doctest; doctest.testmod()
