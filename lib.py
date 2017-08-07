@@ -45,7 +45,7 @@ IGNFILE = ".tagsplorer.ign"  # marker file (dito)
 IGNORE, SKIP, TAG, FROM, SKIPD, IGNORED, GLOBAL = map(intern, ("ignore", "skip", "tag", "from", "skipd", "ignored", "global"))  # config file options
 SEPA, SLASH, DOT = map(intern, (";", "/", os.extsep))
 TOKENIZER = re.compile(r"[\s\-_\.]")
-RE_SANITIZER = re.compile(r"[\.\[\]\(\)\^\$\+\*\?\{\}]")
+RE_SANITIZER = re.compile(r"([\.\[\]\(\)\^\$\+\*\?\{\}])")
 
 
 # Functions
@@ -120,7 +120,7 @@ def removeCasePaths(paths):
   return [l[1] if len(l) > 1 else l[0] for l in (list(sorted(ll)) for ll in dictviewvalues(caseMapping))]  # first entry [0] is always all-uppercase (lower ASCII character than lower case), therefore order is always ABC, Abc (abC, abc), and no more than two entries are expected
 
 def currentPathInGlobalIgnores(path, idirs): return (path[path.rindex(SLASH) + 1:] if path != '' else '') in idirs  # function definitions used only in this local context
-def re_sanitize(name): return RE_SANITIZER.sub(".", name)  # TODO substitute by found character, prepended by a \
+def re_sanitize(name): return RE_SANITIZER.sub(r"\\\1", name)
 def partOfAnyGlobalSkipPath(path, sdirs): return xany(lambda skp: wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((re_sanitize(skp),) * 4), path).groups()[0].replace("/", "") == skp, False), sdirs)  # dynamic RE generation TODO sanitize path names?
 def anyParentIsSkipped(path, paths): return xany(lambda p: SKIP in dictget(paths, SLASH.join(path.split(SLASH)[:p + 1]), {}), range(path.count(SLASH)))  # e.g. /a checks once at [:1] "/".join(["", "a"])
 
