@@ -12,7 +12,7 @@ REPO = '_test-data'
 
 def call(argstr):
   ''' Run in a subprocess, no code coverage. '''
-  return subprocess.Popen(argstr, shell = True, bufsize = 1000000, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).communicate()[0].decode(sys.stdout.encoding)
+  return subprocess.Popen(argstr, cwd = os.base.dirname(os.path.abspath(__file__)), shell = True, bufsize = 1000000, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).communicate()[0].decode(sys.stdout.encoding)
 
 
 def runP(argstr, repo = None):  # instead of script call via Popen, this allows coverage collection
@@ -61,8 +61,8 @@ def tearDownModule():
   if not os.environ.get("SKIP", "False").lower() == "true":
     try: os.unlink(REPO + os.sep + constants.INDEX)
     except: pass
-    if SVN: call('svn revert   "%s"' % (REPO + os.sep + constants.CONFIG))
-    else:   call('git checkout "%s"' % (REPO + os.sep + constants.CONFIG))
+    if SVN: call(f'svn revert   "{REPO + os.sep + constants.CONFIG}"')
+    else:   call(f'git checkout "{REPO + os.sep + constants.CONFIG}"')
 
 
 class TestRepoTestCase(unittest.TestCase):
@@ -72,8 +72,8 @@ class TestRepoTestCase(unittest.TestCase):
     ''' Run before each testCase. '''
     try: os.unlink(REPO + os.sep + constants.INDEX)
     except FileNotFoundError: pass  # if earlier tests finished without errors
-    if SVN:  call('svn revert   "%s"' % (REPO + os.sep + constants.CONFIG))
-    else:    call('git checkout "%s"' % (REPO + os.sep + constants.CONFIG))
+    if SVN:  call(f'svn revert   "{REPO + os.sep + constants.CONFIG}"')
+    else:    call(f'git checkout "{REPO + os.sep + constants.CONFIG}"')
     try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))
     except: pass
     _.assertIn("Updated configuration entry", runP("--set case_sensitive=True -v"))  # fixed value for reproducibility TODO allow all combinations on all platforms

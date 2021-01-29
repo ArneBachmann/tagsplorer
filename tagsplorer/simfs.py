@@ -6,7 +6,7 @@ _log = logging.getLogger(__name__)
 
 if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "false").lower() == "true":
   _log.debug("Using case-insensitive file system emulation (for testing Windows behavior on Linux)")
-  sys.argv.remove('--simulate-winfs')
+  if '--simulate-winfs' in sys.argv: sys.argv.remove('--simulate-winfs')
 
   from tagsplorer.constants import SLASH, ST_SIZE
   from tagsplorer.utils import wrapExc

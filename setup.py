@@ -17,7 +17,7 @@ if 'clean' not in sys.argv:
 
 setup(
   name = 'tagsPlorer',
-  version = versionString + micro,
+  version = versionString,
   description = "tagsPlorer V" + versionString + micro,
   long_description = "",
   classifiers = [c.strip() for c in """
