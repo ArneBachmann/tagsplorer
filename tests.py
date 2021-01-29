@@ -315,7 +315,9 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["Found 4 files in 3 folders", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -v"))  # with exclude with files
 
   def testTestLib(_):
-    _.assertAllIn(["0 failed", "Test passed"], call(PYTHON + " tagsplorer/lib.py -v"))
+    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " tagsplorer/lib.py -v"))
+    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " tagsplorer/tp.py --test -v"))
+    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " tagsplorer/utils.py -v"))
 
   def testExtensionAndTag(_):
     _.assertAllIn(["Found 2 files in 1 folders", "/b/b1/file3.ext1"], runP("b .ext1 -v"))
@@ -371,9 +373,9 @@ def load_tests(loader, tests, ignore):
 
 
 if __name__ == '__main__':
-  os.chdir(os.path.dirname(os.path.abspath(__file__)))
-  PYTHON = os.path.realpath(sys.executable) if not constants.ON_WINDOWS else '"' + os.path.realpath(sys.executable) + '"'
+  os.chdir(os.path.dirname(os.path.abspath(__file__)))  # change to own folder
+  PYTHON = '"' + os.path.realpath(sys.executable) + '"' if constants.ON_WINDOWS else os.path.realpath(sys.executable)
   logFile = None
   SVN = tp.findRootFolder('.svn') is not None
-  print("Using VCS '%s' to revert test data" % "SVN" if SVN else "Git")
+  print("Using VCS '%s' to revert test data" % "Subversion" if SVN else "Git")
   unittest.main()  # warnings = "ignore")
