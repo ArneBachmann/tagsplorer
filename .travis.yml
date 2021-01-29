@@ -3,34 +3,6 @@ matrix:
   include:
   - os: linux
     dist: trusty
-    python: 3.5
-    env:
-    - SIMULATE_WINFS=false
-    - UBUNTU=trusty
-    - PYVER=CP3
-  - os: linux
-    dist: trusty
-    python: 3.5
-    env:
-    - SIMULATE_WINFS=true
-    - UBUNTU=trusty
-    - PYVER=CP3
-  - os: linux
-    dist: trusty
-    python: pypy
-    env:
-    - SIMULATE_WINFS=false
-    - UBUNTU=trusty
-    - PYVER=PP2
-  - os: linux
-    dist: trusty
-    python: pypy
-    env:
-    - SIMULATE_WINFS=true
-    - UBUNTU=trusty
-    - PYVER=PP2
-  - os: linux
-    dist: trusty
     python: pypy3
     env:
     - SIMULATE_WINFS=false
@@ -45,25 +17,46 @@ matrix:
     - PYVER=PP3
   - os: linux
     dist: precise
-    python: 3.5
+    python: 3.6
     env:
     - SIMULATE_WINFS=false
     - UBUNTU=precise
     - PYVER=CP3
   - os: linux
     dist: precise
-    python: 3.5
+    python: 3.6
     env:
     - SIMULATE_WINFS=true
     - UBUNTU=precise
     - PYVER=CP3
   - os: linux
     dist: precise
-    python: pypy
+    python: 3.7
     env:
     - SIMULATE_WINFS=false
     - UBUNTU=precise
-    - PYVER=PP2
+    - PYVER=CP3
+  - os: linux
+    dist: precise
+    python: 3.7
+    env:
+    - SIMULATE_WINFS=true
+    - UBUNTU=precise
+    - PYVER=CP3
+  - os: linux
+    dist: precise
+    python: 3.8
+    env:
+    - SIMULATE_WINFS=false
+    - UBUNTU=precise
+    - PYVER=CP3
+  - os: linux
+    dist: precise
+    python: 3.8
+    env:
+    - SIMULATE_WINFS=true
+    - UBUNTU=precise
+    - PYVER=CP3
   - os: linux
     dist: precise
     python: pypy3
@@ -78,12 +71,6 @@ matrix:
     - SIMULATE_WINFS=true
     - UBUNTU=precise
     - PYVER=PP3
-#    - os: linux
-#      dist: precise
-#      python: pypy
-#    - os: linux
-#      dist: precise
-#      python: pypy3
 install: "pip install coverage python-coveralls"  # or "coveralls" instead (alternative package)
 script: python setup.py build && coverage run tests.py && coverage html && coverage annotate tests.py
 after_success:
