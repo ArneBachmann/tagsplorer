@@ -12,7 +12,7 @@ REPO = '_test-data'
 
 def call(argstr):
   ''' Run in a subprocess, no code coverage. '''
-  return subprocess.Popen(argstr, cwd = os.base.dirname(os.path.abspath(__file__)), shell = True, bufsize = 1000000, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).communicate()[0].decode(sys.stdout.encoding)
+  return subprocess.Popen(argstr, cwd = os.path.dirname(os.path.abspath(__file__)), shell = True, bufsize = 1000000, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).communicate()[0].decode(sys.stdout.encoding)
 
 
 def runP(argstr, repo = None):  # instead of script call via Popen, this allows coverage collection
