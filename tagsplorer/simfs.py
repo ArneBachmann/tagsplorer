@@ -53,8 +53,8 @@ if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "false").l
     while os.pardir in steps:  # implement os.path.normpath
       steps.remove(steps.index(os.pardir) - 1)  # /a/b/../c = /a/c
       steps.remove(steps.index(os.pardir))  # /a/b/../c = /a/c
-    while os.curdir in steps[1:]:  # implement os.path.normpath
-      steps.remove(steps[1:].index(os.curdir) + 1)
+    while os.curdir in steps:  # implement os.path.normpath
+      steps.remove(steps.index(os.curdir))
     real, steps = steps[0], steps[1:]
     for step in steps:
       try: files = _listdir(real if real else "/")  # special case for root
