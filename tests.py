@@ -10,9 +10,9 @@ from tagsplorer import constants, lib, simfs, tp, utils  # entire files
 REPO = '_test-data'
 
 
-def call(argstr):
+def call(argstr, cwd = os.path.dirname(os.path.abspath(__file__))):
   ''' Run in a subprocess, no code coverage. '''
-  return subprocess.Popen(argstr, cwd = os.path.dirname(os.path.abspath(__file__)), shell = True, bufsize = 1000000, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).communicate()[0].decode(sys.stdout.encoding)
+  return subprocess.Popen(argstr, cwd = cwd, shell = True, bufsize = 1000000, stdout = subprocess.PIPE, stderr = subprocess.STDOUT).communicate()[0].decode(sys.stdout.encoding)
 
 
 def runP(argstr, repo = None):  # instead of script call via Popen, this allows coverage collection
@@ -315,9 +315,9 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["Found 4 files in 3 folders", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -v"))  # with exclude with files
 
   def testTestLib(_):
-    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " tagsplorer/lib.py -v"))
-    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " tagsplorer/tp.py --test -v"))
-    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " tagsplorer/utils.py -v"))
+    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " lib.py -v", cwd = os.path.dirname(os.path.abspath(__file__)) + os.sep + "tagsplorer"))
+    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " tp.py --test -v", cwd = os.path.dirname(os.path.abspath(__file__)) + os.sep + "tagsplorer"))
+    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " utils.py -v", cwd = os.path.dirname(os.path.abspath(__file__)) + os.sep + "tagsplorer"))
 
   def testExtensionAndTag(_):
     _.assertAllIn(["Found 2 files in 1 folders", "/b/b1/file3.ext1"], runP("b .ext1 -v"))
