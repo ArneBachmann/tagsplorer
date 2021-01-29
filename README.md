@@ -1,198 +1,394 @@
-[![Build Status](https://travis-ci.org/ArneBachmann/tagsplorer.svg?branch=master)](https://travis-ci.org/ArneBachmann/tagsplorer)
+Linux: [![Build Status](https://travis-ci.org/ArneBachmann/tagsplorer.svg?branch=master)](https://travis-ci.org/ArneBachmann/tagsplorer) Windows: [![Build status](https://ci.appveyor.com/api/projects/status/46axk9bixn4ab0d5/branch/master?svg=true)](https://ci.appveyor.com/project/ArneBachmann/tagsplorer/branch/master)  Test coverage: [![Coverage Status](https://coveralls.io/repos/github/ArneBachmann/tagsplorer/badge.svg?branch=master)](https://coveralls.io/github/ArneBachmann/tagsplorer?branch=master)
 
-# tagsplorer
-A quick and resource-efficient OS-independent tagging filetree extension tool and library written in Python, working with both Python versions 2 and 3.
 
-Each folder name of the indexed file tree is implicitly treated as a tag name, and additional tags can be set or excluded on singular files or file globs. Contents of other folders in the file tree can virtually be mapped. TODO check if globs operate only on files or accidentally also on folders.
+# tagsPlorer
+A quick and resource-efficient OS-independent tagging folder tree extension tool and library written in Python.
+*tagsPlorer* is licensed under the [Mozilla Public License version 2.0](https://www.mozilla.org/en-US/MPL/2.0/), which can also be found in the [`LICENSE`](LICENSE) file.
+
+Each folder name of the indexed file tree is implicitly treated as a tag name, and additional tags can be set or excluded on singular files or file glob patterns.
+Contents of other folders in the file tree can virtually be mapped into the tree.
 The entire system is fully backwards-compatible with the common file tree metaphor present in most file systems.
 
+
+## Initial example
+If you happen to manage your data in a tree-like manner, as most often the case in most any contemporary file system, your data may look similar like that:
+
+```
+/personal/money/tax/2016
+/personal/money/tax/2017
+/personal/money/invoice/2016
+/personal/money/invoice/2017
+/personal/travel/2011/hawaii
+/personal/travel/2011/new york
+/work/projects/archive
+/work/projects/current/communication
+```
+
+This is just an example, but gives you the general idea.
+In each folder, you have files of varying types like office documents, media, or others.
+*tagsPlorer* allows you to create virtual "views" over your files allowing your to ask for "all Word documents from 2016" via `tp .docx 2016`, or "all money-related spreadsheets files from 2017" via `tp money 2017 .xlsx`.
+
+
 ## Problem statement
-Nowadays most operating systems and window managers still adhere to the "tree of files" metaphor, or try to employ some kind of integrated search engine to find and access existing files.
-Both approaches have strong drawbacks that could be solved by tagging files individually, and only when needed.
+Nowadays most operating systems and file system browsers still adhere to the *tree of files* metaphor, or try to employ some kind of integrated search engine to find and access existing files.
+Both approaches have noticeable drawbacks that could be solved by adding a thin optional tagging layer.
 
 ### Problems with file trees
-Each file belongs to only one parent folder, which practically prohibits a file to be found under more than one category. This can be solved locally by using soft or hard links, if the OS supports them, or storing the same file several times in different folders. In that case, however, you either loose OS-independence, compatibility with version control systems becomes clunky and error-prone, or you have lots of duplication that again leads to human errors.
+Each file belongs to exactly one parent folder, which practically prohibits a file to be found under more than one category, one exception being Windows 7's libraries, which are virtual views over several folders.
+
+This can be solved locally by using soft or hard links, if the operating system and file system support them, or storing the same file several times in different folders.
+In that case, however, you either lose independence from the operating system, and/or compatibility with version control systems becomes clunky and error-prone, or you have lots of duplication that might lead to human errors and increased storage demands.
 
 ### Problems with search engines
-There are (semantic) intelligent search engines that continuously crawl and oversee your file system, guessing and suggesting what you might want to access next. Here the problem lies in the system overhead and loss of control - you don't know if you are presented the right file versions, and if you search for the right terms.
+Some desktop systems come with (sometimes even semantic) search engines that continuously crawl and index your files, plus guess and suggest what you might want to access next.
+Here the problem lies in the system overhead and loss of control - you don't know if you are presented the relevant file (or version of tit) and if the search terms are correct, and you lose oversight of your actual underlying file system structure.
 
-## Solution: tagsplorer to the rescue!
-Tagsplorer uses a simple concept which enables you to continue using simple and compatible file trees, keep all your data under version control of your choice, allows you to put files or entire folders into more than one (virtual) category, and still benefit from little manual maintenance or additional setup.
 
-# Usage
-Hint: Currently it's not possible to glob over folder names efficiently; trying to do so will need to walk all folders that are left in the filter process.
+## One solution: tagsPlorer to the rescue!
+*tagsPlorer* uses a simple concept which enables you to
+- continue using simple and compatible file trees and the standard load/save file dialogs,
+- keep all your data under version control of your choice,
+- allows you to put files or entire folders into more than one (virtual) category,
+
+and still benefit from only little manual maintenance or additional setup.
+The benefit will increase even more with graphical tools using this library and with tighter integration into the OS or desktop system of your choice.
+
+
+## History
+The author has been attempting to write similar utilities several times in the past, namely `taggify`, `tagtree`, and `tagtree2`.
+This is his latest take at this persistent problem of convenient semi-sewmantic data archiving and retrieval by using space-efficient ahead-of-time indexing.
+There are similarities to the Linux `find` and `grep` utilites, which are performant but crawl the entire folder tree on every search, and don't support virtual folder mapping.
+There exist other projects with similar goals, e.g. [TMSU](https://github.com/oniony/TMSU).
+
+
+## Usage
+*Hint:* Currently it's not possible to glob over folder names efficiently; trying to do so requires *tagsPlorer* to walk all folders that are left after an initial preselection process, or will have no effect when preselection picks up a set of potential folder matches before that step.
+
 
 ## Command-line interface
-The current main and only user interface is `tp.py`, a thin layer over the library's basic functions.
-Here is a short description of valid programoptions and arguments:
+Try running *tagsPlorer* with the [PyPy](http://pypy.org) Python 3 distribution.
 
-* `--help`
+The current only user interface is the console script `tp` (or `python3 -m tagsplorer.tp`, a thin yet streamlined layer over the library's basic functions.
+*Glob patterns* support using `*` and `?` to match any character sequence or single character, but not character lists and ranges like `[abc]` or `[a-z]`; also make sure to quote the globs correctly for your shell.
 
-  Shows user options, as does this section
+Here is a short description of valid program options and arguments:
 
-* `--test [-v]`
+- `--init [--root <rootfolder>]` or `-i [-r <rootfolder>]`
 
-  Runs unit tests from `tp.py`. If `-v` is specified, use verbose mode.
+  Create an empty configuration in the current (or specified) folder.
 
-* `--version`
+  The location of the configuration file `.tagsplorer.cfg` marks the root path for an entire indexed file tree.
+  No files higher up the parent hierarchy will be considered.
+  This - in theory - allows for nested sub-indices, (not recommended, though).
 
-  Shows version string of code base
+  Creating the root configuration will not start indexing the folder tree.
+  Use the `--update` command or a search command to trigger that.
 
-* `--init [-r rootfolder]`
+`--update` or `-U`
 
-  Create an empty configuration in the current folder (or the relative or absolute one specified by the -r option).
-  The location of a configuration file `.tagsplorer.cfg` marks the root path for an entire indexed file tree. No other configuration files higher up the parent hierarchy will be considered.
+  Update the file index by walking the entire folder tree from the root down to leaf folders.
+  This creates or updates (in fact replaces) the index in `.tagsplorer.idx` with the file system state respecting the current configuration.
+  As this file will be written over on every index run, there is no need to track outdated items or perform memory management in the index.
+  This simplifies the entire software model.
 
-`--update` or `-u`
+- `[--search|-s] [[+]tags1a[,tags1b[,tags1c...]] [[+]tags2a[,...]]] [[-]tags3a[,tags3b[,tags3c...]]]` or *no* command switch plus search terms appended
 
-  Update the file index by walking the entire folder tree from the root to child folders.
-  This creates or updates the `.tagsplorer.idx` file with newly found contents.
-  Since this file will be written over on every inde run, there is no need to track outdated items, perform memory management or garbage collections inside the index.
+  Perform a search with inclusive (`+`) and exclusive (`-`) search terms.
 
-* `--search [[+]tag1[,tags2[,tags...]]] [[-]tag3[,tag4[,tags...]]] [-r rootfolder]` or `-s` or no option
+  This is the main operation for *tagsPlorer* and accepts search terms like tags, folder names, file names, file extensions, or glob patterns.
 
-  Perform a search (which is like a virtual folder listing).
-  This is the main use case for the tagsplorer tools and accepts inclusive as well as exclusive search terms.
-  There can be any number of arguments, which optionally can also be specified in a comma-separated way (after positives tags), or using the `-x` option.
-  Note, however, as the command line interface cannot distinguish between valid options and negative tag arguments well, negative (exclusive) tag arguments must be specified after either after a double-dash `--` or after a comma. TODO this is error-prone if using wrong options we'd get wrong results (e.g. --verbose would search for exclusive tag -verbose).
+  Multiple terms can be specified by either repeating the `-s` or `-x` commands, by using commas between arguments, or by noting down terms directly with preceding `+` or `-`.
 
-* `--exclude tag1[,tag2[,tags...]]` or `-x`
+  Do not provide more than one inclusive or exclusive file extension, as it would always return or exlude zero matches.
 
-  Specify exclusive tags when searching.
-  TODO check if not accidentally still accepting +/-.
-  TODO check if we can remove this option? only when -tag coincides with an option.
-  We don't employ a --yes --no (-y -n) syntax, as it would collide with -n (--simulate)
+  Note, however, that the command line interface cannot distinguish between valid option switches (like `-r <root>` or `--root <root>`) and exclusive tags (like `-r` to exclude all files tagged with "r").
 
-* `--tag [+][-]tag1[,[+][-]tag2[,tags...]] file[,file2[,files...]]` or `-t`
+  Alternatively, exclusive tags must either be specified with an additional dash in front (`--r` or `---root`) or after a comma of a inclusive term. TODO check if all these are true
 
-  Specifies a (set of) (inclusive or exlusive) tag(s) for the following file names, or glob patterns.
-  This information is stored in the configuration file and is respected in the index upon next search and file tree walk.
+- `--exclude tag[,tag2[,tags...]]` or `-x`
 
-* `--log level` or `-l`
+  Specify tags to exclude explicity when searching (not listing any files or folders that match these tags).
 
-  Specify detail level for printed messages.
-  Note, however, that the program still prints to both stderr and stdout, depending on content.
-  Also note, that the maximum log level displayed, is hard-coded into the source code (default: INFO - not printing DEBUG statements).
+- `--tag | -t [+|-]tag1[,[+|-]tag2[,tags...]] [path/][[+|-]glob[,[+|-]glob2[,globs...]] [[path2/][+|-]glob[...]`
 
-* `--set key=value`
+  Action that defines one or more inclusive or exclusive tags for the given (or current) path under the specified glob patterns.
+  This information is stored in the configuration file `.tagsplorer.cfg` and is respected during index creation and search upon next file tree walk.
 
-  Sets a global configuration value.
+  Given glob patterns are treated as conjunctive (logical and, reducing the set of matches).
+  To specify alternative disjunctive patterns, run the tag command several times with different patterns (logical or, enlarging the set of matches).
 
-* `--get key`
+  Historically this command added one or more inclusive or exclusive tags to a glob pattern in a folder.
+  As of now, this command assigns a tag to one or more conjunctions of inclusive and exclusive glob patterns in a folder.
+  This design change is more technical but more useful.
 
-  Prints out a global configuration value.
+- `--untag | -u [+|-]tag[,[+|-]tag2[,tags...]] [path/][+|-]glob[,[+|-]glob2[,globs...]] [[path2/][+|-]glob[...]`
 
-* `--unset key`
+  Action that removes one or more inclusive or exclusive tags for the given (or current) path under the specified glob patterns.
 
-  Removes a global configuration value. This usually switches back to the default logic or value.
+  Removing an inclusive yet undefined tag does not automatically invert it into an exclusive mark.
 
-* `--relaxed`
+  Removal works solely on a pattern basis in the configuration file, and never on actual files currently matched by existing glob patterns.
 
-  Be more lenient when adding tags (allow to define tags even more missing files or globs that don't match any file at the time of definition).
+- `--set <key>=<value>`
 
-* `--simulate` or `-n`
+  Sets a global configuration parameter.
 
-  Don't write anything to the file system.
+  Currently supported keys are:
 
-* `--force` or `-f`
+  - `case_sensitive`      (on/off, default is true if not on Windows)
+  - `reduce_storage` (on/off, default is false)
 
-  Do things even against warning or in a potentially dangerous situations: Creating a new index root file, adding tag file patterns already covered by globs for that tag.
+  Assuming the existence of a filder /folder/File:
 
-# Architecture and program semantics
-## Search algorithm
-In general, simple boolean set operations. The index maps tags to folders, with the risk of false positives (it's an over-specified, optimistic index, linking folders with both inclusive or exclusive manual tag settings and tags mapped from other folders, plus file extension information).
-After determination of potential folders in a first search step, the found folders' contents are filtered by potential further tags and inclusive or exclusive file name patterns. This step always operates on the actual current files, not on any indexed and potentially outdated state.
+  | `case_sensitive` | `reduce_storage` | Windows | Linux | Find `File` | Find `file` | Find `FILE` |
+  | ---------------- | ---------------- | ------- | ----- | ----------- | ----------- | ----------- |
+  | yes              | no               | yes     | no    | yes         | no          | no          |
+  | yes              | no               | no      | yes   | yes         | no          | no          |
+  | yes              | yes              | yes     | no    | yes         | no          | no          |
+  | yes              | yes              | no      | yes   | yes         | no          | no          |
+  | no               | no               | yes     | no    | yes         | yes         | yes         |
+  | no               | no               | no      | yes   | yes         | yes         | yes         |
+  | no               | yes              | yes     | no    | yes         | yes         | yes         |
+  | no               | yes              | no      | yes   | yes         | yes         | yes         |
+
+
+
+- `--get <key>`
+
+  Prints out the value of a global configuration parameter.
+
+- `--unset <key>`
+
+  Removes a global configuration parameter. This switches back to the default value.
+
+- `--simulate` or `-n`
+
+  Don't write anything to the file system. TODO check if true in all places
+
+- `--force` or `-f`
+
+    Perform actions despite warnings or in potentially dangerous situations. This currently covers:
+
+    - write over an index root file (removing all settings)
+    - adding tag file patterns already covered by globs for that tag
+
+- `--dirs`
+
+  List only matching folders instead of all files in matching folders, plus allows glob matching on folder names.
+
+  Glob matching works only on already the tag-filtered folder list, not necessarily on all indexed folders.
+
+- `--verbose` or `-v` | `--debug` or `-V`
+
+  Specify the detail level for printed messages.
+  `-v` increases the log level to `INFO`
+  `-V` increases the log level to `DEBUG`
+
+- `--stdout`
+
+  Write log to STDOUT instead of STDERR.
+  This allows piping for certain situations (e.g. continuous integration or legacy products).
+
+- `--help`
+
+  Shows user options, which are described in more detail in this section
+
+- `--version`
+
+  Shows *tagsPlorer* code base version string and copyright notice
+
+
+## Architecture and program semantics
+
+### Search algorithm
+In general, what the program does is simple boolean set operations.
+The indexer maps tags (which include file and folder name (constituents), user-specified tags, and file extensions) to folders, with the risk of false positives (it's an over-generic, optimistic index that links folders with both inclusive or exclusive manual tags plus tags mapped from other folders, plus file extension information).
+After determination of potential folders in a first search step, their contained file names are filtered by potential further tags and inclusive or exclusive file name patterns.
+This step always operates on the actual currently encountered files, not on any indexed and potentially outdated state, to ensure correctness of output filtered data.
+If a mapped folder is excluded by a negative tag, its contents can still be found by the name of the positive tags of the mapping. TODO check if true.
 
 
 ## Configuration file
-Using the tagsplorer's `-i` option, we can create an empty configuration file which also serves as the marker for the file tree's root (just like the `.svn` or `.git` folders).
-Usually, all access to the configuration file should be performed through the `tp.py` command line interface or the `lib.py` library functions. For quick initialization, however, it may be benefitial to add some options manually.
-The file generally follows the Windows ini-file structure, but without any higher substitution logic.
-The first line contains a timestamp to ensure that the index's `*.dmp` file is not outdated.
+Using the *tagsPlorer*'s `-i` option, we can create an empty configuration file which also serves as the marker for the file tree's root (just like the existence of version control systems' `.svn` or `.git` folders).
+Usually all access to the configuration file should be performed through the `tp` command or directly via `tagsplorer/lib.py` library functions.
+The configuration file follows mainly the format and structure of Windows' INI-file, but without any interpolation nor substitution (avoiding Python's built-in `ConfigParser` to enable multiple keys).
+The first line contains a timestamp to ensure that the matching index file `tagsplorer.idx` file is not outdated.
 
-For each section, including the root section `[]`, any number of occurencens of the following options may be added.
-The following list describes all potential settings:
+The root section contains global configuration options that can be set and queried by the `--set`, `--unset`, `--get` and `--clear` commands.
 
-* `tag=tagname;includes;excludes`
+Each section points to a path, including the root section `[]`, and specifies any number of occurences of the following options:
 
-  Defines a tag `tagname` for the file names specified in `includes`, except those specified in `excludes`. `tagname` should differ from the current folder name, to give a sensible added value. TODO check
-  `includes` and `excludes` are comma-separated lists of file names and file globs.
-  The order of evaluation during search is always left-to-right; there is no deeper semantics prohibiting the user to add e.g. file names or stricter globs that are already included in other looser glob patterns (inclusive or exclusive).
+-   `tag=<name>;<includes>;<excludes>`
 
-* `from=path`
+    Defines a tag `name` for the file name(s) specified in `includes` string, excluding those specified in the `excludes` string.
+    `name` must differ from the current folder name, to give sensible added value. TODO add check plus force option.
 
-  Virtually maps the provided folder `path`'s contents into the current folder, including all its specified tags, observing respective include and exclude constraints.
-  There is not recursive `from` mapping; only one level of mapping is considered.
+    `includes` and `excludes` are comma-separated lists of file names and file globs.
+    This allows powerful distinctions inside a single folder.
 
-* `ignore=`
+    The order of evaluation during search is always left-to-right; there is no deeper semantics prohibiting the user to add e.g. file names or stricter globs that are already included in other wider-scope glob patterns (inclusive or exclusive).
 
-  Advises the file indexer to not index this folder's contents, but continue traversal in its sub-folders. The current folder's name (tag) is ignored for all sub-folders' files indexing.
+-   `from=<path>`
 
-* `skip=`
+    Virtually map `path`'s contents into the (current) section's folder, including all its specified tags, observing respective include and exclude constraints on its files during search.
+    There is no recursive `from` mapping; only one level of mapping is considered (and that's a good thing).
 
-  Advises the file indexer to not index this folder's contents and don't recurse into sub-folders.
+    It's possible to map a skipped folder into another folder, to suppress indexing its original folder name, but find all contents under the name it is mapped to.
 
-* `alias=name`
+    `<path>` is either a repository root-relative path starting with a slash like `/sub1/sub2` or a folder-relative path like `../super1` or `sub1`.
 
-   TODO: Implement it.
-   Specify an alternative folder name (tag) under which to find this folder's contents.
-   The advantage would be that this works also in folder-only mode. TODO explain difference and usage scenarios (overspecific).
+-   `ignore=`
 
-In addition, it's possible to specify global settings under the root configuration section `[]`:
+    Advises the file indexer to not index this folder's contents, but continue traversal into its sub-folders.
+    The folder's name (current section) is ignored as a tag for all sub-folders' indexing (they won't inherit this parent folder's tag TODO and name constituents, which are not yet implemented).
 
-* `global=key=value`
+-   `skip=`
 
-  This defines a global configuration variable `key` with the contents of `value`, which is either a string or boolean toggle.
-  The following values are currently allowed:
+    Advises the file indexer to not index this folder's contents and not recurse into its sub-folders, effectively skipping the entire folder tree.
 
-  * *`case_sensitive`*
+-   `rename=<name1>[,<name2>[,<names...>]]`
 
-      This key is either `true` or `false` or undefined.
-      If undefined, the current operating system determines, if case is used for file name indexing and searching (Windows defaults to false, other OSs default to true).
+     Replace this folder's name with another one, effectively renaming it.
+     TODO: Implement it.
 
-* `ignored=dirname`
+Global settings are stored under the root section `[]`:
 
-  Similar to `ignore` this defines a global folder (directory) name to ignore and to not index.
-  TODO allow glob(s)?allow several per line?
+-   `global=<key>=<value>`
 
-* `skipd=dirname`
+    This sets the global configuration variable `key` with the contents of `value`, which is either a string or boolean toggle.
+    The following values are currently allowed:
 
-  Similar to `skip` this defines a global folder name to skip and not recurse into.
+    -   *`case_sensitive`*
+
+        This key is either `true` or `false` and defaults to `true` on Linux-y operating systems and to `false` on Windows.
+        The setting determines if search is case-sensitive.
+
+        If set to `false`, search terms `a` and `A` will match both file names `a` and `A`; if set to `true`, `a` finds only `a` and `A` finds only `A`.
+
+        Even if set to `true`, users may override the search behavior by using the command-line option `--ignore-case` or `-c`.
+
+    -   *`reduce_storage`*
+
+        This key is either `true` or `false` and defaults to `false`, if undefined.
+        This setting determines if the indexer minimizes file name storage by keeping only one case version per entry.
+        By default, *tagsPlorer* stores both true-case and case-normalized file names in the index.
+
+        Setting `reduce_storage` to `true` deactivates storage of case-normalized file names.
+
+-   *`ignored=dirname`*
+    Define a global folder glob to ignore, but continue indexing its child folders.
+    The glob is not a full path and only applied to the folder base name.
+
+-   `skipd=dirname`
+
+    Define a global folder glob that is skipped and not recursed into.
+    The glob is not a full path and only applied to the folder base name.
+
+## Marking folders
+
+Individual folders can be marked as being ignored or to skip indexing all their children.
+This can be done in three different ways:
+
+1. Place a marker file `.tagsplorer.ign` or `.tagsplorer.skp` into the folder. Please note, that the filename is case-sensitive for all platforms.
+2. Manually create a configuration setting inside the index configuration file `.tagsplorer.cfg` under the key `[/<path>]`: `ignore=` or `skip=`
+3. Manually create a global configuration setting inside the index configuration file `.tagsplorer.cfg` under the root key `[]`: `ignored=<glob>` or `skipd=<glob>`
+
+
+## Internal storage format
+The indexer class contains the following data structures:
+
+- `tagdirs`: array-of-strings containing all encountered folder names during file system walk.
+  Duplicates are not removed (to retain folder-parent relations).
+  May contain case-normalized versions of folder names as well, or even only those (depending on internal configuration settings and operating system run on).
+
+    In a second indexing step, `tagdirs` is augmented with further non-folder tags defined in the configuration file or stemming from file extension information (see `tags` below).
+
+- `tagdir2parent`: array-of-integers containing indexes of each `tagdirs` entry to its parent folder entry (in `tagdirs`).
+  Each entry corresponds to one entry in the `tagdirs` structure; both data could equally have been represented as an array-of-pair-of-string-and-integer (equivalent to `zip(tagdirs, tagdir2parents`)).
+- `tagdir2paths`: integer-dict-to-list-of-integers, mapping `tagdirs` indexes to lists of `tagdirs` indexes of the leaf folder name for all folders carrying that folder name.
+  After indexing, this is converted into an array-of-lists-of-integer instead with index position corresponding to `tagdirs` positions.
+  During indexing `tagdir2paths` makes use of default dictionary semantics for convenience.
+
+There are two further intermediate data structures used during indexing:
+
+- `tags`: array-of-strings containing all manually set tag names and file extensions, which gets mapped into the `tagdirs` structure after walking
+- `tag2paths`: dict-from-integer-to-list-of-integer, mapping `tags` indexes to lists of `tagdirs` indexes of the leaf folder name for all folders carrying that tag.
+
 
 ## Tagging semantics
-TODO What happens if a file with a tag gets mapped into the current folder, where the same tag excludes that file? Or the other way around?
-This currently cannot happen, as all folders are processed individually and then get merged into a single view, with duplicates being removed. There is no real link to the originating folder for the folder list, as we have the concept of virtual (tag) folders in a unified view.
+TODO What happens if a file with a tag gets mapped into the current folder, where the same tag excludes that file?
+Or the other way around?
+This currently cannot happen, as all folders are processed individually and then get merged into a single view, with duplicates being removed.
+There is no real link to the originating folder for the folder list, as we have the concept of virtual (tag) folders in a unified view.
+
 
 ## Design decisions regarding linking on the file system level
-If files are hard-linked between different locations in the file tree and are submitted to the version control system, they won't be linked when checking out at different locations, and modifying one instance will result on several linked copies being modified on the original file system when updated. This leads to all kinds of irritating errors or VCS conflicts.
+If files are hard-linked between different locations in the file tree and are submitted to the version control system, they won't be linked when checking out at different locations, and modifying one instance will result on several linked copies being modified on the original file system when updated.
+This leads to all kinds of irritating errors or VCS conflicts.
 
-1. Option: tagsplorer has to intercept update/checkout and re-establish file links according to its metadata (configuration). This is hard to guarantee.
-2. Option: Add ignore details to the used VCS (.gitignore or SVN ignore list) for all linked (or rather mapped) files. The danger here is of course to ignore files that later could be added manually, and not being able to distinguish between automatically ignored files, and those that the user wants to ignore on purpose.
-3. Option: As by the current design the snapshot `*.dmp` file is not persisted in VCS (TODO add ignore automatically), all links can be recreated on first file tree walk (as option 1), even if linked files were earlier submitted as separate files, the folder walk would re-establish the link (potentially asking the user to confirm linking forcing to choose one master version, of issueing a warning for diverging file contents).
+1. Option: *tagsPlorer* has to intercept *update*/*checkout* and re-establish file links according to its metadata (configuration).
+This is hard to guarantee and communicate.
+2. Option: Add ignore details to the used VCS (.gitignore or SVN ignore list) for all linked (or rather mapped) files.
+The danger here is of course to ignore files that later could be added manually, and not being able to distinguish between automatically ignored files, and those that the user wants to ignore on purpose.
+3. Option: As by the current design the snapshot `*.idx` file is not persisted to the VCS (TODO add ignore markers automatically), all links can be recreated on first file tree walk (as option 1), even if linked files were earlier submitted as separate files, the folder walk would re-establish the link (potentially asking the user to confirm linking forcing to choose one master version, of issueing a warning for diverging file contents).
+
 
 ## Other design decisions
-* The implementation of the simple switch for `case_sensitive` raised quite a lot of semantic questions. For one, should file extensions be treated differently from file names? Is there a benefit of ignoring case for extensions, but not for the actual names? Probably not. Secondly, if we store data case-normalized in the index, we lose the relationship to the actual writings of the indexed folder names, which might cause problems. This would only occur on a case_sensitive file system with `case_sensitive` set to `false`. As a conclusion, we might need to separate storage of tag dirs from other tags or file extensions, or modify search operation to case-normalize instead of doing this in the index, which would slow down the program. Current conclusion: Tough, would need mapping from case-normalized to actual naming on filesystem, or lower() comparisons all over the place :-( to be delayed
+- Configuration and index synchronisation
 
-* Although semantically better suited, in many places we don't use `not a.startswith(b)`, rather the shorter (and faster) `a[0] != b`, but we must ensure a length > 0 of course.
+    - Most operations only modify the configuration file, updating its integrated timestamp, deferring crawling to the next operation
 
-* Program output is written to stdout for further processing by other tools, all logging on stderr.
+    - Only search operations require an up-to-date index.
+      If a time skew between the configuration file's timestamp and the copy of the configuration file inside the index is detected, the index and all timestamps is updated by re-indexing all files.
 
-* For the "skip folder" logic, we *could* have used a semantics of "index the folder, but don't recurse into its sub-folders". However, we prefer marking and skipping each sub-folder, because it's more flexible; implementation complexity may be similar.
+- The implementation of the simple switch for `case_sensitive` raised quite a lot of semantic questions.
+For one, should file extensions be treated differently from file names, and is there a benefit of ignoring case for extensions, but not for the actual names?
+Probably not.
+Secondly, if we store data case-normalized in the index, we lose the relationship to the actual writings of the indexed folder names, which might cause problems.
+This would only occur on a case_sensitive file system with `case_sensitive` set to `false`.
+As a conclusion, we might need to separate storage of tag dirs from other tags or file extensions, or modify search operation to case-normalize instead of doing this in the index, which would slow down the program.
+Current conclusion: Tough, would need mapping from case-normalized to actual naming on filesystem, or lower() comparisons all over the place TODO :-( to be delayed
 
-* Different implementations and replacements for the built-in configuration parser have been tested; there is, however, no version that both a) allows reading values for duplicate keys, and b) is fully interoperable between Python 2 and 3. The alternative of using JSON may be considered, but is potentially harder to edit by humans and requires profiling to make a decision.
+- Although semantically better suited, in many places we don't use `not a.startswith(b)`, but rather the shorter (and faster) `a[0] != b`, but we must of course ensure that `len(a) > 0` and `len(b) == 1`.
 
-* The index itself is designed to be both low on memory consumption and fast to load from the file system. After profiling storing it compressed vs. not compressed, the level 2 zlib approach delivered optimal results on both resource restricted and modern office computers, and offers only minimally worse compacted file size compared even to bz2 compression level 9, while almost being as fast to unpickle as pure uncompressed data (which again was faster than any bz2 level).
+- Program output is written to stdout for further processing by other tools, all logging goes to stderr.
+
+- Globbing on tags or folders is originally not intended to work, because the index is made for quick checks only.
+It does nevertheless work in a situation when no matching folders were found (due to glob patterns being not represented in the index) and traversing the entire folder tree.
+An alternative is to use the `--dirs` option. TODO add tests, because still unsure if all that is working fine
+
+- For the "skip folder" logic, we *could* have used a semantics of "index the folder, but don't recurse into its sub-folders".
+We prefer, however, marking and skipping each sub-folder to ignore individually, because it's more flexible; implementation complexity has not been compared, but could be similar.
+
+- Different implementations and replacements for the built-in configuration parser have been tested; there is, however, no version that allows reading values for duplicate keys. TODO Python2 support was dropped, re-evaluate.
+Using JSON as an alternative may be considered, but is potentially harder to edit by humans and diff by version control systems, thus requires profiling to make a decision.
+Since configuration files may be persisted by users, this is also a breaking change which would require a migration path.
+
+- The index itself is designed to be both low on memory consumption and fast to load from the file system, to the expense of higher CPU processing to recombine folder names into paths once printed out.
+After profiling whether to store the index either compressed vs. uncompressed, the level `2` zlib approach delivered optimal results on both resource restricted and modern office computers, and offers only minimally larger compacted file size compared even to `bz2` compression level `9`, while almost being as fast to unpickle as pure uncompressed data (which again was faster than any `bz2` level).
+Since speed is more important than storage size, even considering more effective compression methods like `lzma` weren't even considered.
 
 
+## Development
 
-# Development
+### Git and Github workflows ##
+The master branch should always run fine and contain the latest stable version (release). Currently we are still nefore V1.0 therefore everything is still happening either on master or on other branches without announcement.
+Development activities are merged on the develop branch, and only merged to master for a release, which is then tagged.
+If any releases are build in the future (e.g. for pip or conda installation), they would only be build from commits that pass all tests on e.g. *Travis CI* or *AppVeyor*.
 
-## Git and Github workflows
-The master branch should always run fine and contain the latest stable version (release). Currently we are pre-V1.0 therefore everything is still happening on master.
-Development activities are merged on the develop branch, and only merged to master for a release.
 
-# Known issues
+## Known issues
 
-* It's possible to commit file names into Subversion, that aren't allowed to checkout on Windows, e.g. `file.`. Since this is no problem that tagsplorer can solve, we ignore this potential problem. In the code, the only difference was whether to check for the DOT from first to last character, or only from first to second last.
+- It's possible to commit file names into Subversion from operating systems like Linux, that aren't valid on Windows file systems, e.g. the filename `file.` with a trailing dot.
+Since this is no problem that *tagsPlorer* can solve, we do not handle it in the code.
+The only decision to make in that regard was whether to check for the DOT from first to last character, or only from first to second last (or even second to second last to avoid "hidden by convention" files to be indexed as extensions), which can be seen as premature optimization and unnecessary.
 
-* ...
+
+## TODOs
+- are configured tags always case-sensitive? in many places (like tagging yes), in other places (like index+search) no, searching always depends on the config setting, and stored tags are treated exactly like user-specified tags, so no need to distinguish there!
+- search for extension = 0 folder matches. why extensions not in folder index?
+- case sensitive: what does it mean during index run vs. during search run?
+    - search terms
+    - folder names (index) vs. file system
+- TODO Add option to avoid indexing all hidden dot-files (start check at second character) at the expense of having to use `?` glob to find them
+- Moving the config file to create a different root requires adapting tag paths inside

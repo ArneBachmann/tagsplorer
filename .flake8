@@ -1,0 +1,42 @@
+# http://flake8.pycqa.org/en/latest/user/error-codes.html
+# https://pycodestyle.readthedocs.io/en/latest/intro.html#error-codes
+# http://flake8.pycqa.org/en/latest/user/options.html#options-list
+
+[flake8]
+ignore = D203,
+  # accept indents other than 4 spaces for code
+  E111,
+  # accept indents other than 4 spaces for comments
+  E114,
+  # allow under-indentation
+  E121,
+  # allow over-indentation for hanging indent
+  E126,
+  # allow over-indentation for visual indent
+  E127,
+  # allow under-indentation for visual indent
+  E128,
+  # allow space around = func(a = 1)
+  E251,
+  # allow multiple imports on one line
+  E401,
+  # allow module level imports anywhere (sometimes you need some conditional code in between)
+  E402,
+  # accept long lines > 79 characters; not used since we specify longer lines below
+  # E501,
+  # allow multiple statements on a line (colon)
+  E701
+  # allow multiple statements on a line (semicolon)
+  E702,
+  # allow multiple statements on a line (def)
+  E704,
+  # when you want to use simple except without argument (sometimes necessary), mark the line with  # noqa: E722
+  # E722
+exclude = .git,.svn,__pycache__,docs,build,dist
+filename = *.py,*.coco
+doctests
+statistics
+count
+max-line-length = 240
+max-doc-length = 240
+max-complexity = 15
