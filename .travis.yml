@@ -1,77 +1,159 @@
 language: python
-matrix:
+jobs:
   include:
   - os: linux
-    dist: trusty
+    dist: bionic
     python: pypy3
     env:
     - SIMULATE_WINFS=false
-    - UBUNTU=trusty
-    - PYVER=PP3
   - os: linux
-    dist: trusty
+    dist: bionic
     python: pypy3
     env:
     - SIMULATE_WINFS=true
-    - UBUNTU=trusty
-    - PYVER=PP3
   - os: linux
-    dist: precise
+    dist: focal
+    python: pypy3
+    env:
+    - SIMULATE_WINFS=false
+  - os: linux
+    dist: focal
+    python: pypy3
+    env:
+    - SIMULATE_WINFS=true
+  - os: linux
+    dist: xenial
+    python: pypy3
+    env:
+    - SIMULATE_WINFS=false
+  - os: linux
+    dist: xenial
+    python: pypy3
+    env:
+    - SIMULATE_WINFS=true
+  - os: linux
+    dist: focal
     python: 3.6
     env:
     - SIMULATE_WINFS=false
-    - UBUNTU=precise
-    - PYVER=CP3
   - os: linux
-    dist: precise
+    dist: focal
     python: 3.6
     env:
     - SIMULATE_WINFS=true
-    - UBUNTU=precise
-    - PYVER=CP3
   - os: linux
-    dist: precise
+    dist: focal
     python: 3.7
     env:
     - SIMULATE_WINFS=false
-    - UBUNTU=precise
-    - PYVER=CP3
   - os: linux
-    dist: precise
+    dist: focal
     python: 3.7
     env:
     - SIMULATE_WINFS=true
-    - UBUNTU=precise
-    - PYVER=CP3
   - os: linux
-    dist: precise
+    dist: focal
     python: 3.8
     env:
     - SIMULATE_WINFS=false
-    - UBUNTU=precise
-    - PYVER=CP3
   - os: linux
-    dist: precise
+    dist: focal
     python: 3.8
     env:
     - SIMULATE_WINFS=true
-    - UBUNTU=precise
-    - PYVER=CP3
   - os: linux
-    dist: precise
-    python: pypy3
+    dist: focal
+    python: 3.9
     env:
     - SIMULATE_WINFS=false
-    - UBUNTU=precise
-    - PYVER=PP3
   - os: linux
-    dist: precise
-    python: pypy3
+    dist: focal
+    python: 3.9
     env:
     - SIMULATE_WINFS=true
-    - UBUNTU=precise
-    - PYVER=PP3
+
+  - os: linux
+    dist: bionic
+    python: 3.6
+    env:
+    - SIMULATE_WINFS=false
+  - os: linux
+    dist: bionic
+    python: 3.6
+    env:
+    - SIMULATE_WINFS=true
+  - os: linux
+    dist: bionic
+    python: 3.7
+    env:
+    - SIMULATE_WINFS=false
+  - os: linux
+    dist: bionic
+    python: 3.7
+    env:
+    - SIMULATE_WINFS=true
+  - os: linux
+    dist: bionic
+    python: 3.8
+    env:
+    - SIMULATE_WINFS=false
+  - os: linux
+    dist: bionic
+    python: 3.8
+    env:
+    - SIMULATE_WINFS=true
+  - os: linux
+    dist: bionic
+    python: 3.9
+    env:
+    - SIMULATE_WINFS=false
+  - os: linux
+    dist: bionic
+    python: 3.9
+    env:
+    - SIMULATE_WINFS=true
+
+  - os: linux
+    dist: xenial
+    python: 3.6
+    env:
+    - SIMULATE_WINFS=false
+  - os: linux
+    dist: xenial
+    python: 3.6
+    env:
+    - SIMULATE_WINFS=true
+  - os: linux
+    dist: xenial
+    python: 3.7
+    env:
+    - SIMULATE_WINFS=false
+  - os: linux
+    dist: xenial
+    python: 3.7
+    env:
+    - SIMULATE_WINFS=true
+  - os: linux
+    dist: xenial
+    python: 3.8
+    env:
+    - SIMULATE_WINFS=false
+  - os: linux
+    dist: xenial
+    python: 3.8
+    env:
+    - SIMULATE_WINFS=true
+  - os: linux
+    dist: xenial
+    python: 3.9
+    env:
+    - SIMULATE_WINFS=false
+  - os: linux
+    dist: xenial
+    python: 3.9
+    env:
+    - SIMULATE_WINFS=true
 install: "pip install coverage python-coveralls"  # or "coveralls" instead (alternative package)
-script: python setup.py build && coverage run tests.py && coverage html && coverage annotate tests.py
+script: python setup.py build && pip install -e . && coverage run tests.py && coverage html && coverage annotate tests.py
 after_success:
 - coveralls
