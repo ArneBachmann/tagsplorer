@@ -18,24 +18,24 @@ if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "false").l
     ''' Central function that determines the actual file name case for the given folder or file path.
         path:    file system path to analyse
         returns: string for real path as stored on the file system
-    >>> wrapExc(lambda: _unlink("_x.X"), None)
-    >>> with open("_x.X", "w"): pass  # create file using context manager
+    >>> with open("_x.X", "w"): pass  # create file
     >>> print(os.path.exists("_x.X"))
     True
-    >>> with open("_x.X", "w"): pass  # write over same file using context manager
+    >>> with open("_x.X", "a"): pass  # write same
     >>> print(os.path.exists("_x.X"))
     True
-    >>> fd = open("_x.X", "w"); fd.write("123"); fd.close()  # write over same file using file handle
+    >>> fd = open("_x.X", "w"); fd.write("123"); fd.close()
     3
     >>> print(os.path.exists("_x.X"))
     True
-    >>> fd = open("_X.x", "w"); fd.write("234"); fd.close()  # write over different case of file using file handle
+    >>> fd = open("_X.x", "w"); fd.write("234"); fd.close()  # write over different case of same file using file handle
     3
     >>> print(os.path.exists("_X.x"))
     True
     >>> print(os.path.exists("_x.X"))
     True
-    >>> with open("_X.X", "a") as fd: l = fd.write("567")
+    >>> with open("_X.X", "a") as fd: fd.write("567")
+    3
     >>> fd = open("_x.x", "r"); contents = fd.read(); fd.close(); print(contents)
     234567
     >>> wrapExc(lambda: _unlink("_x.X"), None)
@@ -44,26 +44,27 @@ if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "false").l
     >>> print(os.path.exists("_x.X"))
     False
     '''
-    _log.debug("_realPath %r" % path)
+    _log.debug(f"_realPath '{path}'")
     assert path is not None
-    if path == "": return path
+    if not path: return path
   #  path = _normpath(path)  # remove intermediate ".." etc. TODO leads to recursion due to use of os.stat
     steps = path.replace(os.sep, SLASH).split(SLASH)
-    if steps[0] not in ("", os.curdir): steps.insert(0, os.curdir)  # relative path
+    absolute = path[0] == SLASH
+    if steps[0] not in ('', os.curdir): steps.insert(0, os.curdir)  # must be relative path like a/b, (otherwise ./a/b or /a/b, but never A:/b/c, because not on Windows)
     while os.pardir in steps:  # implement os.path.normpath
-      steps.remove(steps.index(os.pardir) - 1)  # /a/b/../c = /a/c
-      steps.remove(steps.index(os.pardir))  # /a/b/../c = /a/c
-    while os.curdir in steps:  # implement os.path.normpath
-      steps.remove(steps.index(os.curdir))
-    real, steps = steps[0], steps[1:]
+      steps.pop(steps.index(os.pardir) - 1)  # /a/b/../c = /a/c
+      steps.remove(os.pardir)  # /a/b/../c = /a/c
+    while os.curdir in steps: steps.remove(os.curdir)  # implement os.path.normpath
+    if absolute: steps.pop(0)
+    real = '' if absolute else '.'
     for step in steps:
-      try: files = _listdir(real if real else "/")  # special case for root
-      except: real += os.sep + step; continue  # cannot access: continue with path as given
-      found = [f for f in files if f.lower() == step.lower()]  # matches case-normalized
+      try: files = _listdir(real if real else '/')
+      except: real += SLASH + step; continue  # cannot access: continue with path as given
+      found = [f for f in files if f.lower() == step.lower()]  # match case-normalized
       if len(found) != 1:
-        #print(f"Cannot determine real path, since multiple or no file names map to the normalized version {found}")
-        found = [step]  # fallback
-      real += os.sep + found[0]
+        if len(found) > 1: debug(f"Cannot determine real path, since multiple names match {step}: {found}"); found = list(reversed(sorted(found)))[:1]
+        else: found = [step]  # fallback
+      real += SLASH + found[0]
     return real
 
 
@@ -193,5 +194,6 @@ else: SIMFS = False
 if __name__ == '__main__':
   logging.basicConfig(level = logging.DEBUG if os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s:%(lineno)d | %(message)s")
   if sys.platform == 'win32': print("Testing on Windows makes no sense. This is a Windows file system simulator!"); exit(1)
-  _chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # parent folder
+  _chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # main repo folder
   unittest.main()  # warnings = "ignore")
+  for file in ("_X.x", "_x.X"): wrapExc(lambda: _unlink(file))

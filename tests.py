@@ -150,9 +150,9 @@ class TestRepoTestCase(unittest.TestCase):
   def testReduceCaseStorage(_):
     #_.assertIn("Added configuration entry: reduce_storage = False", runP("--set reduce_storage=False"))
     _.assertIn("tags: 49", runP("--stats"))  # only few upper-case entries exist, therefore no big difference if reduce_storage is used
-    _.assertIn("Found 2 files in %d folders" % (2 if constants.ON_WINDOWS else 1), runP("Case -v"))  # contained in /cases/Case
+    _.assertIn("Found 2 files in %d folders" % (2 if constants.ON_WINDOWS or simfs.SIMFS else 1), runP("Case -v"))  # contained in /cases/Case
     _.assertIn("Found 0 files", runP("CASE -v"))  # wrong case writing, can't find
-    _.assertIn("Found %d files in %d folders" % ((4, 2) if constants.ON_WINDOWS else (2, 1)), runP("case -v -c"))  # ignore case: should find Case and case (no combination because different findFiles calls)
+    _.assertIn("Found %d files in %d folders" % ((4, 2) if constants.ON_WINDOWS or simfs.SIMFS else (2, 1)), runP("case -v -c"))  # ignore case: should find Case and case (no combination because different findFiles calls)
     _.assertIn("Added configuration entry", runP("--set reduce_storage=True -v"))
     runP("-U")  # trigger update index after config change (but should automatically do so anyway)
     _.assertIn("tags: 49", runP("--stats"))  # now also small on Windows Windows
@@ -162,7 +162,7 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testFilenameCaseSetting(_):
     ''' This test confirms that case setting works (only executed on Linux). '''
-    if utils.ON_WINDOWS: return  # TODO only skip the minimal part that is Linux-specific, but not all TODO or run always with simfs?
+    if utils.ON_WINDOWS or simfs.SIMFS: return  # TODO only skip the minimal part that is Linux-specific, but not all TODO or run always with simfs?
     _.assertIn("Found 0 files", runP("-s case --debug"))  # lower-case
     _.assertIn("Found 2 files", runP("-s Case --debug"))  # mixed-case
     _.assertIn("Found 0 files", runP("-s CASE --debug"))
@@ -237,7 +237,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["Found 1 file", "/mapping/two/2.2"], runP("-s two,test -v"))  # finds folder two with a mapped direct tag test
 
   def testExtensionOnly(_):
-    _.assertIn("Found 0 files in %d folders" % (27 if constants.ON_WINDOWS else 26), runP(".xyz -v"))  # /cases/case is added on Windows, and '' is not filtered on Windows
+    _.assertIn("Found 0 files in %d folders" % (27 if constants.ON_WINDOWS or simfs.SIMFS else 26), runP(".xyz -v"))  # /cases/case is added on Windows, and '' is not filtered on Windows
 
   def testMappedGlobExclude(_):
     pass
@@ -333,7 +333,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertNotIn(".ext1", runP("-s a -x .ext1"))
     _.assertIn("Found 3 files in 1 folders", runP("a1 -x .ext1 -v"))
     _.assertIn("Found 3 files in 3 folders", runP("-s a -x .ext2 -v"))
-    _.assertIn("Found 2 files in %d folders" % (27 if constants.ON_WINDOWS else 26), runP("b1 -x .ext2 -v"))
+    _.assertIn("Found 2 files in %d folders" % (27 if constants.ON_WINDOWS or simfs.SIMFS else 26), runP("b1 -x .ext2 -v"))
 
   def testUnwalk(_):
     def unwalk(_, idx = 0, path = ""):
@@ -369,7 +369,7 @@ def load_tests(loader, tests, ignore):
   tests.addTests(doctest.DocTestSuite(tp))
   tests.addTests(doctest.DocTestSuite(lib))
   tests.addTests(doctest.DocTestSuite(utils))
-  if constants.ON_WINDOWS: tests.addTests(doctest.DocTestSuite(simfs))
+  if constants.ON_WINDOWS or simfs.SIMFS: tests.addTests(doctest.DocTestSuite(simfs))
   return tests
 
 
