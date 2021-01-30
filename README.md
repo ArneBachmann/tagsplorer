@@ -1,4 +1,4 @@
-Linux: [![Build Status](https://travis-ci.com/ArneBachmann/tagsplorer.svg?branch=master)](https://travis-ci.com/ArneBachmann/tagsplorer) Windows: [![Build status](https://ci.appveyor.com/api/projects/status/46axk9bixn4ab0d5/branch/main?svg=true)](https://ci.appveyor.com/project/ArneBachmann/tagsplorer/branch/main)  Test coverage: [![Coverage Status](https://coveralls.io/repos/github/ArneBachmann/tagsplorer/badge.svg?branch=main)](https://coveralls.io/github/ArneBachmann/tagsplorer?branch=main)
+Linux: [![Build Status](https://travis-ci.com/ArneBachmann/tagsplorer.svg?branch=master)](https://travis-ci.com/ArneBachmann/tagsplorer) Windows: [![Build status](https://ci.appveyor.com/api/projects/status/46axk9bixn4ab0d5/branch/main?svg=true)](https://ci.appveyor.com/project/ArneBachmann/tagsplorer/branch/main)  Test coverage: [![Coverage Status](https://coveralls.io/repos/github/ArneBachmann/tagsplorer/badge.svg)](https://coveralls.io/github/ArneBachmann/tagsplorer)
 
 
 # tagsPlorer
