@@ -326,7 +326,7 @@ class Main:
     _.options.relative = True  # don't output full paths here
     warn("Configuration stats:")
     warn("  Number of configured paths: %d" % len(idx.cfg.paths))
-    warn("  Average number of markers per folder: %.2f" % ((sum([len(_) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip
+    warn("  Average number of markers per folder: %.2f" % ((sum([len(_) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip, ignore, manual tags
     warn("  Average number of entries per folder: %.2f" % ((sum([sum([len(__) for __ in _.values()]) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip
     warn("  Last update: " + time.strftime("%Y-%m-%d@%H:%M", time.localtime(os.stat(index)[ST_MTIME])))
     warn("Index stats:")
@@ -336,12 +336,14 @@ class Main:
     warn("  Compression level:",    idx.compression)
     warn("  Number of tags:",   len(idx.tagdirs))
     info("Tags and folders:")  # (occurrence = same name for different folder name references")
+    if not _.options.verbose and not _.options.debug_on: return 0
     byOccurrence = dd()
     for i, t in enumerate(frozenset(idx.tagdirs)):
       byOccurrence[idx.tagdirs.count(t)].append(i)  # map number of tag occurrences in index to their tagdir indices
     _cache = {}
     for n, ts in sorted(byOccurrence.items()):
       info(f"  {n} occurence%s for entries %s" % ("s" if n > 1 else "", COMB.join([str(_) for _ in sorted(ts)])))
+      if not _.options.debug_on: return 0
       byMapping = dd()
       for t in ts: byMapping[idx.tagdirs[t]].extend(idx.tagdir2paths[t])  # aggregate all mappings
       for t in sorted(byMapping.keys(), key = caseCompareKey):
@@ -374,7 +376,7 @@ class Main:
     op.add_option('-v', '--verbose',        action = "store_true",  dest = "verbose",     default = False,             help = "Show more information")
     op.add_option('-V', '--debug',          action = "store_true",  dest = "debug_on",    default = False,             help = "Show internal data state")
     op.add_option(      '--stats',          action = "store_true",  dest = "stats",       default = False,             help = "List index internals")
-    op.add_option(      '--simulate-winfs', action = "store_true",  dest = "winfs",       default = True,              help = "Simulate case-insensitive file system")  # but option is checked outside parser
+    op.add_option(      '--simulate-winfs', action = "store_true",  dest = "winfs",       default = True,              help = "Simulate case-insensitive file system")  # but option is checked outside parser TODO hide this option?
     op.add_option(      '--relative',       action = "store_true",  dest = "relative",    default = False,             help = "Output files with root-relative paths only")  # instead of absolute file system paths
     _.options, _.args = op.parse_args()  # TODO replace with argparse?
     reserved1, reserved2 = (set(_) for _ in splitByPredicate([_.get_opt_string() for _ in op.option_list], lambda e: e[:2] != '--'))  # handle reserved option switches that must be masked by a dash to operate as an exclude tag

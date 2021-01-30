@@ -276,7 +276,8 @@ def pathHasGlobalIgnore(path, ignores):
   assert isinstance(path, str)
   assert isinstance(ignores, list)
   if not path: return '' in ignores  # check root ignore
-  return xany(lambda ignore: normalizer.globmatch(path[path.rindex(SLASH) + 1:] if SLASH in path else path, ignore), ignores)
+  basename = path[path.rindex(SLASH) + 1:] if SLASH in path else path
+  return xany(lambda ignore: normalizer.globmatch(basename, ignore), ignores)
 
 
 def anyParentIsSkipped(path, paths):

@@ -11,7 +11,7 @@ def log(func): return (lambda *s: func(sjoin([_() if callable(_) else _ for _ in
 debug, info, warn, error = log(_log.debug), log(_log.info), log(_log.warning), log(_log.error)
 
 
-class ConfigParser(object):  # TODO use code from DLR RCE INI reader or replace by JSON or pickle object for speed
+class ConfigParser(object):  # TODO is there a faster serialization protocol?
   ''' Much simplified ini-style config file.
       No line continuation, no colon separation, no symbolic replacement, no comments, no empty lines.
   '''
@@ -23,7 +23,7 @@ class ConfigParser(object):  # TODO use code from DLR RCE INI reader or replace 
         fd: file-like object to enable reading from arbitrary data source and position in resource (e.g. after consuming the timestamp)
         returns: only the global section []
     '''
-    title = ''; section = dd()  # TODO make this an *ordered default* dict, but couldn't find any compatible solution. nowadays all dicts are ordered anyway
+    title = ''; section = dd()  # TODO make this an *ordered default* dict, but couldn't find any compatible solution. but nowadays all dicts are ordered anyway
     for line in fd.readlines():
       line = line.strip()  # just in case of incorrect formatting IDEA could be optimized away, or comments allowed
       if line.startswith('['):  # new section detected: before processing, store the last section
@@ -50,7 +50,7 @@ class ConfigParser(object):  # TODO use code from DLR RCE INI reader or replace 
     if parent is not None:  # store parent's properties
       if "" not in _.sections: _.sections[""] = dd()
       _.sections[""][GLOBAL] = sorted([f"{k.lower()}={parent.__dict__[k]}" for k, v in (kv.split("=")[:2] for kv in _.sections.get("", {}).get(GLOBAL, []))])  # store updated config
-    for title, _map in sorted(_.sections.items()):  # TODO write in added order instead?
+    for title, _map in sorted(_.sections.items()):  # TODO write in original order instead?
       if len(_map) == 0 or xall(lambda v: len(v) == 0, _map.values()): continue
       fd.write(f"[{title}]\n")
       for key, values in sorted(_map.items()):  # no need for iteritems, as supposedly small (max. size = 4)
@@ -111,7 +111,7 @@ class Configuration(object):
         tag: the tag to add to the configuration for the given folder
         poss: list of inclusive globs to apply the tag to
         negs: list of exclusive globs to apply the tag not to
-        force: allows adding tags already covered inclusively or exclusively by existing globs TODO not checked anymore
+        force: allows adding tags already covered inclusively or exclusively by existing globs TODO reimplement safety checks
         returns: was successfully added?
     '''
     debug(f"addTag +%s -%s to {folder}/{tag}%s" % (COMB.join(poss), COMB.join(negs), " force" if force else ""))
@@ -120,7 +120,7 @@ class Configuration(object):
     for line in conf.get(TAG, []):  # all pattern markers for the given folder
       if line.strip() == to_add:
         warn(f"Tag <{tag}> in {folder} for +%s -%s already defined, skip" % (COMB.join(sorted(poss)), COMB.join(sorted(negs))))
-        return False  # TODO code repetition with above
+        return False
 
     info(f"Tag <{tag}> in '{folder}' for +%s -%s" % (COMB.join(poss), COMB.join(negs)))
     conf = dictGetSet(_.paths, folder, {})  # creates empty config entry if it doesn't exist
@@ -153,7 +153,7 @@ class Configuration(object):
     debug(f"showTags for {folder}")
     inPath = set(safeSplit(folder, SLASH))  # break path into constituents
     inPath.update(reduce(lambda prev, step: prev + TOKENIZER.split(step) + TOKENIZER.split(normalizer.filenorm(step)), inPath, []))
-    warn("Tags derived from path: " + COMB.join(inPath))  # TODO consider filtering by ignore and skip
+    warn("Tags derived from path: " + COMB.join(inPath))  # TODO filter output by ignore and skip
     conf = dictGet(_.paths, folder, {})
     tags = dd()
     for line in conf.get(TAG, []): tags[line.split(SEPA)[0]].append(line)
@@ -187,7 +187,7 @@ class Indexer(object):
     except AttributeError: pass  # delete cache when reloading
     with open(filename, "rb") as fd:
       info("Read index from " + filename)
-      c = pickle.loads(zlib.decompress(fd.read()) if _.compression else fd.read())  # TODO can compression be configured outside source?
+      c = pickle.loads(zlib.decompress(fd.read()) if _.compression else fd.read())  # TODO can compression be configured outside source? not worth it since good enough
       _.cfg, _.timestamp, _.tagdirs, _.tagdir2parent, _.tagdir2paths = c.cfg, c.timestamp, c.tagdirs, c.tagdir2parent, c.tagdir2paths
       cfg = Configuration(_.cfg.case_sensitive)
       if (recreate_index or cfg.load(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)) and not ignore_skew:
@@ -218,8 +218,8 @@ class Indexer(object):
     if _.cfg is None: raise Exception("No configuration loaded. Cannot traverse folder tree")
     debug(f"Configuration: case_sensitive = {_.cfg.case_sensitive}, reduce_storage = {_.cfg.reduce_storage}")
     _.tagdirs = [""]       # list of directory names, duplicates allowed and required to represent the tree structure. "" represents the root folder
-    _.tagdir2parent = [0]  # pointer to parent directory. the self-reference at index 0 marks root. each index position responds to one entry in tagdirs TODO check this invariant somewhere
-    _.tagdir2paths = dd()  # maps index of tagdir entries to list of path leaf indexes, to find all paths ending in that suffix TODO use auto-growing list instead
+    _.tagdir2parent = [0]  # pointer to parent directory. the self-reference at index 0 marks root. each index position responds to one entry in tagdirs (!)
+    _.tagdir2paths = dd()  # maps index of tagdir entries to list of path leaf indexes, to find all paths ending in that suffix
     _.tags = []            # temporary data structure for "set" of (manually set or folder-derived) tag names and file extensions, which gets mapped into the tagdirs structure
     _.tag2paths = dd()     # temporary data structure for config-specified tag and extension mapping to matching respective paths
     _._walk(_.root, 0)     # recursive indexing
@@ -247,7 +247,7 @@ class Indexer(object):
     marks = _.cfg.paths.get(folder[len(_.root):], {})  # contains configuration for current folder, if any
     # 1a. check skip or ignore flags from configuration
     if SKIP   in marks or xany(lambda ignore: normalizer.globmatch(folder[folder.rindex(SLASH) + 1:] if folder and SLASH in folder else folder, ignore), dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, [])):
-      info(f"Skip '{folder[len(_.root):]}' due to " + ('path skip' if SKIP in marks else 'global folder name skip'))  # TODO what if only for root?
+      info(f"Skip '{folder[len(_.root):]}' due to " + ('path skip' if SKIP in marks else 'global folder name skip'))
       return  # completely ignore sub-tree and break recursion
     if IGNORE in marks or xany(lambda ignore: normalizer.globmatch(folder[folder.rindex(SLASH) + 1:] if folder and SLASH in folder else folder, ignore), dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, [])):
       info(f"Ignore '{folder[len(_.root):]}' due to " + ('path ignore' if IGNORE in marks else 'global folder name ignore'))
@@ -265,7 +265,7 @@ class Indexer(object):
         other = os.path.normpath(os.path.join(folder, pathNorm(f)))[len(_.root):] if not f.startswith(SLASH) else pathNorm(f)
         _marks = _.cfg.paths.get(other, {})  # marks of mapped folder
         for t in _marks.get(TAG, []):
-          tag, pos, neg = t.split(SEPA)  # TODO the actual pattern filtering must be implemented in findFiles or even findfolders
+          tag, pos, neg = t.split(SEPA)  # HINT the actual pattern filtering is implemented in findFiles TODO or even findfolders
           info(f"Tag <{tag}> (+<{pos}> -<{neg}>) in '{folder[len(_.root):]}'")
           i = findIndexOrAppend(_.tags, tag); adds.add(i)
           appendnew(_.tag2paths[i], findex)
@@ -292,10 +292,10 @@ class Indexer(object):
       # TODO index file names and their tokens! this would also cover dot-first files ignored above
 
     # 3.  prepare recursion
-    newtags = [t for t in tags[:-last if ignore else None]]  # tags to propagate into subfolders (except current folder names if ignored) to children TODO we could reuse the "tags" reference from here on instead of "newtags"
+    newtags = [t for t in tags[:-last if ignore else None]]  # tags to propagate into subfolders (except current folder names if ignored)
+    cache = {}  # for faster path computation during output logging HINT cache was formerly in side folders loop
     for subfolder in ([] if ignore else folders):  # iterate sub-folders
       # 3a. add sub-folder name to "tagdirs" and "tagdir2parent"
-      cache = {}  # for faster path computation during output logging TODO pull cache out of loop?
       idxs  = []  # *first* element in "idx" is parent index to use in recursion for the currently processed subfolder
       addt  = set()  # per-subfolder local additional tokens
       added = 0
@@ -317,7 +317,7 @@ class Indexer(object):
         assert len(_.tagdirs) == len(_.tagdir2parent)  # invariant
 
       tokens = [r for r in TOKENIZER.split(subfolder) if r not in ("", subfolder)]  # in addition to the folder parent mapping, split folder name into tokens
-      for token in set(tokens):  # HINT: for folders, we also split at dots ("extension") TODO document this difference (also stores .folder extension for the folder)
+      for token in set(tokens):
         debug(f"Store literal token '{token}' for '{_.getPath(findex, cache)}'")
         i = findIndexOrAppend(_.tags, token); addt.add(i)
         _.tag2paths[i].append(idxs[-added])  # link token index to stored path constituent
@@ -445,10 +445,11 @@ class Indexer(object):
         returns:   list of folder paths (case-normalized or both normalized and as is, depending on the case-sensitive option)
     '''
     idirs, sdirs = dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, []), dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored and skipped paths
-    debug(f"Build list of all paths.  Global ignores: {idirs}  Global skips: {sdirs}")  # TODO put message into lambda below
-    _.allPaths = wrapExc(lambda: _.allPaths,  # lazy computation: try to use previously computed paths first. fails if property not defined
-                         lambda: set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), {})))  # compute union of all paths (cached when running as a server)
-    alls = [path for path in _.allPaths if not pathHasGlobalIgnore(path, idirs) and not pathHasGlobalSkip(path, sdirs) and not anyParentIsSkipped(path, _.cfg.paths) and IGNORE not in dictGet(_.cfg.paths, path, {})]  # must be computed here already TODO add marker file logic below?
+    def rebuild():
+      debug(f"Build list of all paths.  Global ignores: {idirs}  Global skips: {sdirs}")
+      return set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), {}))  # compute union of all paths (cached when running as a server)
+    _.allPaths = wrapExc(lambda: _.allPaths, rebuild)  # lazy computation. fails and computes if property not defined
+    alls = [path for path in _.allPaths if not pathHasGlobalIgnore(path, idirs) and not pathHasGlobalSkip(path, sdirs) and not anyParentIsSkipped(path, _.cfg.paths) and IGNORE not in dictGet(_.cfg.paths, path, {})]  # TODO add marker file logic below?
     if returnAll or len(include) == 0:  # if only exclusive tags, we need all paths and prune them later
       debug(f"Prune skipped and ignored paths from {len(_.allPaths)} to {len(alls)} paths")
       if returnAll:
@@ -458,7 +459,8 @@ class Indexer(object):
     for tag in include:  # positive restrictive matching
       debug(f"Filter {len(alls if first else paths)} paths by inclusive tag <{tag}>")
       if isGlob(tag):  # filters indexed extensions by extension's glob (".c??"")
-        new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), normalizer.globfilter(_.tagdirs, tag), set())  # TODO use set.update() in loop instead
+#        new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), normalizer.globfilter(_.tagdirs, tag), set())  # TODO use set.update() in loop instead? instead of |
+        new = reduce(lambda a, b: a.update(set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache))) or a, normalizer.globfilter(_.tagdirs, tag), set())  # in-place version
       elif DOT in tag:
         new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(normalizer.filenorm(tag[tag.index(DOT):]))], cache)), set())  # directly from index
       else:  # no glob, no extension: tag or file name
@@ -475,11 +477,11 @@ class Indexer(object):
       else:
         paths.difference_update(new)  # reduce found paths by exclude matches
     # Now convert to return list, which may differ from previously computed set of paths
-    paths = [p for p in paths if not pathHasGlobalIgnore(p, idirs) and not pathHasGlobalSkip(p, sdirs)]  # TODO filter was done above already TODO remove filtering here, it should be reflected in index already (in contrast to above getall?)
+    paths = [p for p in paths if not pathHasGlobalIgnore(p, idirs) and not pathHasGlobalSkip(p, sdirs)]  # TODO filter was done above already. remove filtering here, it should be reflected in index already (in contrast to above getall?)
     debug(f"Found {len(paths)} path matches")
     if _.cfg.case_sensitive:  # eliminate different letter cases, otherwise return both, although only one physically exists TOOD use "not"?
       paths[:] = [p for p in paths if os.path.isdir(_.root + os.sep + p)]  # ensure that only correct letter cases are retained on case-sensitive file systems
-      debug(f"Retained {len(paths)} paths after removing duplicates")  # TODO on windows, this might succesd although case differs!
+      debug(f"Retained {len(paths)} paths after removing duplicates")  # TODO on windows, this might succeed although case differs!
     assert all(path.startswith(SLASH) or path == '' for path in paths), paths  # only return root-relative paths
     return paths
 
@@ -499,12 +501,13 @@ class Indexer(object):
     poss = set([p for p in poss if not normalizer.globfilter(inPath, p)])  # remove already true positive tags (folder name match)
     info(f"Filter folder '{current}' %s" % (("by remaining including tags " + (", ".join(poss)) if len(poss) else (("by remaining excluding tags " + ", ".join(negs)) if len(negs) else "with no constraint"))))
     conf = _.cfg.paths.get(current, {})  # if empty we return all files
-    mapped = [pathNorm(m if m.startswith(SLASH) else os.path.normpath(current + SLASH + m)) for m in conf.get(FROM, [])]  # root-absolute or folder-relative path TODO sanity check if path exists or if outside repository
-    if len(mapped): debug(f"Mapped folders: {os.pathsep.join(mapped)}")
+    mapped = [pathNorm(m if m.startswith(SLASH) else os.path.normpath(current + SLASH + m)) for m in conf.get(FROM, [])]  # root-absolute or folder-relative path
+#    mapped[:] = [m for m in mapped if usInderRoot] TODO sanity check if path exists or if outside repository
+    if len(mapped): debug(f"Mapped folders: {os.pathsep.join(mapped)}")  # root-relative paths
     skipFilter = len(poss) + len(negs) + len(mapped) == 0
 
     willskip = False  # contains files from current or mapped folders (without path, since "mapped", but could get a local symlink - TODO
-    found = set() if not skipFilter else set(wrapExc(lambda: [f for f in os.listdir(_.root + current) if isFile(_.root + current + os.sep + f)], []))  # TODO duplicate of below as special case for no further constraints -> returns all
+    found = set() if not skipFilter else set(wrapExc(lambda: [f for f in os.listdir(_.root + current) if isFile(_.root + current + os.sep + f)], []))  # TODO what if folder doesn't exist TODO duplicate of below as special case for no further constraints -> returns all
     if IGNFILE in found: skipFilter, found = True, set()  # enable skip but don't return anything
     for _f, folder in enumerate([] if skipFilter else [current] + mapped):
       info(("Check %s %%sfolder%%s" % ('mapped' if _f else 'proper')) % (('', f" '{folder}'") if folder else ("root ", "")))
@@ -523,8 +526,8 @@ class Indexer(object):
       keep = set(files)  # shallow copy. start with all files to keep, then reduce by remaining matching tag patterns
       for tag in poss:  # for every inclusive tag, check if action on current files is necessary
         if tag[0] == DOT:  keep.intersection_update(set(f for f in files if f[-len(tag):] == tag)); continue  # filter by file extension
-        elif isGlob(tag):  keep.intersection_update(set(normalizer.globfilter(files, tag))); continue  # filter globsdifference_
-        elif tag in files: keep.intersection_update(set([tag])); continue  # TODO cannot detect tokenized file globsdifference_names here, we operate only on actual file system contents TODO what if same tag defined in removeon
+        elif isGlob(tag):  keep.intersection_update(set(normalizer.globfilter(files, tag))); continue  # filter globs
+        elif tag in files: keep.intersection_update(set([tag])); continue  # TODO cannot detect tokenized file globs here, we operate only on actual file system contents TODO what if same tag defined in remove
 
         diskeep = set()  # collect all disjunctive "keep" results for configured tag
         for value in tags:  # restrict by additional matching tags from the folder configuration
