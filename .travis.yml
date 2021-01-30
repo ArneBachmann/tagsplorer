@@ -153,7 +153,7 @@ jobs:
     python: 3.9
     env:
     - SIMULATE_WINFS=true
-install: "pip install --user coverage python-coveralls"  # or "coveralls" instead (alternative package)
+install: "pip install coverage python-coveralls"  # or "coveralls" instead (alternative package)
 script: python setup.py build && pip install -e . && coverage run tests.py && coverage html && coverage annotate tests.py
 after_success:
 - coveralls
