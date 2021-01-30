@@ -366,11 +366,11 @@ class Main:
     op.add_option(      '--tags',           action = "store_true",  dest = "show_tags",   default = False,             help = "List defined tags for a folder")
     op.add_option(      '--get',            action = "store",       dest = "getconfig",   default = None,  type = str, help = "Get global configuration parameter")
     op.add_option(      '--set',            action = "store",       dest = "setconfig",   default = None,  type = str, help = "Set global configuration parameter key=value")
-    op.add_option(      '--unset',          action = "store",       dest = "unsetconfig", default = None,  type = str, help = "Unset global configuration parameter")  # add '--clear' TODO remove/reset all settings
+    op.add_option(      '--unset',          action = "store",       dest = "unsetconfig", default = None,  type = str, help = "Unset global configuration parameter")  # add '--clear -C' TODO remove/reset all settings
     op.add_option(      '--run',            action = "store_true",  dest = "run",         default = False,             help = "Attempt to run file, if search results in exactly one match")  # TODO implement
     op.add_option('-f', '--force',          action = "store_false", dest = "strict",      default = True,              help = "Force operation, relax safety measures")  # mapped to inverse "strict" flag
     op.add_option('-c', '--ignore-case',    action = "store_true",  dest = "ignore_case", default = False,             help = "Search case-insensitive (overrides option in index)")
-    op.add_option('-n', '--simulate',       action = "store_true",  dest = "simulate",    default = False,             help = "Don't write anything")  # TODO confirm nothing modified on FS
+    op.add_option('-n', '--simulate',       action = "store_true",  dest = "simulate",    default = False,             help = "Don't write anything")
     op.add_option('-k', '--keep-index',     action = "store_true",  dest = "keep_index",  default = False,             help = "Don't update the index, even if configuration was changed")
     op.add_option(      '--dirs',           action = "store_true",  dest = "onlyfolders", default = False,             help = "Only find folders that contain matches")
     op.add_option('-v', '--verbose',        action = "store_true",  dest = "verbose",     default = False,             help = "Show more information")

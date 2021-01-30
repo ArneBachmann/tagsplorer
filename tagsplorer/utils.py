@@ -26,7 +26,7 @@ class Normalizer(object):
     >>> n.setupCasematching(False)
     >>> print((n.filenorm("Abc"), n.globmatch("abc", "?Bc"), n.globfilter(["ab1", "Ab2"], "a??")))
     ('abc', True, ['ab1', 'Ab2'])
-    >>> print(n.globfilter(["ab", "Ab"], "a?"))  # TODO what about duplicates in normalized results? Is this possible?
+    >>> print(n.globfilter(["ab", "Ab"], "a?"))
     ['ab', 'Ab']
     >>> print(n.globfilter(["dot.folder"], "DOT*"))  # regression test
     ['dot.folder']
@@ -36,7 +36,7 @@ class Normalizer(object):
     _.globmatch  = fnmatch.fnmatchcase if case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower())
     _.globfilter = casefilter if case_sensitive else \
                    (lambda lizt, pat: [name for name in lizt if fnmatch.fnmatch(name.lower(), pat.lower())])  # HINT lower maybe not necessary
-normalizer = Normalizer()  # keep a static module-reference. TODO move to main or objects instead?
+normalizer = Normalizer()  # keep a static module-reference
 
 
 def dd(): return collections.defaultdict(list)
@@ -168,7 +168,8 @@ def isFile(f): return wrapExc(lambda: os.path.isfile(f) and not os.path.ismount(
 
 
 def isGlob(f):
-  ''' Is the specified pattern a potential glob? HINT TODO doesn't allow square bracket patterns like "[123] or "[a-z]""
+  ''' Is the specified pattern a potential glob?
+      HINT TODO doesn't allow yet square bracket patterns like "[123] or "[a-z]""
   >>> isGlob("a*b.jp?")
   True
   >>> isGlob("sdf.txt")
@@ -235,10 +236,10 @@ def splitByPredicate(lizt, pred):
 
 
 def caseCompareKey(c):
-  ''' Python 3 key function for sorting. '''
+  ''' Python 3 key function for sorting, only used in debug output. '''
   if c == '': return 0
-  if len(c) > 1: return caseCompareKey(c[-1])  # TODO explain - also used only in one debug output
-  return ord(c.lower()) << 24 | ord(c)
+  if len(c) > 1: return ord(c[0].lower()) << 8 | caseCompareKey(c[1:])
+  return ord(c.lower())
 
 
 def escapeRegex(name):
@@ -251,7 +252,7 @@ def escapeRegex(name):
 
 def pathHasGlobalSkip(path, skips):
   ''' True if any path matches the global skip paths (regex for full, beginning, middle, end).
-      Uses dynamic generation of regular expressions TODO path sanitization for security
+      Uses dynamic generation of regular expressions TODO path sanitization before re for security
   >>> pathHasGlobalSkip('/a', ['a'])
   True
   >>> pathHasGlobalSkip('/b', ['a'])
@@ -266,9 +267,15 @@ def pathHasGlobalSkip(path, skips):
 
 def pathHasGlobalIgnore(path, ignores):
   ''' Check if last path constituent matches any global ignore pattern.
+  >>> normalizer.setupCasematching(True)
   >>> pathHasGlobalIgnore('/a/b', ['b'])
   True
+  >>> pathHasGlobalIgnore('/a/b', ['B'])
+  False
+  >>> normalizer.setupCasematching(False)
   >>> pathHasGlobalIgnore('/a/b', ['c'])
+  False
+  >>> pathHasGlobalIgnore('/a/b', ['C'])
   False
   >>> pathHasGlobalIgnore('', [''])
   True
