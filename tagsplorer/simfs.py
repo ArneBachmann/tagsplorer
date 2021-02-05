@@ -2,7 +2,9 @@
 
 import doctest, logging, os, sys, unittest
 
+
 _log = logging.getLogger(__name__)
+
 
 if '--simulate-winfs' in sys.argv or os.environ.get("SIMULATE_WINFS", "false").lower() == "true":
   _log.debug("Using case-insensitive file system emulation (for testing Windows behavior on Linux)")
@@ -194,6 +196,6 @@ else: SIMFS = False
 if __name__ == '__main__':
   logging.basicConfig(level = logging.DEBUG if os.environ.get("DEBUG", "False").lower() == "true" else logging.INFO, stream = sys.stderr, format = "%(asctime)-23s %(levelname)-8s %(name)s:%(lineno)d | %(message)s")
   if sys.platform == 'win32': print("Testing on Windows makes no sense. This is a Windows file system simulator!"); exit(1)
-  _chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # main repo folder
+  os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # main repo folder
   unittest.main()  # warnings = "ignore")
   for file in ("_X.x", "_x.X"): wrapExc(lambda: _unlink(file))

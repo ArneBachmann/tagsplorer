@@ -1,10 +1,13 @@
+# coding=utf-8
+
 ''' tagsPlorer library  (C) 2016-2021  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer '''
 
 import logging, os, pickle, sys, zlib
 from functools import reduce
 
-from tagsplorer.constants import ALL, COMB, CONFIG, DOT, FROM, GLOBAL, IGNFILE, IGNORE, IGNORED, ON_WINDOWS, PICKLE_PROTOCOL, SEPA, SKIP, SKIPD, SKPFILE, SLASH, ST_SIZE, TAG, TOKENIZER
-from tagsplorer.utils import anyParentIsSkipped, appendnew, dd, dictGet, dictGetSet, findIndexOrAppend, getTsMs, isFile, isGlob, lappend, normalizer, pathHasGlobalIgnore, pathHasGlobalSkip, pathNorm, safeSplit, sjoin, splitByPredicate, wrapExc, xall, xany
+from tagsplorer.constants import ALL, COMB, CONFIG, DOT, FROM, GLOBAL, IGNFILE, IGNORE, IGNORED, IGNOREDS, ON_WINDOWS, PICKLE_PROTOCOL, SEPA, SKIP, SKIPD, SKIPDS, SKPFILE, SLASH, ST_SIZE, TAG, TOKENIZER
+from tagsplorer.utils import anyParentIsSkipped, appendnew, dd, dictGet, dictGetSet, findIndexOrAppend, getTsMs, isDir, isFile, isGlob, lappend, normalizer, pathHasGlobalIgnore, pathHasGlobalSkip, pathNorm, safeSplit, sjoin, splitByPredicate, wrapExc, xall, xany
+
 
 _log = logging.getLogger(__name__)
 def log(func): return (lambda *s: func(sjoin([_() if callable(_) else _ for _ in s]), **({"stacklevel": 2} if sys.version_info >= (3, 8) else {})))
@@ -12,9 +15,7 @@ debug, info, warn, error = log(_log.debug), log(_log.info), log(_log.warning), l
 
 
 class ConfigParser(object):  # TODO is there a faster serialization protocol?
-  ''' Much simplified ini-style config file.
-      No line continuation, no colon separation, no symbolic replacement, no comments, no empty lines.
-  '''
+  ''' Much simplified ini-style config file. No line continuation, no colon separation, no symbolic replacement, no comments, no empty lines. '''
 
   def __init__(_): _.sections = {}  # there is always a global section [] and optionally exactly one section per root-relative path
 
@@ -23,7 +24,7 @@ class ConfigParser(object):  # TODO is there a faster serialization protocol?
         fd: file-like object to enable reading from arbitrary data source and position in resource (e.g. after consuming the timestamp)
         returns: only the global section []
     '''
-    title = ''; section = dd()  # TODO make this an *ordered default* dict, but couldn't find any compatible solution. but nowadays all dicts are ordered anyway
+    title = ''; section = dd()  # TODO make this an *ordered default* dict, but couldn't find any compatible solution. HINT nowadays all dicts are ordered anyway
     for line in fd.readlines():
       line = line.strip()  # just in case of incorrect formatting IDEA could be optimized away, or comments allowed
       if line.startswith('['):  # new section detected: before processing, store the last section
@@ -67,6 +68,7 @@ class Configuration(object):
     _.paths = {}  # {relative dir path -> {marker -> [entries]}}
     _.case_sensitive = case_sensitive  # search behavior
     _.reduce_storage = False           # storage behavior
+    _.compression = 2                  # good fast compromise: uncompressed pickling is faster than any bz2 compression, but zlib level 2 seems to get best trade-off. 0 means uncompressed
     normalizer.setupCasematching(case_sensitive, suppress = True)  # compute default, but can be overridden during load()
 
   def logConfiguration(_):
@@ -168,10 +170,9 @@ class Indexer(object):
 
   def __init__(_, startDir):
     ''' startDir: absolute path. '''
-    _.compression = 2  # pure pickling is faster than any bz2 compression, but zlib level 2 seems to have best size/speed combination. if changed to 0, data will be stored uncompressed and the index needs to be re-created
     _.timestamp = 1.23456789  # for comparison with configuration timestamp
     _.cfg = None  # reference to latest corresponding configuration
-    _.root = pathNorm(startDir)  # slash-normalized absolute path
+    _.root = pathNorm(startDir[:-1] if startDir.endswith(":\\") else startDir)  # slash-normalized absolute path
     _.tagdirs = []  # array of tags (plain dirnames and manually set tags (not represented in parent), both case-normalized and as-is)
     _.tagdir2parent = []  # index of dir entry (tagdirs) -> index of parent to represent tree structure (excluding folder links)
     _.tagdir2paths = dd()  # dirname/tag index -> list of [all path indices relevant for that dirname/tag]
@@ -187,7 +188,7 @@ class Indexer(object):
     except AttributeError: pass  # delete cache when reloading
     with open(filename, "rb") as fd:
       info("Read index from " + filename)
-      c = pickle.loads(zlib.decompress(fd.read()) if _.compression else fd.read())  # TODO can compression be configured outside source? not worth it since good enough
+      c = pickle.loads(zlib.decompress(fd.read()) if _.cfg.compression else fd.read())
       _.cfg, _.timestamp, _.tagdirs, _.tagdir2parent, _.tagdir2paths = c.cfg, c.timestamp, c.tagdirs, c.tagdir2parent, c.tagdir2paths
       cfg = Configuration(_.cfg.case_sensitive)
       if (recreate_index or cfg.load(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)) and not ignore_skew:
@@ -203,7 +204,7 @@ class Indexer(object):
       nts = getTsMs()
       _.timestamp = _.timestamp + 0.001 if nts <= _.timestamp else nts  # assign new date, ensure always differing from old value
       debug("Store index to " + filename)
-      fd.write(zlib.compress(pickle.dumps(_, protocol = PICKLE_PROTOCOL), _.compression) if _.compression else pickle.dumps(_, protocol = PICKLE_PROTOCOL))
+      fd.write(zlib.compress(pickle.dumps(_, protocol = PICKLE_PROTOCOL), _.cfg.compression) if _.cfg.compression else pickle.dumps(_, protocol = PICKLE_PROTOCOL))
       if config_too:
         debug("Update configuration to match new index timestamp")
         _.cfg.store(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)  # update timestamp in configuration
@@ -246,10 +247,10 @@ class Indexer(object):
     # 1.  get folder configuration, if any
     marks = _.cfg.paths.get(folder[len(_.root):], {})  # contains configuration for current folder, if any
     # 1a. check skip or ignore flags from configuration
-    if SKIP   in marks or xany(lambda ignore: normalizer.globmatch(folder[folder.rindex(SLASH) + 1:] if folder and SLASH in folder else folder, ignore), dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, [])):
+    if SKIP   in marks or xany(lambda ignore: normalizer.globmatch(folder[folder.rindex(SLASH) + 1:] if folder and SLASH in folder else folder, ignore), dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, []) + SKIPDS):
       info(f"Skip '{folder[len(_.root):]}' due to " + ('path skip' if SKIP in marks else 'global folder name skip'))
       return  # completely ignore sub-tree and break recursion
-    if IGNORE in marks or xany(lambda ignore: normalizer.globmatch(folder[folder.rindex(SLASH) + 1:] if folder and SLASH in folder else folder, ignore), dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, [])):
+    if IGNORE in marks or xany(lambda ignore: normalizer.globmatch(folder[folder.rindex(SLASH) + 1:] if folder and SLASH in folder else folder, ignore), dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, []) + IGNOREDS):
       info(f"Ignore '{folder[len(_.root):]}' due to " + ('path ignore' if IGNORE in marks else 'global folder name ignore'))
       ignore = True  # ignore this directory as a tag, and don't index its contents, but still continue recursion
     # 1b. read configured additional tags for folder and folder mapping from configuration into "tags" and "adds"
@@ -265,13 +266,14 @@ class Indexer(object):
         other = os.path.normpath(os.path.join(folder, pathNorm(f)))[len(_.root):] if not f.startswith(SLASH) else pathNorm(f)
         _marks = _.cfg.paths.get(other, {})  # marks of mapped folder
         for t in _marks.get(TAG, []):
-          tag, pos, neg = t.split(SEPA)  # HINT the actual pattern filtering is implemented in findFiles TODO or even findfolders
+          tag, pos, neg = t.split(SEPA)  # HINT the actual pattern filtering is implemented in findFiles TODO or even findFolders
           info(f"Tag <{tag}> (+<{pos}> -<{neg}>) in '{folder[len(_.root):]}'")
           i = findIndexOrAppend(_.tags, tag); adds.add(i)
           appendnew(_.tag2paths[i], findex)
 
     # 2. process folder's file names (file extensions only)
-    files, folders = splitByPredicate(os.listdir(folder), lambda f: wrapExc(lambda: os.path.isfile(folder + SLASH + f), False))  # TODO rest is not automatically a directory!
+    files, folders = splitByPredicate(os.listdir(folder), lambda f: isFile(folder + SLASH + f))  # HINT right-hand side is not automatically a directory, thus filtered below:
+    folders[:] = sorted([f for f in folders if isDir(folder + SLASH + f)])  # remove special files like ".desktop"
     if SKPFILE in files:  # HINT allow other than lower case skip file? should be no problem, as even Windows allows lower-case file names and should match here
       info(f"Skip '{folder[len(_.root):]}' due to local skip marker file")
       return  # ignore entire sub-tree and break recursion
@@ -289,7 +291,7 @@ class Indexer(object):
         if iext != ext and not _.cfg.reduce_storage:  # store normalized extension if different from literal, unless told not to
           i = findIndexOrAppend(_.tags, iext); adds.add(i)  # add file extension to local dir's tags only
           _.tag2paths[i].append(findex)  # add current dir to index of that extension
-      # TODO index file names and their tokens! this would also cover dot-first files ignored above
+      # TODO optionally also index file names and their tokens! this would also cover dot-first files ignored above
 
     # 3.  prepare recursion
     newtags = [t for t in tags[:-last if ignore else None]]  # tags to propagate into subfolders (except current folder names if ignored)
@@ -444,7 +446,7 @@ class Indexer(object):
         returnAll: shortcut flag that simply returns *all paths* from the index instead of finding and filtering results (from tp.find())
         returns:   list of folder paths (case-normalized or both normalized and as is, depending on the case-sensitive option)
     '''
-    idirs, sdirs = dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, []), dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored and skipped paths
+    idirs, sdirs = dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, []) + IGNOREDS, dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, []) + SKIPDS  # get lists of ignored and skipped paths
     def rebuild():
       debug(f"Build list of all paths.  Global ignores: {idirs}  Global skips: {sdirs}")
       return set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), {}))  # compute union of all paths (cached when running as a server)
@@ -459,7 +461,6 @@ class Indexer(object):
     for tag in include:  # positive restrictive matching
       debug(f"Filter {len(alls if first else paths)} paths by inclusive tag <{tag}>")
       if isGlob(tag):  # filters indexed extensions by extension's glob (".c??"")
-#        new = reduce(lambda a, b: a | set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache)), normalizer.globfilter(_.tagdirs, tag), set())  # TODO use set.update() in loop instead? instead of |
         new = reduce(lambda a, b: a.update(set(_.getPaths(_.tagdir2paths[_.tagdirs.index(b)], cache))) or a, normalizer.globfilter(_.tagdirs, tag), set())  # in-place version
       elif DOT in tag:
         new = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(normalizer.filenorm(tag[tag.index(DOT):]))], cache)), set())  # directly from index
@@ -502,7 +503,7 @@ class Indexer(object):
     info(f"Filter folder '{current}' %s" % (("by remaining including tags " + (", ".join(poss)) if len(poss) else (("by remaining excluding tags " + ", ".join(negs)) if len(negs) else "with no constraint"))))
     conf = _.cfg.paths.get(current, {})  # if empty we return all files
     mapped = [pathNorm(m if m.startswith(SLASH) else os.path.normpath(current + SLASH + m)) for m in conf.get(FROM, [])]  # root-absolute or folder-relative path
-#    mapped[:] = [m for m in mapped if usInderRoot] TODO sanity check if path exists or if outside repository
+#    mapped[:] = [m for m in mapped if usInderRoot] TODO sanity check if path exists or if outside repository? could be considered a feature though
     if len(mapped): debug(f"Mapped folders: {os.pathsep.join(mapped)}")  # root-relative paths
     skipFilter = len(poss) + len(negs) + len(mapped) == 0
 
@@ -511,7 +512,7 @@ class Indexer(object):
     if IGNFILE in found: skipFilter, found = True, set()  # enable skip but don't return anything
     for _f, folder in enumerate([] if skipFilter else [current] + mapped):
       info(("Check %s %%sfolder%%s" % ('mapped' if _f else 'proper')) % (('', f" '{folder}'") if folder else ("root ", "")))
-      files = set(wrapExc(lambda: [f for f in os.listdir(_.root + folder) if isFile(_.root + folder + os.sep + f)], []))  # TODO silently catches for OS errors, e.g. encoding
+      files = set(wrapExc(lambda: [f for f in os.listdir(_.root + folder) if isFile(_.root + folder + os.sep + f)], []))  # TODO silently catches for OS errors, e.g. encoding problems
       if IGNFILE in files: continue  # ignore is easy
       if folder == current and SKPFILE in files:  # only applies to non-mapped folder
         willskip = True  # skip is more difficult to handle than ignore, cf. return 2-tuple (call in tp.find())

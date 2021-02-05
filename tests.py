@@ -1,3 +1,5 @@
+# coding=utf-8
+
 ''' tagsPlorer test suite  (C) 2016-2021  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer '''
 
 # HINT Set environment variable SKIP=true to avoid reverting test data prior to test run
@@ -154,6 +156,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Found 0 files", runP("CASE -v"))  # wrong case writing, can't find
     _.assertIn("Found %d files in %d folders" % ((4, 2) if constants.ON_WINDOWS or simfs.SIMFS else (2, 1)), runP("case -v -c"))  # ignore case: should find Case and case (no combination because different findFiles calls)
     _.assertIn("Added configuration entry", runP("--set reduce_storage=True -v"))
+    _.assertAllIn(["Configuration entry: case_sensitive = True", "Configuration entry: reduce_storage = True"], runP("--config -v"))
     runP("-U")  # trigger update index after config change (but should automatically do so anyway)
     _.assertIn("tags: 49", runP("--stats"))  # now also small on Windows Windows
     _.assertIn("Found 2 files in 1 folders", runP("Case -v"))  # index contains original case only
@@ -245,7 +248,7 @@ class TestRepoTestCase(unittest.TestCase):
   def testOnlyDirsOption(_):
     _.assertAllIn(["Found 1 folder", "/folders/folder1"], runP("-s folder1 -v --dirs"))
     _.assertAllIn(["Found 3 folders", "/folders", "/folders/folder1", "/folders/folder2"], runP('-v -s folder? --dirs'))  # must be quoted on command-line, though
-    _.assertIn(    "Found 3 folders", runP('-s folder* -v --dirs'))
+    _.assertAllIn(["Found 4 folders", "folder2", "folder1", "folders", "dot.folder"], runP('-s folder* -v --dirs'))
 
   def testExtensions(_):
     _.assertIn("Found 3 files in 2 folders", runP("-s .ext1 -v"))
@@ -288,6 +291,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Found 0 files", runP("-s missing -v"))
     _.assertIn("No file matches", runP("--tag missing,-exclusive _test-data/tagging/anyfile1 -v"))
     _.assertNotIn("Wrote", runP("--tag missing,-exclusive _test-data/tagging/anyfile1 -v"))
+    _.assertAllIn(["folders", "folder2"], runP("--tags _test-data/folders/folder2"))
     _.assertNotIn("Recreate", runP("-s missing -v"))  # should not reindex due to absence of above cfg update
     _.assertIn("Found 0 files", runP("-s missing -v"))  # should still not find anything
     # test adding non-existing file, then search
@@ -368,8 +372,8 @@ def load_tests(loader, tests, ignore):
   ''' Added up by unittest. '''
   tests.addTests(doctest.DocTestSuite(tp))
   tests.addTests(doctest.DocTestSuite(lib))
+  tests.addTests(doctest.DocTestSuite(simfs))
   tests.addTests(doctest.DocTestSuite(utils))
-  if constants.ON_WINDOWS or simfs.SIMFS: tests.addTests(doctest.DocTestSuite(simfs))
   return tests
 
 

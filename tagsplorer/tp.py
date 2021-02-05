@@ -1,13 +1,15 @@
+# coding=utf-8
+
 ''' tagsPlorer command-line interface  (C) 2016-2021  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer '''
 
 import logging, optparse, os, sys, time
 assert sys.version_info >= (3, 6), "tagsPlorer requires Python 3.6+"
 
-from tagsplorer.constants import ALL, COMB, CONFIG, DOT, GLOBAL, INDEX, SLASH, ST_MTIME
+from tagsplorer.constants import ALL, APPNAME, APPSTR, COMB, CONFIG, DOT, GLOBAL, INDEX, RIGHTS, SLASH, ST_MTIME, VERSION
 from tagsplorer.lib import Configuration, Indexer
 from tagsplorer.utils import caseCompareKey, casefilter, dd, dictGetSet, isGlob, isUnderRoot, lindex, normalizer, pathNorm, removeTagPrefixes, safeSplit, safeRSplit, sjoin, splitByPredicate, splitTags, wrapExc, xany
-with open(os.path.join(os.path.dirname(__file__), 'VERSION'), encoding = 'utf-8') as fd: VERSION = fd.read()
 from tagsplorer import lib, simfs, utils  # for setting the log level dynamically
+
 
 logging.basicConfig(
   level =  logging.DEBUG if '-V' in sys.argv or '--debug'   in sys.argv or os.environ.get("DEBUG",   "False").lower() == "true" else
@@ -19,10 +21,6 @@ logging.basicConfig(
 _log = logging.getLogger(__name__)
 def log(func): return (lambda *s: func(sjoin([_() if callable(_) else _ for _ in s]), **({"stacklevel": 2} if sys.version_info >= (3, 8) else {})))
 debug, info, warn, error = log(_log.debug), log(_log.info), log(_log.warning), log(_log.error)
-
-RIGHTS  = 0o755  # for creating new folders
-APPNAME = "tagsPlorer"  # or something clunky like "virtdirview"
-APPSTR  = APPNAME + " version %s  (C) 2016-2021  Arne Bachmann" % VERSION
 
 
 def findRootFolder(filename, start = None):
@@ -62,7 +60,7 @@ def getRoot(options, args):
   '''
   if options.index:
     if options.root is None: raise Exception("Cannot omit root folder and specify index file folder")
-    return (os.path.abspath(options.root), os.path.abspath(options.index))  # the options "-i" and "-r" always go together
+    return (os.path.abspath(options.root), os.path.abspath(options.index))  # the options "-I" and "-r" always go together
   folder = options.root
   if folder is None:
     folder = findRootFolder(CONFIG)
@@ -77,7 +75,7 @@ class CatchExclusionsParser(optparse.OptionParser):
   ''' Allows to process undefined options as non-option arguments (e.g. --tag as an additional exclusive tag marked via --). '''
   def __init__(_):
     ihf = optparse.IndentedHelpFormatter(2, 60, 120)  # , formatter = optparse.TitledHelpFormatter(),
-    optparse.OptionParser.__init__(_, prog = APPNAME, usage = "python tp <tags and options>", description = APPSTR, version = VERSION, formatter = ihf)
+    optparse.OptionParser.__init__(_, add_help_option = False, prog = APPNAME, usage = "python tp <tags and options>", description = APPSTR, version = VERSION, formatter = ihf)
 
   def _process_args(_, largs, rargs, values):
     while rargs:
@@ -129,14 +127,13 @@ class Main:
     folder, index = getRoot(_.options, _.args)
     indexFile = os.path.join(index, INDEX)
     if not os.path.exists(indexFile):  # e.g. first run after root initialization
-      error("No index file found. %s" % ("Exit" if _.options.keep_index else "Crawl folder tree"))
+      error("No index file found. " + ("Exit" if _.options.keep_index else "Crawl folder tree"))
       if _.options.keep_index: return 2
-      idx = _.updateIndex()  # crawl folder tree immediately and return search index TODO also update if outdated
+      idx = _.updateIndex()  # crawl folder tree immediately and return search index
     else:
       idx = Indexer(index)
       idx.load(indexFile, ignore_skew = _.options.keep_index)  # load search index from root
-    if _.options.ignore_case or not idx.cfg.case_sensitive:  # TODO this changes the settings only for search?
-      normalizer.setupCasematching(False)  # case option defaults to true, but can be overriden by --ignore-case TODO does this work if index was created with a different option?
+    normalizer.setupCasematching(not (_.options.ignore_case or not idx.cfg.case_sensitive))  # case option can be overriden by --ignore-case
     poss, negs = map(lambda l: list(map(normalizer.filenorm, l)), (poss, negs))  # convert search terms to normalized case, if necessary
     debug("Effective search filters +<%s> -<%s>"        % (COMB.join(poss), COMB.join(negs)))
     _exts = [ext for ext in poss + negs if ext and ext[0] == DOT]
@@ -151,40 +148,51 @@ class Main:
     if not len(paths) and xany(lambda x: isGlob(x) or DOT in x, poss + negs):  # glob or extension
       paths = idx.findFolders([], [], True)  # return all folders names unfiltered (except ignore/skip without marker files)
     if _.options.onlyfolders:
-      for p in poss: paths[:] = [x for x in paths if not isGlob(p) or     normalizer.globmatch(safeRSplit(x), p)]  # successively reduce paths down to matching positive tags: in --dirs mode tags currently have to be folder names TODO later we should reflect actual mapping
-      for n in negs: paths[:] = [x for x in paths if not isGlob(n) or not normalizer.globmatch(safeRSplit(x), n)]  # TODO is this too strict and ignores configured tags and the index entirely? TODO also handle tokenization here
+#      for p in poss: paths[:] = [x for x in paths if not isGlob(p) or     normalizer.globmatch(safeRSplit(x), p)]  # successively reduce paths down to matching positive tags: in --dirs mode tags currently have to be folder names TODO later we should reflect actual mapping
+#      for n in negs: paths[:] = [x for x in paths if not isGlob(n) or not normalizer.globmatch(safeRSplit(x), n)]  # TODO is this too strict and ignores configured tags and the index entirely? TODO also handle tokenization here -> not necessary, as already found in findFolders since tokenized in the index
       info(f"Found {len(paths)} folders for +<%s> -<%s>" % (COMB.join(poss), COMB.join(negs)))
-      #paths[:] = removeCasePaths(folder, paths)  # remove case doubles TODO this should already been done inside findFolders?
       try:
         if len(paths): print("\n".join((idx.root if not _.options.relative else '') + path for path in paths))
-      except KeyboardInterrupt: pass  #idx.root + path + SLASH + file for file in files)); counter += len(files)  # incremental output
+      except KeyboardInterrupt: pass  # idx.root + path + SLASH + file for file in files)); counter += len(files)
       return 0  # no file filtering requested
 
-    dcount, counter, skipped = 0, 0, []  # if showing also files
+    dcount, counter, skipped, run = 0, 0, [], None  # if showing also files
     for path, fskip in ((p, idx.findFiles(p, poss, negs)) for p in paths):
       files, skip = fskip  # deconstruct 2-tuple
-      if skip: skipped.append(path); continue  # memorize to skip all folders with this prefix TODO is this always ordered correctly? (breadth first traversal)
-      if xany(lambda skp: path.startswith(skp) if skp != '' else (path == ''), skipped): continue  # is in skipped folder tree
+      if skip: skipped.append(path); continue  # memorize prefix to skip all folders under it HINT relies on breadth-first traversal (since ord('.') < ord('/') < ord('A'))
+      if xany(lambda skp: path.startswith(skp), skipped): continue  # is in skipped folder tree HINT if root is skipped, will if course ignore all subfolders as well
       dcount += 1
       try:
-        if len(files) > 0: print("\n".join((idx.root if not _.options.relative else '') + path + SLASH + file for file in files)); counter += len(files)  # incremental output
-      except KeyboardInterrupt: pass
-    info(f"Found {counter} files in {dcount} folders for +<%s> -<%s>" % (COMB.join(poss), COMB.join(negs)))  # TODO dcount reflect mapped as well?
+        if len(files) > 0:
+          print("\n".join((idx.root if not _.options.relative else '') + path + SLASH + file for file in files))
+          counter += len(files)  # incremental output
+          run = list(files)[0]
+      except KeyboardInterrupt: break
+    info(f"Found {counter} files in {dcount} folders for +<%s> -<%s>" % (COMB.join(poss), COMB.join(negs)))
+    if counter == 1 and _.options.run:
+      import subprocess
+      process = subprocess.Popen(f'''{'start "tagsPlorer run"' if sys.platform == "win32" else ""} "{run}"''', shell = True)
+      try: sys.exit(process.wait(5))
+      except KeyboardInterrupt: process.kill(); sys.exit(1)
+      except subprocess.TimeoutExpired: warn("Still running")
     return 0
 
-  def config(_, unset = False, get = False):
+  def config(_, unset = False, get = False, all = False):
     ''' Define, display or remove a global configuration parameter. '''
-    value = ((_.options.setconfig if not get else _.options.getconfig) if not unset else _.options.unsetconfig)
-    if value is None: warn("No configuration key provided"); return 1
-    if not unset and not get and "=" not in value: warn("Configuration entry must be specified in the form key=value"); return 2
+    value = ((_.options.setconfig if not get else (_.options.getconfig if not all else None)) if not unset else _.options.unsetconfig)
+    if value is None and not all: warn("No configuration key provided"); return 1
+    if not unset and not get and "=" not in value: warn("Configuration entry must be specified in the form <key>=<value>"); return 2
     key, value = safeSplit(value, "=")[:2] if not unset and not get else (value, None)
-    key = key.lower()  # config keys are normalized to lower case
+    key = wrapExc(lambda: key.lower())  # config keys are normalized to lower case
     folder, indexPath = getRoot(_.options, _.args)
     cfg = Configuration()
     cfg.load(os.path.join(indexPath, CONFIG))
     if get:  # get operation
-      if key in cfg.__dict__: warn(f"Configuration entry: {key} = {cfg.__dict__[key]}"); return 0
-      else: warn("Configuration key '%s' not found" % key); return 3
+      if key is None:
+        for k, v in cfg.__dict__.items(): warn(f"Configuration entry: {k} = {v}")
+        return 0
+      elif key in cfg.__dict__: warn(f"Configuration entry: {key} = {cfg.__dict__[key]}"); return 0
+      else: warn(f"Configuration key '{key}' not found"); return 3
     if '' not in cfg.paths: cfg.paths[''] = dd()  # create global section
     entries = dictGetSet(cfg.paths[''], GLOBAL, [])
     index = wrapExc(lambda: lindex([kv.split("=")[0].lower() for kv in entries], key))  # find index for specified key, or None
@@ -200,9 +208,20 @@ class Main:
     if not _.options.simulate: cfg.store(os.path.join(indexPath, CONFIG))
     return 0
 
+  def clear(_):
+    ''' Remove all global configuration entries. '''
+    folder, indexPath = getRoot(_.options, _.args)
+    cfg = Configuration()
+    cfg.load(os.path.join(indexPath, CONFIG))
+    for key in [k for k in cfg.__dict__.keys() if k != "paths"]: del cfg.__dict__[key]
+    if not _.options.simulate: cfg.store(os.path.join(indexPath, CONFIG))
+    warn("Reset configuration parameters")
+    return 0
+
+
   def assign(_):
     ''' Add one or more tags for the given (inclusive and/or exclusive) globs.
-        TODO detect if all existing patterns are mutually exclusive or always covered by other globs
+        TODO detect if all existing patterns are mutually exclusive or probably always covered by other globs
     '''
     folder, index = getRoot(_.options, _.args)
     root = pathNorm(folder)
@@ -227,9 +246,8 @@ class Main:
       if not os.path.exists(path):
         error(f"Specified pattern path '{path}' does not exist; skip '{pathpatterns}'"); continue
       path = path[len(root):]  # make repo-relative
-      for p in (poss + negs):
-        if p in safeSplit(path, SLASH):  # tag should not be part of any path constituents
-          error(f"Specified tag <{p}> must not match any path constituents of '{path}'"); continue  # TODO unless folder is ignored
+      for pn in (poss + negs):
+        if pn in safeSplit(path, SLASH): warn(f"Specified tag <{pn}> should not match any path constituents of '{path}'"); continue  # TODO unless positive, and folder is ignored somehow
       assert path[0] == SLASH
       files = os.listdir(root + path)  # check current state on file system
       _i, _e = [], []
@@ -246,7 +264,7 @@ class Main:
             if _.options.strict: continue
           l.append(p)
       if len(_i + _e):
-        for tag in poss: modified = cfg.addTag(path, tag, _i, _e, not _.options.strict) or modified  # TODO also add negs, if semantics clear
+        for tag in poss: modified = cfg.addTag(path, tag, _i, _e, not _.options.strict) or modified  # TODO also add negative tags, if semantics clear
     if not modified: error("Nothing was added")
     if modified and not _.options.simulate: cfg.store(os.path.join(index, CONFIG))
     return 0
@@ -297,14 +315,16 @@ class Main:
     return 0
 
   def show(_):
+    ''' Show tags for current or specified folder. '''
     folder, index = getRoot(_.options, _.args)
     root = pathNorm(folder)
     cfg = Configuration()  # load config early for the case_sensitive flag
     cfg.load(os.path.join(index, CONFIG))
 
     for folder in ([os.getcwd()] if not _.args else _.args):
+      warn(f"Tags for {folder}")
       folder = pathNorm(os.path.abspath(folder))
-      folder = folder.strip(SLASH + os.sep)
+      folder = folder.rstrip(SLASH + os.sep)
       if not isUnderRoot(root, folder):  # outside folder tree
         warn(f"Relative path '{folder}' is outside indexed folder tree '{root}'; skip"); continue
       cfg.showTags(folder[len(root):])
@@ -325,6 +345,7 @@ class Main:
       idx.load(indexFile, ignore_skew = _.options.keep_index)
     _.options.relative = True  # don't output full paths here
     warn("Configuration stats:")
+    warn("  Compression level:", idx.cfg.compression)
     warn("  Number of configured paths: %d" % len(idx.cfg.paths))
     warn("  Average number of markers per folder: %.2f" % ((sum([len(_) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip, ignore, manual tags
     warn("  Average number of entries per folder: %.2f" % ((sum([sum([len(__) for __ in _.values()]) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip
@@ -333,7 +354,6 @@ class Main:
     warn("  Root folder:", idx.root)
     warn("  Timestamp:", time.strftime("%Y-%m-%d@%H:%M", time.localtime(idx.timestamp / 1000.)))
     warn("  Timestamp (ms epoch):", idx.timestamp)
-    warn("  Compression level:",    idx.compression)
     warn("  Number of tags:",   len(idx.tagdirs))
     info("Tags and folders:")  # (occurrence = same name for different folder name references")
     if not _.options.verbose and not _.options.debug_on: return 0
@@ -364,26 +384,29 @@ class Main:
     op.add_option('-t', '--tag',            action = "store",       dest = "tag",         default = None,  type = str, help = "Set   tag(s) for given file(s) or glob(s): tp -t tag,tag2,-tag3... file,glob...")
     op.add_option('-T', '--untag',          action = "store",       dest = "untag",       default = None,  type = str, help = "Unset tag(s) for given file(s) or glob(s): tp -d tag,tag2,-tag3... file,glob...")
     op.add_option(      '--tags',           action = "store_true",  dest = "show_tags",   default = False,             help = "List defined tags for a folder")
-    op.add_option(      '--get',            action = "store",       dest = "getconfig",   default = None,  type = str, help = "Get global configuration parameter")
-    op.add_option(      '--set',            action = "store",       dest = "setconfig",   default = None,  type = str, help = "Set global configuration parameter key=value")
-    op.add_option(      '--unset',          action = "store",       dest = "unsetconfig", default = None,  type = str, help = "Unset global configuration parameter")  # add '--clear -C' TODO remove/reset all settings
-    op.add_option(      '--run',            action = "store_true",  dest = "run",         default = False,             help = "Attempt to run file, if search results in exactly one match")  # TODO implement
+    op.add_option(      '--get',            action = "store",       dest = "getconfig",   default = None,  type = str, help = "Get a global configuration parameter [<key>]")
+    op.add_option(      '--set',            action = "store",       dest = "setconfig",   default = None,  type = str, help = "Set a global configuration parameter <key>=<value>")
+    op.add_option(      '--unset',          action = "store",       dest = "unsetconfig", default = None,  type = str, help = "Unset a global configuration parameters")
+    op.add_option(      '--config',         action = "store_true",  dest = "showconfig",  default = None,              help = "Display all global configuration parameters")
+    op.add_option('-C', '--clear',          action = "store_true",  dest = "clearconfig", default = False,             help = "Unset all global configuration parameters")
+    op.add_option(      '--run',            action = "store_true",  dest = "run",         default = False,             help = "Attempt to run file, if search results in exactly one match")
     op.add_option('-f', '--force',          action = "store_false", dest = "strict",      default = True,              help = "Force operation, relax safety measures")  # mapped to inverse "strict" flag
     op.add_option('-c', '--ignore-case',    action = "store_true",  dest = "ignore_case", default = False,             help = "Search case-insensitive (overrides option in index)")
     op.add_option('-n', '--simulate',       action = "store_true",  dest = "simulate",    default = False,             help = "Don't write anything")
     op.add_option('-k', '--keep-index',     action = "store_true",  dest = "keep_index",  default = False,             help = "Don't update the index, even if configuration was changed")
     op.add_option(      '--dirs',           action = "store_true",  dest = "onlyfolders", default = False,             help = "Only find folders that contain matches")
-    op.add_option('-v', '--verbose',        action = "store_true",  dest = "verbose",     default = False,             help = "Show more information")
-    op.add_option('-V', '--debug',          action = "store_true",  dest = "debug_on",    default = False,             help = "Show internal data state")
+    op.add_option('-v', '--verbose',        action = "store_true",  dest = "verbose",     default = False,             help = "Display more information")
+    op.add_option('-V', '--debug',          action = "store_true",  dest = "debug_on",    default = False,             help = "Display internal data state")
     op.add_option(      '--stats',          action = "store_true",  dest = "stats",       default = False,             help = "List index internals")
-    op.add_option(      '--simulate-winfs', action = "store_true",  dest = "winfs",       default = True,              help = "Simulate case-insensitive file system")  # but option is checked outside parser TODO hide this option?
+    op.add_option(      '--simulate-winfs', action = "store_true",  dest = "winfs",       default = True,              help = optparse.SUPPRESS_HELP)  # "Simulate case-insensitive file system")  # but option is checked outside parser in simfs.py
     op.add_option(      '--relative',       action = "store_true",  dest = "relative",    default = False,             help = "Output files with root-relative paths only")  # instead of absolute file system paths
+    op.add_option('-h', '--help',           action = "help", help = optparse.SUPPRESS_HELP)
     _.options, _.args = op.parse_args()  # TODO replace with argparse?
     reserved1, reserved2 = (set(_) for _ in splitByPredicate([_.get_opt_string() for _ in op.option_list], lambda e: e[:2] != '--'))  # handle reserved option switches that must be masked by a dash to operate as an exclude tag
     _.args, excludes = splitByPredicate(_.args,   lambda e: e[:2] != '---')      # split definitive excludes (triple dash)
     _.args, exclude_ = splitByPredicate(_.args,   lambda e: e[:2] != '--')       # split potential  excludes (double dash)
-    add2, exclude2 =   splitByPredicate(exclude_, lambda e: e not in reserved2)  # filter out program options with double dash
-    add1, exclude1 =   splitByPredicate(exclude2, lambda e: e not in reserved1)  # filter out program options with single dash
+    add2, exclude2   = splitByPredicate(exclude_, lambda e: e not in reserved2)  # filter out program options with double dash
+    add1, exclude1   = splitByPredicate(exclude2, lambda e: e not in reserved1)  # filter out program options with single dash
     _.options.excludes.extend([_.strip("---") for _ in excludes] + [_.strip("--") for _ in add2] + [_.strip("-") for _ in add1])  # update excludes option
     if _.options.index and not _.options.root: error("Index location specified (-i) without specifying root (-r)"); sys.exit(1)
     logLevel = logging.DEBUG if _.options.debug_on else (logging.INFO if _.options.verbose else logging.WARNING)
@@ -398,8 +421,10 @@ class Main:
     elif _.options.untag:       code = _.remove()
     elif _.options.show_tags:          _.show()
     elif _.options.setconfig:   code = _.config()
-    elif _.options.getconfig:   code = _.config(get = True)
     elif _.options.unsetconfig: code = _.config(unset = True)
+    elif _.options.getconfig:   code = _.config(get   = True)
+    elif _.options.showconfig:  code = _.config(get   = True, all = True)
+    elif _.options.clearconfig: code = _.clear()
     elif _.options.stats:       code = _.stats()
     elif _.args \
       or _.options.includes \

@@ -283,6 +283,7 @@ Global settings are stored under the root section `[]`:
 
     Define a global folder glob that is skipped and not recursed into.
     The glob is not a full path and only applied to the folder base name.
+    Make sure not to skip the empty string, as it would apply to the root folder.
 
 ## Marking folders
 

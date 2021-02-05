@@ -5,6 +5,7 @@ from functools import reduce
 
 from tagsplorer.constants import COMB, ON_WINDOWS, REGEX_SANITIZE, SKIP, SLASH
 
+
 _log = logging.getLogger(__name__)
 def log(func): return (lambda *s: func(sjoin([_() if callable(_) else _ for _ in s]), **({"stacklevel": 2} if sys.version_info >= (3, 8) else {})))
 debug, info, warn, error = log(_log.debug), log(_log.info), log(_log.warning), log(_log.error)
@@ -12,6 +13,7 @@ debug, info, warn, error = log(_log.debug), log(_log.info), log(_log.warning), l
 
 pathNorm = (lambda s: s.replace(os.sep, SLASH)) if ON_WINDOWS else lambda _: _  # HINT do not convert into a function to allow ternary expression here
 casefilter = lambda lizt, pat: [name for name in lizt if fnmatch.fnmatchcase(name, pat)]  # case-sensitive filter
+
 
 class Normalizer(object):
   ''' Class that provides all case-normalization functions. '''
@@ -164,7 +166,10 @@ def findIndexOrAppend(lizt, elem):
   return lindex(lizt, elem, otherwise = lambda l, v: l.append(v) or len(l) - 1)
 
 
-def isFile(f): return wrapExc(lambda: os.path.isfile(f) and not os.path.ismount(f), False)  # handle "no file" errors
+def isDir(f):  return wrapExc(lambda: os.path.isdir(f) and not os.path.ismount(f), False)  # HINT silently catches encoding errors
+
+
+def isFile(f): return wrapExc(lambda: os.path.isfile(f), False)  # handle "no file" errors
 
 
 def isGlob(f):
