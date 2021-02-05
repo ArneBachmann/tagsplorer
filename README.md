@@ -1,4 +1,4 @@
-Linux: [![Build Status](https://travis-ci.com/ArneBachmann/tagsplorer.svg?branch=master)](https://travis-ci.com/ArneBachmann/tagsplorer) Windows: [![Build status](https://ci.appveyor.com/api/projects/status/46axk9bixn4ab0d5/branch/main?svg=true)](https://ci.appveyor.com/project/ArneBachmann/tagsplorer/branch/main)  Test coverage: [![Coverage Status](https://coveralls.io/repos/github/ArneBachmann/tagsplorer/badge.svg)](https://coveralls.io/github/ArneBachmann/tagsplorer)
+Linux: [![Build Status](https://travis-ci.com/ArneBachmann/tagsplorer.svg?branch=main)](https://travis-ci.com/ArneBachmann/tagsplorer) Windows: [![Build status](https://ci.appveyor.com/api/projects/status/46axk9bixn4ab0d5/branch/main?svg=true)](https://ci.appveyor.com/project/ArneBachmann/tagsplorer/branch/main)  Test coverage: [![Coverage Status](https://coveralls.io/repos/github/ArneBachmann/tagsplorer/badge.svg?branch=main)](https://coveralls.io/github/ArneBachmann/tagsplorer?branch=main)
 
 
 # tagsPlorer
@@ -373,8 +373,8 @@ Since speed is more important than storage size, even considering more effective
 ## Development
 
 ### Git and Github workflows ##
-The master branch should always run fine and contain the latest stable version (release). Currently we are still nefore V1.0 therefore everything is still happening either on master or on other branches without announcement.
-Development activities are merged on the develop branch, and only merged to master for a release, which is then tagged.
+The main branch should always run fine and contain the latest stable version (release). Currently we are still nefore V1.0 therefore everything is still happening either on main or on other branches without announcement.
+Development activities are merged on the develop branch, and only merged to main for a release, which is then tagged.
 If any releases are build in the future (e.g. for pip or conda installation), they would only be build from commits that pass all tests on e.g. *Travis CI* or *AppVeyor*.
 
 
