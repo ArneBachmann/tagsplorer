@@ -6,7 +6,7 @@ from setuptools import setup
 from tagsplorer.constants import MAJOR_VERSION
 
 if os.path.exists(".git"):
-  so, se = subprocess.Popen("git describe --always", shell = True, bufsize = 1, stdout = subprocess.PIPE).communicate()
+  so, se = subprocess.Popen("git describe --always", shell = True, stdout = subprocess.PIPE).communicate()
   micro = "-" + so.strip().decode(sys.stdout.encoding).strip()
 else: micro = ""
 lt = time.localtime()

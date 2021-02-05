@@ -5,7 +5,7 @@
 import logging, optparse, os, sys, time
 assert sys.version_info >= (3, 6), "tagsPlorer requires Python 3.6+"
 
-from tagsplorer.constants import ALL, APPNAME, APPSTR, COMB, CONFIG, DOT, GLOBAL, INDEX, RIGHTS, SLASH, ST_MTIME, VERSION
+from tagsplorer.constants import ALL, APPNAME, COMB, CONFIG, DOT, GLOBAL, INDEX, RIGHTS, SLASH, ST_MTIME, VERSION
 from tagsplorer.lib import Configuration, Indexer
 from tagsplorer.utils import caseCompareKey, casefilter, dd, dictGetSet, isGlob, isUnderRoot, lindex, normalizer, pathNorm, removeTagPrefixes, safeSplit, safeRSplit, sjoin, splitByPredicate, splitTags, wrapExc, xany
 from tagsplorer import lib, simfs, utils  # for setting the log level dynamically
@@ -21,6 +21,9 @@ logging.basicConfig(
 _log = logging.getLogger(__name__)
 def log(func): return (lambda *s: func(sjoin([_() if callable(_) else _ for _ in s]), **({"stacklevel": 2} if sys.version_info >= (3, 8) else {})))
 debug, info, warn, error = log(_log.debug), log(_log.info), log(_log.warning), log(_log.error)
+
+
+APPSTR  = APPNAME + " version %s  (C) 2016-2021  Arne Bachmann" % VERSION
 
 
 def findRootFolder(filename, start = None):
