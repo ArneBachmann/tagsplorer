@@ -5,7 +5,7 @@
 import logging, optparse, os, sys, time
 assert sys.version_info >= (3, 6), "tagsPlorer requires Python 3.6+"
 
-from tagsplorer.constants import ALL, APPNAME, COMB, CONFIG, DOT, GLOBAL, INDEX, RIGHTS, SLASH, ST_MTIME, VERSION
+from tagsplorer.constants import ALL, APPNAME, COMB, CONFIG, DOT, GLOBAL, INDEX, RIGHTS, SLASH, ST_MTIME
 from tagsplorer.lib import Configuration, Indexer
 from tagsplorer.utils import caseCompareKey, casefilter, dd, dictGetSet, isGlob, isUnderRoot, lindex, normalizer, pathNorm, removeTagPrefixes, safeSplit, safeRSplit, sjoin, splitByPredicate, splitTags, wrapExc, xany
 from tagsplorer import lib, simfs, utils  # for setting the log level dynamically
@@ -23,6 +23,7 @@ def log(func): return (lambda *s: func(sjoin([_() if callable(_) else _ for _ in
 debug, info, warn, error = log(_log.debug), log(_log.info), log(_log.warning), log(_log.error)
 
 
+with open(os.path.join(os.path.dirname(__file__), 'VERSION'), encoding = 'utf-8') as fd: VERSION = fd.read()
 APPSTR  = APPNAME + " version %s  (C) 2016-2021  Arne Bachmann" % VERSION
 
 
