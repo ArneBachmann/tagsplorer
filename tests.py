@@ -162,6 +162,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Found 2 files in 1 folders", runP("Case -v"))  # index contains original case only
     _.assertIn("Found 0 files in 0 folders", runP("case -v"))  # normalized version not in index anymore
 #    _.assertIn("Found 2 files in ? folders", runP("case -c -v"))  # find anyway TODO should work but gets 0 in 0
+    _.assertIn("Reset configuration parameters", runP("--clear"))  # TODO test if parameters reset to default
 
   def testFilenameCaseSetting(_):
     ''' This test confirms that case setting works (only executed on Linux). '''

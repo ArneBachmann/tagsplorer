@@ -192,8 +192,8 @@ class Main:
     cfg = Configuration()
     cfg.load(os.path.join(indexPath, CONFIG))
     if get:  # get operation
-      if key is None:
-        for k, v in cfg.__dict__.items(): warn(f"Configuration entry: {k} = {v}")
+      if all:
+        for k, v in ((_k, cfg.__dict__[_k]) for _k in cfg.__dict__ if _k != "paths"): warn(f"Configuration entry: {k} = {v}")
         return 0
       elif key in cfg.__dict__: warn(f"Configuration entry: {key} = {cfg.__dict__[key]}"); return 0
       else: warn(f"Configuration key '{key}' not found"); return 3
@@ -212,12 +212,12 @@ class Main:
     if not _.options.simulate: cfg.store(os.path.join(indexPath, CONFIG))
     return 0
 
-  def clear(_):
+  def reset(_):
     ''' Remove all global configuration entries. '''
     folder, indexPath = getRoot(_.options, _.args)
     cfg = Configuration()
     cfg.load(os.path.join(indexPath, CONFIG))
-    for key in [k for k in cfg.__dict__.keys() if k != "paths"]: del cfg.__dict__[key]
+    cfg.reset()  # to defaults
     if not _.options.simulate: cfg.store(os.path.join(indexPath, CONFIG))
     warn("Reset configuration parameters")
     return 0
@@ -392,7 +392,7 @@ class Main:
     op.add_option(      '--set',            action = "store",       dest = "setconfig",   default = None,  type = str, help = "Set a global configuration parameter <key>=<value>")
     op.add_option(      '--unset',          action = "store",       dest = "unsetconfig", default = None,  type = str, help = "Unset a global configuration parameters")
     op.add_option(      '--config',         action = "store_true",  dest = "showconfig",  default = None,              help = "Display all global configuration parameters")
-    op.add_option('-C', '--clear',          action = "store_true",  dest = "clearconfig", default = False,             help = "Unset all global configuration parameters")
+    op.add_option('-R', '--reset',          action = "store_true",  dest = "resetconfig", default = False,             help = "Reset all global configuration parameters to defaults")
     op.add_option(      '--run',            action = "store_true",  dest = "run",         default = False,             help = "Attempt to run file, if search results in exactly one match")
     op.add_option('-f', '--force',          action = "store_false", dest = "strict",      default = True,              help = "Force operation, relax safety measures")  # mapped to inverse "strict" flag
     op.add_option('-c', '--ignore-case',    action = "store_true",  dest = "ignore_case", default = False,             help = "Search case-insensitive (overrides option in index)")
@@ -428,7 +428,7 @@ class Main:
     elif _.options.unsetconfig: code = _.config(unset = True)
     elif _.options.getconfig:   code = _.config(get   = True)
     elif _.options.showconfig:  code = _.config(get   = True, all = True)
-    elif _.options.clearconfig: code = _.clear()
+    elif _.options.resetconfig: code = _.reset()
     elif _.options.stats:       code = _.stats()
     elif _.args \
       or _.options.includes \

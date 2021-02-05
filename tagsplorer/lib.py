@@ -64,12 +64,15 @@ class ConfigParser(object):  # TODO is there a faster serialization protocol?
 class Configuration(object):
   ''' Contains all tag configuration. '''
 
-  def __init__(_, case_sensitive = not ON_WINDOWS):
+  def __init__(_, case_sensitive = None):
     _.paths = {}  # {relative dir path -> {marker -> [entries]}}
-    _.case_sensitive = case_sensitive  # search behavior
+    _.reset(case_sensitive)
+    normalizer.setupCasematching(_.case_sensitive, suppress = True)  # initialize normalizer, but can be overridden during load()
+
+  def reset(_, case_sensitive = None):
+    _.case_sensitive = (not ON_WINDOWS) if case_sensitive is None else case_sensitive  # search behavior
     _.reduce_storage = False           # storage behavior
     _.compression = 2                  # good fast compromise: uncompressed pickling is faster than any bz2 compression, but zlib level 2 seems to get best trade-off. 0 means uncompressed
-    normalizer.setupCasematching(case_sensitive, suppress = True)  # compute default, but can be overridden during load()
 
   def logConfiguration(_):
     ''' Display debug info. '''
@@ -103,8 +106,7 @@ class Configuration(object):
     debug(f"Store configuration to {filename}%s" % (" (%.1f)" % timestamp if timestamp else ""))
     if not timestamp: timestamp = getTsMs()  # for those cases, in which we modify only the config file (e.g. tag, untag, config)
     cp = ConfigParser(); cp.sections = _.paths
-    with open(filename, "w", encoding = "utf-8") as fd:  # don't use wb for Python 3 compatibility
-      fd.write(f"{timestamp}\n"); cp.store(fd, parent = _)
+    with open(filename, "w", encoding = "utf-8") as fd: fd.write(f"{timestamp}\n"); cp.store(fd, parent = _)
     info(f"Wrote {os.stat(filename)[ST_SIZE]} config bytes")
 
   def addTag(_, folder, tag, poss, negs, force = False):
