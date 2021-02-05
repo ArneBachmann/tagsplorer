@@ -188,7 +188,7 @@ class Indexer(object):
     except AttributeError: pass  # delete cache when reloading
     with open(filename, "rb") as fd:
       info("Read index from " + filename)
-      c = pickle.loads(zlib.decompress(fd.read()) if _.cfg.compression else fd.read())
+      c = pickle.loads(wrapExc(lambda: zlib.decompress(fd.read()), fd.read))
       _.cfg, _.timestamp, _.tagdirs, _.tagdir2parent, _.tagdir2paths = c.cfg, c.timestamp, c.tagdirs, c.tagdir2parent, c.tagdir2paths
       cfg = Configuration(_.cfg.case_sensitive)
       if (recreate_index or cfg.load(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)) and not ignore_skew:
