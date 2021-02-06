@@ -371,9 +371,9 @@ def _compressionTest():
 
 def load_tests(loader, tests, ignore):
   ''' Added up by unittest. '''
-  tests.addTests(doctest.DocTestSuite(tp))
   tests.addTests(doctest.DocTestSuite(lib))
   tests.addTests(doctest.DocTestSuite(simfs))
+  tests.addTests(doctest.DocTestSuite(tp))
   tests.addTests(doctest.DocTestSuite(utils))
   return tests
 

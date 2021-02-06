@@ -449,6 +449,6 @@ class Main:
 def main(): Main().parse_and_run()  # Main entry point for console tools (setuptools)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':   # pragma: no cover
   if '--test' in sys.argv: import doctest; sys.exit(doctest.testmod(optionflags = doctest.ELLIPSIS)[0])
   main()

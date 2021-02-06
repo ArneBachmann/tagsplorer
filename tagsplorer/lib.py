@@ -24,7 +24,7 @@ class ConfigParser(object):  # TODO is there a faster serialization protocol?
         fd: file-like object to enable reading from arbitrary data source and position in resource (e.g. after consuming the timestamp)
         returns: only the global section []
     '''
-    title = ''; section = dd()  # TODO make this an *ordered default* dict, but couldn't find any compatible solution. HINT nowadays all dicts are ordered anyway
+    title = ''; section = dd()
     for line in fd.readlines():
       line = line.strip()  # just in case of incorrect formatting IDEA could be optimized away, or comments allowed
       if line.startswith('['):  # new section detected: before processing, store the last section
@@ -51,7 +51,7 @@ class ConfigParser(object):  # TODO is there a faster serialization protocol?
     if parent is not None:  # store parent's properties
       if "" not in _.sections: _.sections[""] = dd()
       _.sections[""][GLOBAL] = sorted([f"{k.lower()}={parent.__dict__[k]}" for k, v in (kv.split("=")[:2] for kv in _.sections.get("", {}).get(GLOBAL, []))])  # store updated config
-    for title, _map in sorted(_.sections.items()):  # TODO write in original order instead?
+    for title, _map in sorted(_.sections.items()):  # ordered is better for VCS
       if len(_map) == 0 or xall(lambda v: len(v) == 0, _map.values()): continue
       fd.write(f"[{title}]\n")
       for key, values in sorted(_map.items()):  # no need for iteritems, as supposedly small (max. size = 4)
@@ -168,6 +168,7 @@ class Indexer(object):
   ''' Main index creation. Walks through file tree and indexes folder tags.
       Addtionally, tags for single files or globs, and those mapped by FROM markers are included in the index.
       File-specific tags are only determined during the find phase.
+      TODO test and benchmark other methods of serialization, e.g. shelve, pickleDB and others
   '''
 
   def __init__(_, startDir):
@@ -407,37 +408,22 @@ class Indexer(object):
 
   def removeIncluded(_, includedTags, excludedPaths):
     ''' Return those paths, that have no manual tags or FROM tags from the inclusion list; subtract from the exclusion list to reduce set of paths to ignore.
-        includedTags: search tags (no extensions, no globs) to keep included: will be removed from the excludedPaths list
+        includedTags:  search tags to keep included (no extensions, no globs). Will be removed from the excludedPaths list
         excludedPaths: all paths for exclusive tags, scheduled for removal from search results
-        returns: list of paths to retain
-        hint: there is no need to check all tags in configuration, because they could be inclusive or exclusive, and are on a per-file basis
+        returns:       list of paths to retain
+        HINT: there is no need to check all tags in configuration, because they could be inclusive or exclusive, and are on a per-file basis
         the existence of a tag suffices for retaining paths
     '''
     retain = []
     for path in excludedPaths:
       conf = _.cfg.paths.get(path, {})
-      if len(conf) == 0: retain.append(path); continue  # keep for removal, because no inclusion information available
-      tags = conf.get(TAG, [])
-      if len(tags) == 0:  # if no direct tags, it depends on the froms
-        froms = conf.get(FROM, [])
-        if len(froms) == 0: retain.append(path); continue  # keep for removal, no manual tags in mapped config
-        retainit = True
-        for other in froms:
-          conf2 = _.cfg.paths.get(other, {})
-          if len(conf2) == 0:  # the mapped folder has no manual tags specified
-            error(f"Encountered missing FROM source config in '{path}': '{other}'; please repair")  # TODO can be removed? what to do here?
-            # TODO is this correct? we don't know anything about the mapped files?
-          tags2 = conf2.get(TAG, [])
-          if len(tags2) == 0: break  # found from config, but has no tags: no need to consider for removal from removes -> retain
-          for value2 in tags2:
-            tg, inc, exc = value2.split(SEPA)
-            if tg in includedTags: retainit = False; break
-        if retainit: retain.append(path)
-        continue  # removed from removal, go to next path
+      if len(conf) == 0: retain.append(path); continue  # accept for removal, because no further tagging information exists
+      tags, froms = conf.get(TAG, []), conf.get(FROM, [])
+      for other in froms: tags.extend(_.cfg.paths.get(other, {}).get(TAG, []))
       retainit = True
-      for value in tags:
+      for value in tags:  # all explicit tags count, no matter if globs match anything or not (over-generic folder list)
         tg, inc, exc = value.split(SEPA)
-        if tg in includedTags: retainit = False; break  # removed from retained paths
+        if tg in includedTags: retainit = False; break  # deny removal
       if retainit: retain.append(path)
     return set(retain)
 
@@ -449,9 +435,10 @@ class Indexer(object):
         returns:   list of folder paths (case-normalized or both normalized and as is, depending on the case-sensitive option)
     '''
     idirs, sdirs = dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, []) + IGNOREDS, dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, []) + SKIPDS  # get lists of ignored and skipped paths
+    cache = {}
     def rebuild():
       debug(f"Build list of all paths.  Global ignores: {idirs}  Global skips: {sdirs}")
-      return set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), {}))  # compute union of all paths (cached when running as a server)
+      return set(_.getPaths(list(reduce(lambda a, b: a.update(set(b)) or a, _.tagdir2paths, set())), cache))  # compute union of all paths (cached when running as a server)
     _.allPaths = wrapExc(lambda: _.allPaths, rebuild)  # lazy computation. fails and computes if property not defined
     alls = [path for path in _.allPaths if not pathHasGlobalIgnore(path, idirs) and not pathHasGlobalSkip(path, sdirs) and not anyParentIsSkipped(path, _.cfg.paths) and IGNORE not in dictGet(_.cfg.paths, path, {})]  # TODO add marker file logic below?
     if returnAll or len(include) == 0:  # if only exclusive tags, we need all paths and prune them later
@@ -459,7 +446,7 @@ class Indexer(object):
       if returnAll:
         alls = [a for a in alls if os.path.isdir(_.root + os.sep + a)]  # ensure that only correct letter cases are retained on case-sensitive file systems
         return alls
-    paths, first, cache = (set() if len(include) else alls), True, {}  # first filtering action (inclusive or exclusive)
+    paths, first = (set() if len(include) else alls), True  # first filtering action (inclusive or exclusive)
     for tag in include:  # positive restrictive matching
       debug(f"Filter {len(alls if first else paths)} paths by inclusive tag <{tag}>")
       if isGlob(tag):  # filters indexed extensions by extension's glob (".c??"")
@@ -475,8 +462,8 @@ class Indexer(object):
       potentialRemove = wrapExc(lambda: set(_.getPaths(_.tagdir2paths[_.tagdirs.index(tag)], cache)), set())  # these paths can only be removed, if no manual tag/file extension/glob in config or FROM. TODO what if positive extension looked for? already handled?
       new = _.removeIncluded(include, potentialRemove)  # remove paths with includes from "remove" list (adding back)
       if first:  # start with all paths, except determined excluded paths
-        paths = set(_.getPaths(list(reduce(lambda a, b: a | set(b), _.tagdir2paths, set())), cache)) - new  # get paths from index data structure
-        first = False  # TODO isn't paths = all() already handled above? why compute again?
+        paths = _.allPaths - new
+        first = False
       else:
         paths.difference_update(new)  # reduce found paths by exclude matches
     # Now convert to return list, which may differ from previously computed set of paths
