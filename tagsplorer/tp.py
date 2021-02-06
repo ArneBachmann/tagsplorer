@@ -5,9 +5,9 @@
 import logging, optparse, os, sys, time
 assert sys.version_info >= (3, 6), "tagsPlorer requires Python 3.6+"
 
-from tagsplorer.constants import ALL, APPNAME, COMB, CONFIG, DOT, GLOBAL, INDEX, RIGHTS, SLASH, ST_MTIME
+from tagsplorer.constants import ALL, APPNAME, COMB, CONFIG, DOT, FROM, GLOBAL, INDEX, RIGHTS, SLASH, ST_MTIME
 from tagsplorer.lib import Configuration, Indexer
-from tagsplorer.utils import caseCompareKey, casefilter, dd, dictGetSet, isGlob, isUnderRoot, lindex, normalizer, pathNorm, removeTagPrefixes, safeSplit, safeRSplit, sjoin, splitByPredicate, splitTags, wrapExc, xany
+from tagsplorer.utils import caseCompareKey, casefilter, dd, dictGetSet, isDir, isGlob, isUnderRoot, lindex, normalizer, pathNorm, removeTagPrefixes, safeSplit, safeRSplit, sjoin, splitByPredicate, splitTags, wrapExc, xany
 from tagsplorer import lib, simfs, utils  # for setting the log level dynamically
 
 
@@ -109,15 +109,22 @@ class Main:
     ''' Crawl the folder tree and (re)create the index file.
         _.options: options structure from optparse, set in parse
         _.args:    arguments list from optparse, set in parse
-        returns: created Index
+        returns: 2-tuple(created Index, exit code if error)
     '''
     folder, index = getRoot(_.options, _.args)
     cfg = Configuration()
     cfg.load(os.path.join(index, CONFIG))
+    stop = False
+    for path, defs in cfg.paths.items():  # check for correctness
+      for other in defs.get(FROM, []):
+        abspath = (folder + other) if other.startswith(SLASH) else os.path.normpath(folder + path + SLASH + other)
+        if   not isUnderRoot(folder, abspath): error(f"Configured mapped folder '{other}' for '{path}' is outside indexed folder tree, please fix"); stop = True
+        elif not isDir(              abspath): error(f"Configured mapped folder '{other}' for '{path}' not found, please fix"); stop = True
+    if stop: return None, 1
     idx = Indexer(folder)  # no need to load the old index
     idx.walk(cfg)  # track all files using the configuration settings
     if not _.options.simulate: idx.store(os.path.join(index, INDEX), idx.timestamp)
-    return idx
+    return idx, 0
 
   def find(_):
     ''' Find and display all folders that match the provided tags in _.options.includes while excluding those from _.options.excludes.
@@ -133,7 +140,8 @@ class Main:
     if not os.path.exists(indexFile):  # e.g. first run after root initialization
       error("No index file found. " + ("Exit" if _.options.keep_index else "Crawl folder tree"))
       if _.options.keep_index: return 2
-      idx = _.updateIndex()  # crawl folder tree immediately and return search index
+      idx, code = _.updateIndex()  # crawl folder tree immediately and return search index
+      if code: return code
     else:
       idx = Indexer(index)
       idx.load(indexFile, ignore_skew = _.options.keep_index)  # load search index from root
@@ -149,7 +157,7 @@ class Main:
     debug(f"Found {len(paths)} potential path matches")
     #[debug(path) for path in paths]  # optimistic: all folders "seem" to match given tags, but only some might actually do (e.g. due to excludes)
 
-    if not len(paths) and xany(lambda x: isGlob(x) or DOT in x, poss + negs):  # glob or extension
+    if len(paths) == 0 and xany(lambda x: isGlob(x) or DOT in x, poss + negs):  # glob or extension
       paths = idx.findFolders([], [], True)  # return all folders names unfiltered (except ignore/skip without marker files)
     if _.options.onlyfolders:
 #      for p in poss: paths[:] = [x for x in paths if not isGlob(p) or     normalizer.globmatch(safeRSplit(x), p)]  # successively reduce paths down to matching positive tags: in --dirs mode tags currently have to be folder names TODO later we should reflect actual mapping
@@ -329,8 +337,7 @@ class Main:
       warn(f"Tags for {folder}")
       folder = pathNorm(os.path.abspath(folder))
       folder = folder.rstrip(SLASH + os.sep)
-      if not isUnderRoot(root, folder):  # outside folder tree
-        warn(f"Relative path '{folder}' is outside indexed folder tree '{root}'; skip"); continue
+      if not isUnderRoot(root, folder): warn(f"Relative path '{folder}' is outside indexed folder tree '{root}'; skip"); continue
       cfg.showTags(folder[len(root):])
 
 
@@ -343,7 +350,8 @@ class Main:
     if not os.path.exists(indexFile):
       error("No index file found. %s" % ("Exit" if _.options.keep_index else "Crawl folder tree"))
       if _.options.keep_index: return 2
-      idx = _.updateIndex()  # crawl folder tree immediately and return search index
+      idx, code = _.updateIndex()  # crawl folder tree immediately and return search index
+      if code: return code
     else:
       idx = Indexer(index)
       idx.load(indexFile, ignore_skew = _.options.keep_index)
@@ -420,7 +428,7 @@ class Main:
     debug(f"Arguments: {_.args}")
     code = 0  # exit code
     if   _.options.init:        _.initIndex()
-    elif _.options.update:      _.updateIndex()
+    elif _.options.update: idx, code = _.updateIndex()
     elif _.options.tag:         code = _.assign()
     elif _.options.untag:       code = _.remove()
     elif _.options.show_tags:          _.show()

@@ -234,8 +234,8 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testLocalTag(_):
     _.assertIn("Found 1 folders", runP("-s b1,tag1 -v --dirs"))  #
-    _.assertIn("Found 3 files in 1 folders", runP("-s b1,tag1 -v"))  # TODO correct but we should change semantics for exclusive patterns
-    _.assertIn("Found 3 files in 1 folders", runP("-s b1 -s tag1 -v"))  # different interface, same result
+    _.assertIn("Found 1 files in 1 folders", runP("-s b1,tag1 -v"))  # each pattern line matches exlusive sets, otherwise exclusion cannot work
+    _.assertIn("Found 1 files in 1 folders", runP("-s b1 -s tag1 -v"))  # different interface, same result
 
   def testMappedInclude(_):
     _.assertAllIn(["Found 1 file", "/mapping/two/2.2"], runP("-s two,test -v"))  # finds folder two with a mapped direct tag test
@@ -293,8 +293,8 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("No file matches", runP("--tag missing,-exclusive _test-data/tagging/anyfile1 -v"))
     _.assertNotIn("Wrote", runP("--tag missing,-exclusive _test-data/tagging/anyfile1 -v"))
     _.assertAllIn(["folders", "folder2"], runP("--tags _test-data/folders/folder2"))
-    _.assertNotIn("Recreate", runP("-s missing -v"))  # should not reindex due to absence of above cfg update
-    _.assertIn("Found 0 files", runP("-s missing -v"))  # should still not find anything
+    _.assertNotIn("Recreate", runP("-s missing -v"))
+    _.assertIn("Found 0 files", runP("-s missing -v"))  # should still not find anything TODO ??
     # test adding non-existing file, then search
     _.assertAllIn(["Tag <missing> in '/tagging' for +anyfile1 -", "add anyway"], runP("--tag missing,-exclusive _test-data/tagging/anyfile1 -v --force"))
     _.assertIn("Found 0 files in 1 folders", runP("-s missing -v"))
@@ -303,7 +303,7 @@ class TestRepoTestCase(unittest.TestCase):
     # test adding on existing file, then search
     with open(os.path.join(REPO, "tagging", "anyfile1"), "w") as fd: fd.close()  # touch to create file
     _.assertIn("Tag <missing> in '/tagging' for +anyfile1 -", runP("--tag missing,-exclusive _test-data/tagging/anyfile1 -v"))
-    _.assertIn("Found 1 files", runP("-s missing -v"))  # is now find, since existing
+    _.assertIn("Found 1 files in 1 folders", runP("-s missing -v"))  # is now found, since existing
     try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))  # remove again
     except: pass
     _.assertIn("skip", runP("--untag missing,-exclusive _test-data/tagging/anyfile1 -v"))
@@ -316,7 +316,7 @@ class TestRepoTestCase(unittest.TestCase):
   def testNegativeSearch(_):
     _.assertAllInAny(["Found 4 folders for +<a> -<>", "/a", "/a/a1", "/a/a2"], runP("-s a -v --dirs").split("\n"))  # only display dirs
     _.assertAllInAny(["Found 3 folders for +<a> -<a1>", "/a", "/a/a2"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
-    _.assertIn("Found 7 files in 4 folders", runP("-s a -v"))  # only include with files
+    _.assertIn("Found 8 files in 4 folders", runP("-s a -v"))  # only include with files
     _.assertAllIn(["Found 4 files in 3 folders", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -v"))  # with exclude with files
 
   @unittest.skip("doesn't run on CI because No module named 'tagsplorer'")
@@ -334,9 +334,9 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testNegativeExtension(_):
     _.assertIn("more than one file extension", runP("a,-.ext1,-.ext2 -v"))
-    _.assertIn("Found 5 files in 4 folders", runP("-s a -x .ext1 -v"))
+    _.assertIn("Found 6 files in 4 folders", runP("-s a -x .ext1 -v"))
     _.assertNotIn(".ext1", runP("-s a -x .ext1"))
-    _.assertIn("Found 3 files in 1 folders", runP("a1 -x .ext1 -v"))
+    _.assertIn("Found 4 files in 1 folders", runP("a1 -x .ext1 -v"))
     _.assertIn("Found 3 files in 3 folders", runP("-s a -x .ext2 -v"))
     _.assertIn("Found 2 files in %d folders" % (27 if constants.ON_WINDOWS or simfs.SIMFS else 26), runP("b1 -x .ext2 -v"))
 

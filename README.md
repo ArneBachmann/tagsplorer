@@ -116,10 +116,11 @@ Here is a short description of valid program options and arguments:
 
   Given glob patterns are treated as conjunctive (logical and, reducing the set of matches).
   To specify alternative disjunctive patterns, run the tag command several times with different patterns (logical or, enlarging the set of matches).
+  Make sure to keep the inclusive patterns disjunct, otherwise exclusive patterns will create to overlap of the excluded files leading to less exclusion than expected, see [this issue](https://github.com/ArneBachmann/tagsplorer/issues/84).
 
   Historically this command added one or more inclusive or exclusive tags to a glob pattern in a folder.
   As of now, this command assigns a tag to one or more conjunctions of inclusive and exclusive glob patterns in a folder.
-  This design change is more technical but more useful.
+  This design change is rather technical but hopefully useful.
 
 - `--untag | -u [+|-]tag[,[+|-]tag2[,tags...]] [path/][+|-]glob[,[+|-]glob2[,globs...]] [[path2/][+|-]glob[...]`
 

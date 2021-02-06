@@ -502,7 +502,7 @@ class Indexer(object):
     inPath.discard('')  # tokenizer may split an empty string
     inPath.update([normalizer.filenorm(f) for f in inPath])  # adds case-normalized versions if case_sensitive
     poss = set([p for p in poss if not normalizer.globfilter(inPath, p)])  # remove already true positive tags (folder name match)
-    info(f"Filter folder '{current}' %s" % (("by remaining including tags " + (", ".join(poss)) if len(poss) else (("by remaining excluding tags " + ", ".join(negs)) if len(negs) else "with no constraint"))))
+    info(f"Filter folder '{current}' %s" % (("by remaining including tags <%s>" % (COMB.join(poss)) if len(poss) else (("by remaining excluding tags " + COMB.join(negs)) if len(negs) else "with no constraint"))))
     conf = _.cfg.paths.get(current, {})  # if empty we return all files
     mapped = [pathNorm(m if m.startswith(SLASH) else os.path.normpath(current + SLASH + m)) for m in conf.get(FROM, [])]  # root-absolute or folder-relative path
 #    mapped[:] = [m for m in mapped if usInderRoot] TODO sanity check if path exists or if outside repository? could be considered a feature though
@@ -524,7 +524,7 @@ class Indexer(object):
       for f in files: caseMapping[normalizer.filenorm(f)].append(f)
       files.update(set(caseMapping.keys()))  # adds case-normalized file names for matching, used if case_sensitive == False
 
-      tags = _.cfg.paths.get(folder, {}).get(TAG, [None])  # add None as a placeholder for "no config"
+      tags = _.cfg.paths.get(folder, {}).get(TAG, [])
 
       keep = set(files)  # shallow copy. start with all files to keep, then reduce by remaining matching tag patterns
       for tag in poss:  # for every inclusive tag, check if action on current files is necessary
@@ -533,21 +533,21 @@ class Indexer(object):
         elif tag in files: keep.intersection_update(set([tag])); continue  # TODO cannot detect tokenized file globs here, we operate only on actual file system contents TODO what if same tag defined in remove
 
         diskeep = set()  # collect all disjunctive "keep" results for configured tag
-        for value in tags:  # restrict by additional matching tags from the folder configuration
-          if value is None: break  # None is end marker for inclusive tags, thus no match any for this (mapped) folder
+        for value in (t for t in tags if t.startswith(tag + SEPA)):  # restrict by additional matching tags from the folder configuration
+          assert value.count(SEPA) == 2
           tg, inc, exc = value.split(SEPA)  # tag name, includes, excludes
-          if tg == tag:  # mark that matches the find criterion: we can ignore all others
-            conkeep = set(keep)  # all conjunctive filter expressions start with previously filtered set
-            for i in safeSplit(inc):  # keep conjunction of inclusive files
-              if i[0] == DOT: conkeep.intersection_update(set(f for f in conkeep if f[-len(i):] == i))  # TODO also check normalized extension here for user convenience? NO
-              elif  i == ALL: continue  # keep all, nothing to do
-              elif isGlob(i): conkeep.intersection_update(set(normalizer.globfilter(conkeep, i)))  # "set &"
-              else:           conkeep.intersection_update(set([i]) if i in conkeep and isFile(_.root + folder + os.sep + i) else set())  # add file only if exists
-            for e in safeSplit(exc):  # remove conjunction of exclusive files
-              if e[0] == DOT: conkeep.difference_update(set(f for f in conkeep if f[-len(e):] == e))
-              elif isGlob(e): conkeep.difference_update(set(normalizer.globfilter(conkeep, e)))  # "set -" re-add path if excluded from TAG
-              elif e in conkeep: conkeep.remove(e)
-            diskeep.update(conkeep)  # "set |" disjunctive combination of all filters for a tag
+          conkeep = set(keep)  # all conjunctive filter expressions start with previously filtered set
+          for i in safeSplit(inc):  # keep conjunction of inclusive files
+            if i[0] == DOT: conkeep.intersection_update(set(f for f in conkeep if f[-len(i):] == i))  # TODO also check normalized extension here for user convenience? NO
+            elif  i == ALL: continue  # keep all, nothing to do
+            elif isGlob(i): conkeep.intersection_update(set(normalizer.globfilter(conkeep, i)))  # "set &"
+            else:           conkeep.intersection_update(set([i]) if i in conkeep and isFile(_.root + folder + os.sep + i) else set())  # add file only if exists
+          conrmve = set(keep) if exc else set()  # no excludes mean remove nothing TODO mirror this logic below?
+          for e in safeSplit(exc):  # remove conjunction of exclusive files
+            if e[0] == DOT: conrmve.intersection_update(set(f for f in conrmve if f[-len(e):] == e))
+            elif isGlob(e): conrmve.intersection_update(set(normalizer.globfilter(conrmve, e)))
+            else:           conrmve.intersection_update(set([i]) if i in conrmve and isFile(_.root + folder + os.sep + i) else set())
+          diskeep.update(conkeep - conrmve)  # "set |" disjunctive combination of all filters for a tag
         keep.intersection_update(diskeep)
         if not keep: break  # no need to further check, if no matches remain after tag
 
@@ -558,21 +558,21 @@ class Indexer(object):
         elif tag in files: remove.intersection_update(set([tag])); continue
 
         disremove = set()
-        for value in tags:
-          if value is None: break  # None means no config found, no further matching needed
+        for value in (t for t in tags if t.startswith(tag + SEPA)):
+          assert value.count(SEPA) == 2
           tg, inc, exc = value.split(SEPA)
-          if tg == tag:
-            conremove = set(remove)  # collect all file that should be excluded
-            for i in safeSplit(inc):
-              if i[0] == DOT: conremove.intersection_update(set(f for f in conremove if normalizer.filenorm(f[-len(i):]) == normalizer.filenorm(i)))
-              elif  i == ALL: continue
-              elif isGlob(i): conremove.intersection_update(set(normalizer.globfilter(conremove, i)))
-              else:           conremove.intersection_update(set([i]) if i in conremove and isFile(_.root + folder + os.sep + i) else set())
-            for e in safeSplit(exc):
-              if e[0] == DOT: conremove.difference_update(set(f for f in conremove if normalizer.filenorm(f[-len(e):])))
-              elif isGlob(e): conremove.difference_update(set(normalizer.globfilter(conremove, e)))
-              elif e in conremove: conremove.remove(e)
-            disremove.update(conremove)
+          conremove = set(remove)  # collect all file that should be excluded
+          for i in safeSplit(inc):
+            if i[0] == DOT: conremove.intersection_update(set(f for f in conremove if normalizer.filenorm(f[-len(i):]) == normalizer.filenorm(i)))
+            elif  i == ALL: continue
+            elif isGlob(i): conremove.intersection_update(set(normalizer.globfilter(conremove, i)))
+            else:           conremove.intersection_update(set([i]) if i in conremove and isFile(_.root + folder + os.sep + i) else set())
+          conkeep = set(remove) if exc else set()
+          for e in safeSplit(exc):
+            if e[0] == DOT: conkeep.intersection_update(set(f for f in conkeep if normalizer.filenorm(f[-len(e):])))
+            elif isGlob(e): conkeep.intersection_update(set(normalizer.globfilter(conkeep, e)))
+            else:           conkeep.intersection_update(set([i]) if i in conkeep and isFile(_.root + folder + os.sep + i) else set())
+          disremove.update(conremove - conkeep)
         remove.intersection_update(disremove)
         if not remove: break
       files.intersection_update(keep)
