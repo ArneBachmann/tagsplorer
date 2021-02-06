@@ -46,7 +46,7 @@ def findRootFolder(filename, start = None):
 
 def getRoot(options, args):
   ''' Determine tagsPlorer repository root folder by checking program arguments with some fall-back logic.
-      returns 2-tuple(root folder absolute path, index file folder absolute path), depending on options
+      returns 2-tuple(root folder absolute path, index/config file folder absolute path), depending on options
   >>> class O:
   ...   def __init__(_): _.index = _.root = None  # options object
   >>> os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "_test-data"))  # change into folder that contains .tagsplorer.cfg
@@ -57,22 +57,19 @@ def getRoot(options, args):
   ('x', 'x')
   >>> o.index = "./y"; rela(*getRoot(o, []))  # given both
   ('x', 'y')
-  >>> o.root = None; o.index = "/abc"; rela(*getRoot(o, []))
-  Traceback (most recent call last):
-  ...
-  Exception: Cannot omit root folder and specify index file folder
+  >>> o.root = None; o.index = "abc"; rela(*getRoot(o, []))
+  ('abc', 'abc')
   '''
-  if options.index:
-    if options.root is None: raise Exception("Cannot omit root folder and specify index file folder")
-    return (os.path.abspath(options.root), os.path.abspath(options.index))  # the options "-I" and "-r" always go together
-  folder = options.root
-  if folder is None:
-    folder = findRootFolder(CONFIG)
-    if folder: folder = os.path.relpath(os.path.dirname(folder))
-  if folder is None: folder = os.curdir  # fallback to '.'
-  root, index = os.path.abspath(folder), os.path.abspath(options.index if options.index else folder)
-  debug(f"Root and index folders found at {root} {index}")
-  return root, index
+  if options.index:  # given folder to place the index
+    if options.root is None: options.root = str(options.index)  # copy by value
+    return (os.path.abspath(options.root), os.path.abspath(options.index))
+  # determine root folder by finding the config/index files
+  folder = options.root  # None if not defined
+  if folder is None: folder = wrapExc(lambda: os.path.relpath(os.path.dirname(findRootFolder(CONFIG))))
+  if folder is None: folder = os.curdir  # fallback
+  root, meta = os.path.abspath(folder), os.path.abspath(options.index if options.index else folder)
+  debug(f"Root and index folders found at {root} {meta}")
+  return root, meta
 
 
 class CatchExclusionsParser(optparse.OptionParser):
@@ -92,18 +89,18 @@ class Main:
 
   def initIndex(_):
     ''' Set up and store an empty index, thus marking the repository root folder. '''
-    if not _.options.root: _.options.root = os.getcwd()
-    folder, index = getRoot(_.options, _.args)
+    if not _.options.root:  _.options.root  = os.getcwd()  # if not specified on command line
+    if not _.options.index: _.options.index = os.getcwd()
+    folder, meta = getRoot(_.options, _.args)
+    if _.options.strict and os.path.exists(os.path.join(meta, CONFIG)): error("Index already exists. Use --force or -f to override"); return 1
+    info(f"Create root configuration at '{meta}'")
     cfg = Configuration()
-    if _.options.strict and os.path.exists(os.path.join(index, CONFIG)):
-      error("Index already exists. Use --force or -f to override")
-      return
-    info("Create root configuration at '%s'" % index)
     if not _.options.simulate:
-      try: os.makedirs(index, mode = RIGHTS, exist_ok = True)
-      except OSError as E: debug("Cannot create folder. %r" % E)
-      if not os.path.exists(index): error("Could not create index for that folder. Check access rights and path errors"); return
-      cfg.store(os.path.join(index, CONFIG))
+      try: os.makedirs(meta, mode = RIGHTS, exist_ok = True)
+      except OSError as E: debug(f"Cannot create folder {E}")
+      if not os.path.exists(meta): error("Could not create index for that folder. Check access rights and path errors"); return 2
+      cfg.store(meta)
+    return 0
 
   def updateIndex(_):
     ''' Crawl the folder tree and (re)create the index file.
@@ -111,9 +108,9 @@ class Main:
         _.args:    arguments list from optparse, set in parse
         returns: 2-tuple(created Index, exit code if error)
     '''
-    folder, index = getRoot(_.options, _.args)
+    folder, meta = getRoot(_.options, _.args)
     cfg = Configuration()
-    cfg.load(os.path.join(index, CONFIG))
+    cfg.load(meta)
     stop = False
     for path, defs in cfg.paths.items():  # check for correctness
       for other in defs.get(FROM, []):
@@ -123,7 +120,7 @@ class Main:
     if stop: return None, 1
     idx = Indexer(folder)  # no need to load the old index
     idx.walk(cfg)  # track all files using the configuration settings
-    if not _.options.simulate: idx.store(os.path.join(index, INDEX), idx.timestamp)
+    if not _.options.simulate: idx.store(os.path.join(meta, INDEX), idx.timestamp)
     return idx, 0
 
   def find(_):
@@ -135,15 +132,15 @@ class Main:
     negs.extend(splitTags(_.options.excludes))
     poss, negs = removeTagPrefixes(poss, negs)
 
-    folder, index = getRoot(_.options, _.args)
-    indexFile = os.path.join(index, INDEX)
+    folder, meta = getRoot(_.options, _.args)
+    indexFile = os.path.join(meta, INDEX)
     if not os.path.exists(indexFile):  # e.g. first run after root initialization
       error("No index file found. " + ("Exit" if _.options.keep_index else "Crawl folder tree"))
       if _.options.keep_index: return 2
       idx, code = _.updateIndex()  # crawl folder tree immediately and return search index
       if code: return code
     else:
-      idx = Indexer(index)
+      idx = Indexer(meta)
       idx.load(indexFile, ignore_skew = _.options.keep_index)  # load search index from root
     normalizer.setupCasematching(not (_.options.ignore_case or not idx.cfg.case_sensitive))  # case option can be overriden by --ignore-case
     poss, negs = map(lambda l: list(map(normalizer.filenorm, l)), (poss, negs))  # convert search terms to normalized case, if necessary
@@ -196,9 +193,9 @@ class Main:
     if not unset and not get and "=" not in value: warn("Configuration entry must be specified in the form <key>=<value>"); return 2
     key, value = safeSplit(value, "=")[:2] if not unset and not get else (value, None)
     key = wrapExc(lambda: key.lower())  # config keys are normalized to lower case
-    folder, indexPath = getRoot(_.options, _.args)
+    folder, meta = getRoot(_.options, _.args)
     cfg = Configuration()
-    cfg.load(os.path.join(indexPath, CONFIG))
+    cfg.load(meta)
     if get:  # get operation
       if all:
         for k, v in ((_k, cfg.__dict__[_k]) for _k in cfg.__dict__ if _k != "paths"): warn(f"Configuration entry: {k} = {v}")
@@ -217,16 +214,16 @@ class Main:
       else: warn("Configuration entry not found, nothing to do")
       try: del cfg.__dict__[key]  # remove in-memory global configuration
       except: pass
-    if not _.options.simulate: cfg.store(os.path.join(indexPath, CONFIG))
+    if not _.options.simulate: cfg.store(meta)
     return 0
 
   def reset(_):
     ''' Remove all global configuration entries. '''
-    folder, indexPath = getRoot(_.options, _.args)
+    folder, meta = getRoot(_.options, _.args)
     cfg = Configuration()
-    cfg.load(os.path.join(indexPath, CONFIG))
+    cfg.load(meta)
     cfg.reset()  # to defaults
-    if not _.options.simulate: cfg.store(os.path.join(indexPath, CONFIG))
+    if not _.options.simulate: cfg.store(meta)
     warn("Reset configuration parameters")
     return 0
 
@@ -235,10 +232,10 @@ class Main:
     ''' Add one or more tags for the given (inclusive and/or exclusive) globs.
         TODO detect if all existing patterns are mutually exclusive or probably always covered by other globs
     '''
-    folder, index = getRoot(_.options, _.args)
+    folder, meta = getRoot(_.options, _.args)
     root = pathNorm(folder)
     cfg = Configuration()
-    cfg.load(os.path.join(index, CONFIG))
+    cfg.load(meta)
 
     tags = safeSplit(_.options.tag)  # from -t option
     poss, negs = splitByPredicate(tags, lambda e: e[0] != '-')  # TODO only additive tags allowed (index is over-specified and removing is hard?)
@@ -278,15 +275,15 @@ class Main:
       if len(_i + _e):
         for tag in poss: modified = cfg.addTag(path, tag, _i, _e, not _.options.strict) or modified  # TODO also add negative tags, if semantics clear
     if not modified: error("Nothing was added")
-    if modified and not _.options.simulate: cfg.store(os.path.join(index, CONFIG))
+    if modified and not _.options.simulate: cfg.store(meta)
     return 0
 
   def remove(_):
     ''' Remove one or more tags for the given (inclusive and/or exclusive) globs. '''
-    folder, index = getRoot(_.options, _.args)
+    folder, meta = getRoot(_.options, _.args)
     root = pathNorm(folder)
     cfg = Configuration()
-    cfg.load(os.path.join(index, CONFIG))
+    cfg.load(meta)
 
     tags = safeSplit(_.options.untag)  # from -u option
     poss, negs = splitByPredicate(tags, lambda e: e[0] != '-')
@@ -323,15 +320,15 @@ class Main:
       if len(_i + _e):
         for tag in poss: modified = cfg.delTag(path, tag, _i, _e) or modified
     if not modified: error("Nothing was removed")
-    if modified and not _.options.simulate: cfg.store(os.path.join(index, CONFIG))
+    if modified and not _.options.simulate: cfg.store(meta)
     return 0
 
   def show(_):
     ''' Show tags for current or specified folder. '''
-    folder, index = getRoot(_.options, _.args)
+    folder, meta = getRoot(_.options, _.args)
     root = pathNorm(folder)
     cfg = Configuration()  # load config early for the case_sensitive flag
-    cfg.load(os.path.join(index, CONFIG))
+    cfg.load(meta)
 
     for folder in ([os.getcwd()] if not _.args else _.args):
       warn(f"Tags for {folder}")
@@ -345,15 +342,15 @@ class Main:
     ''' Show index stats, optionally including very detailed information.
         returns: exit code
     '''
-    folder, index = getRoot(_.options, _.args)
-    indexFile = os.path.join(index, INDEX)
+    folder, meta = getRoot(_.options, _.args)
+    indexFile = os.path.join(meta, INDEX)
     if not os.path.exists(indexFile):
       error("No index file found. %s" % ("Exit" if _.options.keep_index else "Crawl folder tree"))
       if _.options.keep_index: return 2
       idx, code = _.updateIndex()  # crawl folder tree immediately and return search index
       if code: return code
     else:
-      idx = Indexer(index)
+      idx = Indexer(meta)
       idx.load(indexFile, ignore_skew = _.options.keep_index)
     _.options.relative = True  # don't output full paths here
     warn("Configuration stats:")
@@ -361,7 +358,7 @@ class Main:
     warn("  Number of configured paths: %d" % len(idx.cfg.paths))
     warn("  Average number of markers per folder: %.2f" % ((sum([len(_) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip, ignore, manual tags
     warn("  Average number of entries per folder: %.2f" % ((sum([sum([len(__) for __ in _.values()]) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip
-    warn("  Last update: " + time.strftime("%Y-%m-%d@%H:%M", time.localtime(os.stat(index)[ST_MTIME])))
+    warn("  Last update: " + time.strftime("%Y-%m-%d@%H:%M", time.localtime(os.stat(os.path.join(meta, CONFIG))[ST_MTIME])))
     warn("Index stats:")
     warn("  Root folder:", idx.root)
     warn("  Timestamp:", time.strftime("%Y-%m-%d@%H:%M", time.localtime(idx.timestamp / 1000.)))
@@ -388,8 +385,8 @@ class Main:
     info("Started at %s" % (time.strftime("%H:%M:%S", time.localtime(ts))))
     op = CatchExclusionsParser()  # https://docs.python.org/3/library/optparse.html#optparse-option-callbacks HINT options default to None!
     op.add_option('-I', '--init',           action = "store_true",  dest = "init",        default = False,             help = "Create empty index (repository root)")
-    op.add_option('-r', '--root',           action = "store",       dest = "root",        default = None,  type = str, help = "Specify root folder for index (and configuration), default: current folder")
-    op.add_option('-i', '--index',          action = "store",       dest = "index",       default = None,  type = str, help = "Specify alternative index folder (if separate from root)")
+    op.add_option('-r', '--root',           action = "store",       dest = "root",        default = None,  type = str, help = "Specify root folder of file tree, default: current folder")
+    op.add_option('-i', '--index',          action = "store",       dest = "index",       default = None,  type = str, help = "Specify alternative index folder (if different from root)")
     op.add_option('-U', '--update',         action = "store_true",  dest = "update",      default = False,             help = "Force-update the index, crawl files in folder tree")
     op.add_option('-s', '--search',         action = "append",      dest = "includes",    default = [],                help = "Find files by tags (default action if no option specified)")
     op.add_option('-x', '--exclude',        action = "append",      dest = "excludes",    default = [],                help = "Tags to ignore. Same as -<tag>")
@@ -410,9 +407,9 @@ class Main:
     op.add_option('-v', '--verbose',        action = "store_true",  dest = "verbose",     default = False,             help = "Display more information")
     op.add_option('-V', '--debug',          action = "store_true",  dest = "debug_on",    default = False,             help = "Display internal data state")
     op.add_option(      '--stats',          action = "store_true",  dest = "stats",       default = False,             help = "List index internals")
-    op.add_option(      '--simulate-winfs', action = "store_true",  dest = "winfs",       default = True,              help = optparse.SUPPRESS_HELP)  # "Simulate case-insensitive file system")  # but option is checked outside parser in simfs.py
     op.add_option(      '--relative',       action = "store_true",  dest = "relative",    default = False,             help = "Output files with root-relative paths only")  # instead of absolute file system paths
-    op.add_option('-h', '--help',           action = "help", help = optparse.SUPPRESS_HELP)
+    op.add_option(      '--simulate-winfs', action = "store_true",  dest = "winfs",       default = True,              help = optparse.SUPPRESS_HELP)  # "Simulate case-insensitive file system")  # but option is checked outside parser in simfs.py
+    op.add_option('-h', '--help',           action = "help",                                                           help = optparse.SUPPRESS_HELP)  # whoever showed the help, doesn't need this information
     _.options, _.args = op.parse_args()  # TODO replace with argparse?
     reserved1, reserved2 = (set(_) for _ in splitByPredicate([_.get_opt_string() for _ in op.option_list], lambda e: e[:2] != '--'))  # handle reserved option switches that must be masked by a dash to operate as an exclude tag
     _.args, excludes = splitByPredicate(_.args,   lambda e: e[:2] != '---')      # split definitive excludes (triple dash)
@@ -420,14 +417,13 @@ class Main:
     add2, exclude2   = splitByPredicate(exclude_, lambda e: e not in reserved2)  # filter out program options with double dash
     add1, exclude1   = splitByPredicate(exclude2, lambda e: e not in reserved1)  # filter out program options with single dash
     _.options.excludes.extend([_.strip("---") for _ in excludes] + [_.strip("--") for _ in add2] + [_.strip("-") for _ in add1])  # update excludes option
-    if _.options.index and not _.options.root: error("Index location specified (-i) without specifying root (-r)"); sys.exit(1)
     logLevel = logging.DEBUG if _.options.debug_on else (logging.INFO if _.options.verbose else logging.WARNING)
     _log.setLevel(logLevel)
     for mod in (lib, simfs, utils): mod._log.setLevel(logLevel)
     debug(f"Options:   {_.options}")
     debug(f"Arguments: {_.args}")
     code = 0  # exit code
-    if   _.options.init:        _.initIndex()
+    if   _.options.init:        code = _.initIndex()
     elif _.options.update: idx, code = _.updateIndex()
     elif _.options.tag:         code = _.assign()
     elif _.options.untag:       code = _.remove()

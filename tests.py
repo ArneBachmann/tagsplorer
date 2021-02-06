@@ -18,7 +18,7 @@ def call(argstr, cwd = os.path.dirname(os.path.abspath(__file__))):
 
 
 def runP(argstr, repo = None):  # instead of script call via Popen, this allows coverage collection
-  sys.argv = ["tp.py", "-r", repo if repo else REPO] + (["--simulate-winfs"] if simfs.SIMFS else []) + utils.safeSplit(argstr, " ")  # fake arguments
+  sys.argv = ["tp.py", "-r", repo if repo else REPO, "-i", repo if repo else REPO] + (["--simulate-winfs"] if simfs.SIMFS else []) + utils.safeSplit(argstr, " ")  # fake arguments
   def tmp():
     logFile.write("TEST: %s " % inspect.stack()[3].function + " ".join(sys.argv) + "\n")
     try: tp.Main().parse_and_run()
@@ -282,7 +282,7 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testInit(_):
     _.assertAllIn(["Create root configuration", "Wrote", "config bytes"], runP("-I -v --force", repo = os.path.join("_test-data", "tmp")))
-    _.assertAllIn(["Index already exists", "--force"], runP("-I -v", repo = os.path.join("_test-data", "tmp")))
+    _.assertAllIn(["Index already exists", "--force"],                    runP("-I -v",         repo = os.path.join("_test-data", "tmp")))
     _.assertAllIn(["Create root configuration", "Wrote", "config bytes"], runP("-I -v --force", repo = os.path.join("_test-data", "tmp")))
     try: os.unlink(os.path.join("_test-data", "tmp", ".tagsplorer.cfg")); os.rmdir(os.path.join("_test-data", "tmp"))
     except Exception as E: _.fail(str(E))

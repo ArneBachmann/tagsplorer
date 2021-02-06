@@ -82,32 +82,32 @@ class Configuration(object):
         ("on_windows",      ON_WINDOWS)
       ]))
 
-  def load(_, filename, index_ts = None):
+  def load(_, folder, index_ts = None):
     ''' Load configuration from file, unless up to date.
-        filename: the configuration file to load
+        folder:   the configuration folder to load from
         index_ts: timestamp from inside the index file, or None (force load)
         returns:  False if index is still current, otherwise True (configuration loaded and a new index must be created)
     '''
-    with open(filename, 'r', encoding = "utf-8") as fd:
+    with open(os.path.join(folder, CONFIG), 'r', encoding = "utf-8") as fd:
       timestamp = float(fd.readline().rstrip())
       if index_ts and timestamp == index_ts:
         debug("Index is up to date")  # skip loading configuration
         _.logConfiguration()
         return False  # no skew detected, allow using old index's interned configuration ("self" will be discarded)
-      debug(f"Load configuration from {filename}%s" % ("" if not index_ts else " because index is outdated"))
+      debug(f"Load configuration from {folder}{'' if not index_ts else ' because index is outdated'}")
       cp = ConfigParser(); dat = cp.load(fd); _.__dict__.update(dat)  # update Configuration() object with loaded global options
       _.paths = cp.sections
       normalizer.setupCasematching(_.case_sensitive)  # update with just loaded setting
       _.logConfiguration()
       return True
 
-  def store(_, filename, timestamp = None):
+  def store(_, folder, timestamp = None):
     ''' Store configuration to file, prepending data by the timestamp, or the current time. '''
-    debug(f"Store configuration to {filename}%s" % (" (%.1f)" % timestamp if timestamp else ""))
+    debug(f"Store configuration to {folder}%s" % (" (%.1f)" % timestamp if timestamp else ""))
     if not timestamp: timestamp = getTsMs()  # for those cases, in which we modify only the config file (e.g. tag, untag, config)
     cp = ConfigParser(); cp.sections = _.paths
-    with open(filename, "w", encoding = "utf-8") as fd: fd.write(f"{timestamp}\n"); cp.store(fd, parent = _)
-    info(f"Wrote {os.stat(filename)[ST_SIZE]} config bytes")
+    with open(os.path.join(folder, CONFIG), "w", encoding = "utf-8") as fd: fd.write(f"{timestamp}\n"); cp.store(fd, parent = _)
+    info(f"Wrote {os.stat(os.path.join(folder, CONFIG))[ST_SIZE]} config bytes")
 
   def addTag(_, folder, tag, poss, negs, force = False):
     ''' For a given folder, add a tag for inclusive and exclusive conjunctive globs.
@@ -194,7 +194,7 @@ class Indexer(object):
       c = pickle.loads(wrapExc(lambda: zlib.decompress(fd.read()), fd.read))
       _.cfg, _.timestamp, _.tagdirs, _.tagdir2parent, _.tagdir2paths = c.cfg, c.timestamp, c.tagdirs, c.tagdir2parent, c.tagdir2paths
       cfg = Configuration(_.cfg.case_sensitive)
-      if (recreate_index or cfg.load(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)) and not ignore_skew:
+      if (recreate_index or cfg.load(os.path.dirname(os.path.abspath(filename)), _.timestamp)) and not ignore_skew:
         info("Recreate index considering configuration")
         _.cfg = cfg  # set more recent config and update
         _.walk()  # re-create this index
@@ -210,7 +210,7 @@ class Indexer(object):
       fd.write(zlib.compress(pickle.dumps(_, protocol = PICKLE_PROTOCOL), _.cfg.compression) if _.cfg.compression else pickle.dumps(_, protocol = PICKLE_PROTOCOL))
       if config_too:
         debug("Update configuration to match new index timestamp")
-        _.cfg.store(os.path.join(os.path.dirname(os.path.abspath(filename)), CONFIG), _.timestamp)  # update timestamp in configuration
+        _.cfg.store(os.path.dirname(os.path.abspath(filename)), _.timestamp)  # update timestamp in configuration
     info(f"Wrote {os.stat(filename)[6]} index bytes ({len(_.tagdirs)} entries and %d paths)" % (sum([len(p) for p in _.tagdir2paths])))
 
   def walk(_, cfg = None):

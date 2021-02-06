@@ -5,43 +5,43 @@ install:
         https://ci.appveyor.com/api/projects/$env:APPVEYOR_ACCOUNT_NAME/$env:APPVEYOR_PROJECT_SLUG/history?recordsNumber=50).builds | `
         Where-Object pullRequestId -eq $env:APPVEYOR_PULL_REQUEST_NUMBER)[0].buildNumber) { `
           throw "There are newer queued builds for this pull request, failing early." }
-  - ps: If(($env:PYTHON).Contains("pypy37")) { (New-Object Net.WebClient).DownloadFile('https://downloads.python.org/pypy/pypy3.7-v7.3.3-win32.zip', "$env:appveyor_build_folder\pypy3.zip"); 7z x pypy3.zip | Out-Null; move pypy3-2.4.0-win32 C:\pypy3; move C:\pypy3\pypy.exe C:\pypy3\python.exe }
-  - ps: If(-not(Test-Path($env:PYTHON))) { & appveyor\install.ps1 }
-  - cmd: "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
-  - cmd: "python --version"
-  - ps: If(($env:PYTHON).Contains("pypy")) { python -m ensurepip }
+  - ps:  If(($env:PYTHON).Contains("pypy37")) { (New-Object Net.WebClient).DownloadFile('https://downloads.python.org/pypy/pypy3.7-v7.3.3-win32.zip', "$env:appveyor_build_folder\pypy3.zip"); 7z x pypy3.zip | Out-Null; move pypy3.7-v7.3.3-win32 C:\pypy3; copy C:\pypy3\pypy.exe C:\pypy3\python.exe }
+  - ps:  If(-not(Test-Path($env:PYTHON))) { & appveyor\install.ps1 }
+  - cmd: 'SET PATH=%PYTHON%;%PYTHON%\Scripts;%PATH%'
+  - cmd: 'python --version'
+  - ps:  If(($env:PYTHON).Contains("pypy")) { python -m ensurepip }
   - cmd: "python -m pip install coverage coveralls"
 clone_script:
-  - cmd: git clone https://github.com/ArneBachmann/tagsplorer .\
+  - cmd: 'git clone https://github.com/ArneBachmann/tagsplorer .\'
 environment:
   PYTHONDONTWRITEBYTECODE: True  # avoid writing __pycache__ dirs for Python 3
   matrix:
-    - PYTHON: "C:\\pypy37"
+    - PYTHON: 'C:\Python36'
       platform: x86
-    - PYTHON: "C:\\Python36"
-      platform: x86
-    - PYTHON: "C:\\Python36-x64"
+    - PYTHON: 'C:\Python36-x64'
       platform: x64
-    - PYTHON: "C:\\Python36"
+    - PYTHON: 'C:\Python36'
       platform: x86
-    - PYTHON: "C:\\Python36-x64"
+    - PYTHON: 'C:\Python36-x64'
       platform: x64
-    - PYTHON: "C:\\Python37"
+    - PYTHON: 'C:\Python37'
       platform: x86
-    - PYTHON: "C:\\Python37-x64"
+    - PYTHON: 'C:\Python37-x64'
       platform: x64
-    - PYTHON: "C:\\Python38"
+    - PYTHON: 'C:\Python38'
       platform: x86
-    - PYTHON: "C:\\Python38-x64"
+    - PYTHON: 'C:\Python38-x64'
       platform: x64
-    - PYTHON: "C:\\Python39"
+    - PYTHON: 'C:\Python39'
       platform: x86
-    - PYTHON: "C:\\Python39-x64"
+    - PYTHON: 'C:\Python39-x64'
       platform: x64
-    - PYTHON: "C:\\Miniconda36"
+    - PYTHON: 'C:\Miniconda36'
       platform: x86
-    - PYTHON: "C:\\Miniconda36-x64"
+    - PYTHON: 'C:\Miniconda36-x64'
       platform: x64
+    - PYTHON: 'C:\pypy37'
+      platform: x86
 build_script:
   - cmd: python -B setup.py build
 # Examples learned from https://social.technet.microsoft.com/wiki/contents/articles/7703.powershell-running-executables.aspx
@@ -49,7 +49,6 @@ test_script:
   - ps: If(($env:PYTHON).Contains("pypy")) { & ($env:PYTHON + '\bin\coverage') 'run' '--branch' '--include' 'tests.py,tagsplorer/*.py' 'tests.py' } Else { coverage run --branch --include tests.py,tagsplorer/*.py tests.py }
 after_test:
   - ps: If(($env:PYTHON).Contains("pypy")) { & ($env:PYTHON + '\bin\coverage') 'html'; & ($env:PYTHON + '\bin\coverage') 'annotate' 'tests.py' } Else { coverage html; coverage annotate tests.py }
-  - cmd: dir
   - ps: dir "$env:appveyor_build_folder"
   - ps: 7z a coverage.zip "$env:appveyor_build_folder\htmlcov\*"
 artifacts:
