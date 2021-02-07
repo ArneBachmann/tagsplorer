@@ -31,6 +31,11 @@ jobs:
     python: pypy3
     env:
     - SIMULATE_WINFS=true
+  - os: windows
+    python: pypy3
+    env:
+    - SIMULATE_WINFS=false
+
   - os: linux
     dist: focal
     python: 3.6
@@ -153,6 +158,23 @@ jobs:
     python: 3.9
     env:
     - SIMULATE_WINFS=true
+
+  - os: windows
+    python: 3.6
+    env:
+    - SIMULATE_WINFS=false
+  - os: windows
+    python: 3.7
+    env:
+    - SIMULATE_WINFS=false
+  - os: windows
+    python: 3.8
+    env:
+    - SIMULATE_WINFS=false
+  - os: windows
+    python: 3.9
+    env:
+    - SIMULATE_WINFS=false
 install: "pip install coverage coveralls"  # or "coveralls" instead (alternative package)
 script: python -B setup.py build && pip install -e . && coverage run --branch --include tests.py,tagsplorer/*.py --omit /home/travis/ tests.py && coverage html && coverage annotate tests.py
 after_success:

@@ -1,5 +1,4 @@
 version: '{build}.{branch}'
-skip_branch_with_pr: true
 install:
 - ps:   If(($env:PYTHON).Contains("pypy37")) { (New-Object Net.WebClient).DownloadFile('https://downloads.python.org/pypy/pypy3.7-v7.3.3-win32.zip', "$env:appveyor_build_folder\pypy3.zip"); 7z x pypy3.zip | Out-Null; move pypy3.7-v7.3.3-win32 C:\pypy3; copy C:\pypy3\pypy3.exe C:\pypy3\python.exe }  # download and set up pypy
 - ps:   If(-not(Test-Path($env:PYTHON))) { & appveyor\install.ps1 }
@@ -53,8 +52,6 @@ after_test:
 - ps: If(($env:PYTHON).Contains("pypy")) { & ($env:PYTHON + '\bin\coverage') 'html'; & ($env:PYTHON + '\bin\coverage') 'annotate' 'tests.py'   2>&1 } Else { coverage html; coverage annotate tests.py                          2>&1 } 2>&1
 - ps: dir "$env:appveyor_build_folder"
 - ps: 7z a coverage.zip "$env:appveyor_build_folder\htmlcov\*"
-- ps: Clear-Variable LastExitCode
-- ps: exit 0
 artifacts:
 - path: htmlcov.zip
   name: Coverage Report
