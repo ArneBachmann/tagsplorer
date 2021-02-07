@@ -384,5 +384,5 @@ if __name__ == '__main__':
   PYTHON = '"' + os.path.realpath(sys.executable) + '"' if constants.ON_WINDOWS else os.path.realpath(sys.executable)
   logFile = None
   SVN = tp.findRootFolder('.svn') is not None
-  print("Using VCS '%s' to revert test data" % "Subversion" if SVN else "Git")
-  unittest.main()  # warnings = "ignore")
+  print(f"Using VCS '{"Subversion" if SVN else "Git"}' to revert test data")
+  unittest.main(exit = False)  # warnings = "ignore")

@@ -181,10 +181,10 @@ class Main:
     info(f"Found {counter} files in {dcount} folders for +<%s> -<%s>" % (COMB.join(poss), COMB.join(negs)))
     if counter == 1 and _.options.run:
       import subprocess
-      process = subprocess.Popen(f'''{'start "tagsPlorer run"' if sys.platform == "win32" else ""} "{run}"''', shell = True)
-      try: sys.exit(process.wait(5))
-      except KeyboardInterrupt: process.kill(); sys.exit(1)
-      except subprocess.TimeoutExpired: warn("Still running")
+      with subprocess.Popen(f'''{'start "tagsPlorer run"' if sys.platform == "win32" else ""} "{run}"''', shell = True) as process:
+        try: sys.exit(process.wait(5))
+        except KeyboardInterrupt: process.kill(); return 1
+        except subprocess.TimeoutExpired: warn("Still running")
     return 0
 
   def config(_, unset = False, get = False, all = False):
