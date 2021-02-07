@@ -49,10 +49,10 @@ build_script:
 - cmd: python -B setup.py build  # -B avoids writing .pyc files
 test_script:  # Examples learned from https://social.technet.microsoft.com/wiki/contents/articles/7703.powershell-running-executables.aspx
 - ps: $ErrorActionPreference = "Stop";
-- ps: If(($env:PYTHON).Contains("pypy")) { "$env:PYTHON\bin\coverage" run --branch --include tests.py,tagsplorer/*.py tests.py } Else { coverage run --branch --include tests.py,tagsplorer/*.py tests.py }
+- ps: If(($env:PYTHON).Contains("pypy")) { & ($env:PYTHON + '\bin\coverage') 'run' '--branch' '--include' 'tests.py,tagsplorer/*.py' 'tests.py' 2>&1 } Else { coverage run --branch --include tests.py,tagsplorer/*.py tests.py 2>&1 }
 after_test:
 - ps: $ErrorActionPreference = "Stop";
-- ps: If(($env:PYTHON).Contains("pypy")) { "$env:PYTHON\bin\coverage" html; "$env:PYTHON\bin\coverage" annotate tests.py       } Else { coverage html; coverage annotate tests.py }
+- ps: If(($env:PYTHON).Contains("pypy")) {  & ($env:PYTHON + '\bin\coverage') 'html'; & ($env:PYTHON + '\bin\coverage') 'annotate' 'tests.py'   2>&1 } Else { coverage html; coverage annotate tests.py                         2>&1 }
 - ps: dir "$env:appveyor_build_folder"
 - ps: 7z a coverage.zip "$env:appveyor_build_folder\htmlcov\*"
 - ps: Clear-Variable LastExitCode
