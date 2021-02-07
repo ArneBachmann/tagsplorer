@@ -5,7 +5,7 @@
 import logging, os, pickle, sys, zlib
 from functools import reduce
 
-from tagsplorer.constants import ALL, COMB, CONFIG, DOT, FROM, GLOBAL, IGNFILE, IGNORE, IGNORED, IGNOREDS, ON_WINDOWS, PICKLE_PROTOCOL, SEPA, SKIP, SKIPD, SKIPDS, SKPFILE, SLASH, ST_SIZE, TAG, TOKENIZER
+from tagsplorer.constants import ALL, COMB, CONFIG, DOT, FROM, GLOBAL, IGNFILE, IGNORE, IGNORED, ON_WINDOWS, PICKLE_PROTOCOL, SEPA, SKIP, SKIPD, SKPFILE, SLASH, ST_SIZE, TAG, TOKENIZER
 from tagsplorer.utils import anyParentIsSkipped, appendnew, dd, dictGet, dictGetSet, findIndexOrAppend, getTsMs, isDir, isFile, isGlob, lappend, normalizer, pathHasGlobalIgnore, pathHasGlobalSkip, pathNorm, safeSplit, sjoin, splitByPredicate, wrapExc, xall, xany
 
 
@@ -250,10 +250,10 @@ class Indexer(object):
     # 1.  get folder configuration, if any
     marks = _.cfg.paths.get(folder[len(_.root):], {})  # contains configuration for current folder, if any
     # 1a. check skip or ignore flags from configuration
-    if SKIP   in marks or xany(lambda ignore: normalizer.globmatch(folder[folder.rindex(SLASH) + 1:] if folder and SLASH in folder else folder, ignore), dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, []) + SKIPDS):
+    if SKIP   in marks or xany(lambda ignore: normalizer.globmatch(folder[folder.rindex(SLASH) + 1:] if folder and SLASH in folder else folder, ignore), dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, [])):
       info(f"Skip '{folder[len(_.root):]}' due to " + ('path skip' if SKIP in marks else 'global folder name skip'))
       return  # completely ignore sub-tree and break recursion
-    if IGNORE in marks or xany(lambda ignore: normalizer.globmatch(folder[folder.rindex(SLASH) + 1:] if folder and SLASH in folder else folder, ignore), dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, []) + IGNOREDS):
+    if IGNORE in marks or xany(lambda ignore: normalizer.globmatch(folder[folder.rindex(SLASH) + 1:] if folder and SLASH in folder else folder, ignore), dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, [])):
       info(f"Ignore '{folder[len(_.root):]}' due to " + ('path ignore' if IGNORE in marks else 'global folder name ignore'))
       ignore = True  # ignore this directory as a tag, and don't index its contents, but still continue recursion
     # 1b. read configured additional tags for folder and folder mapping from configuration into "tags" and "adds"
@@ -434,7 +434,7 @@ class Indexer(object):
         returnAll: shortcut flag that simply returns *all paths* from the index instead of finding and filtering results (from tp.find())
         returns:   list of folder paths (case-normalized or both normalized and as is, depending on the case-sensitive option)
     '''
-    idirs, sdirs = dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, []) + IGNOREDS, dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, []) + SKIPDS  # get lists of ignored and skipped paths
+    idirs, sdirs = dictGet(dictGet(_.cfg.paths, '', {}), IGNORED, []), dictGet(dictGet(_.cfg.paths, '', {}), SKIPD, [])  # get lists of ignored and skipped paths
     cache = {}
     def rebuild():
       debug(f"Build list of all paths.  Global ignores: {idirs}  Global skips: {sdirs}")

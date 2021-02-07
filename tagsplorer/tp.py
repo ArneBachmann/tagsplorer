@@ -5,7 +5,7 @@
 import logging, optparse, os, sys, time
 assert sys.version_info >= (3, 6), "tagsPlorer requires Python 3.6+"
 
-from tagsplorer.constants import ALL, APPNAME, COMB, CONFIG, DOT, FROM, GLOBAL, INDEX, RIGHTS, SLASH, ST_MTIME
+from tagsplorer.constants import ALL, APPNAME, COMB, CONFIG, DOT, FROM, GLOBAL, IGNORED, IGNOREDS, INDEX, RIGHTS, SKIPD, SKIPDS, SLASH, ST_MTIME
 from tagsplorer.lib import Configuration, Indexer
 from tagsplorer.utils import caseCompareKey, casefilter, dd, dictGetSet, isDir, isGlob, isUnderRoot, lindex, normalizer, pathNorm, removeTagPrefixes, safeSplit, safeRSplit, sjoin, splitByPredicate, splitTags, wrapExc, xany
 from tagsplorer import lib, simfs, utils  # for setting the log level dynamically
@@ -96,6 +96,8 @@ class Main:
     if _.options.strict and os.path.exists(os.path.join(meta, CONFIG)): error("Index already exists. Use --force or -f to override"); return 1
     info(f"Create root configuration at '{meta}'")
     cfg = Configuration()
+    if SKIPFS:   dictGetSet(cfg.paths, '', {})[SKIPD]   = SKIPDS  # initialize defaults
+    if IGNOREDS: dictGetSet(cfg.paths, '', {})[IGNORED] = IGNOREDS
     if not _.options.simulate:
       try: os.makedirs(meta, mode = RIGHTS, exist_ok = True)
       except OSError as E: debug(f"Cannot create folder {E}")

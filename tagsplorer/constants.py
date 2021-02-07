@@ -16,7 +16,7 @@ COMB, SEPA, SLASH, DOT, ALL, ST_MTIME, ST_SIZE = ",", ";", "/", os.extsep, "*", 
 TOKENIZER = re.compile(r"[\s\-_\.]+")  # tokenize file names as additional tags WARN may return empty string
 REGEX_SANITIZE = re.compile(r"([\.\[\]\(\)\^\$\+\*\?\{\}])")  # all special regex characters to escape
 PICKLE_PROTOCOL = 4  # (Python V3.4+) for pypy3 compatibility
-SKIPDS = [".git", ".svn", "$RECYCLE.BIN", "System Volume Information"]
+SKIPDS   = [".git", ".svn", "$RECYCLE.BIN", "System Volume Information"]
 IGNOREDS = []
 
 ON_WINDOWS = sys.platform == 'win32'
