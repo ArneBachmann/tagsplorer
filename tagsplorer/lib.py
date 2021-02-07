@@ -5,7 +5,7 @@
 import logging, os, pickle, sys, zlib
 from functools import reduce
 
-from tagsplorer.constants import ALL, COMB, CONFIG, DOT, FROM, GLOBAL, IGNFILE, IGNORE, IGNORED, ON_WINDOWS, PICKLE_PROTOCOL, SEPA, SKIP, SKIPD, SKPFILE, SLASH, ST_SIZE, TAG, TOKENIZER
+from tagsplorer.constants import ALL, COMB, CONFIG, DOT, FROM, GLOBAL, IGNFILE, IGNORE, IGNORED, ON_WINDOWS, PICKLE_PROTOCOL, SEPA, SKIP, SKIPD, SKPFILE, SLASH, ST_MTIME, ST_SIZE, TAG, TOKENIZER
 from tagsplorer.utils import anyParentIsSkipped, appendnew, dd, dictGet, dictGetSet, findIndexOrAppend, getTsMs, isDir, isFile, isGlob, lappend, normalizer, pathHasGlobalIgnore, pathHasGlobalSkip, pathNorm, safeSplit, sjoin, splitByPredicate, wrapExc, xall, xany
 
 
@@ -14,7 +14,7 @@ def log(func): return (lambda *s: func(sjoin([_() if callable(_) else _ for _ in
 debug, info, warn, error = log(_log.debug), log(_log.info), log(_log.warning), log(_log.error)
 
 
-class ConfigParser(object):  # TODO is there a faster serialization protocol?
+class ConfigParser(object):  # TODO is there a faster serialization protocol? #89
   ''' Much simplified ini-style config file. No line continuation, no colon separation, no symbolic replacement, no comments, no empty lines. '''
 
   def __init__(_): _.sections = {}  # there is always a global section [] and optionally exactly one section per root-relative path
@@ -90,7 +90,8 @@ class Configuration(object):
     '''
     with open(os.path.join(folder, CONFIG), 'r', encoding = "utf-8") as fd:
       timestamp = float(fd.readline().rstrip())
-      if index_ts and timestamp == index_ts:
+      file_time = int(os.stat(os.path.join(folder, CONFIG))[ST_MTIME] * 1000)
+      if index_ts and max(timestamp, file_time) == index_ts:
         debug("Index is up to date")  # skip loading configuration
         _.logConfiguration()
         return False  # no skew detected, allow using old index's interned configuration ("self" will be discarded)
@@ -115,10 +116,10 @@ class Configuration(object):
         tag: the tag to add to the configuration for the given folder
         poss: list of inclusive globs to apply the tag to
         negs: list of exclusive globs to apply the tag not to
-        force: allows adding tags already covered inclusively or exclusively by existing globs TODO reimplement safety checks
+        force: allows adding tags already covered inclusively or exclusively by existing globs TODO reimplement safety checks #90
         returns: was successfully added?
     '''
-    debug(f"addTag +%s -%s to {folder}/{tag}%s" % (COMB.join(poss), COMB.join(negs), " force" if force else ""))
+    debug(f"addTag +{COMB.join(poss)} -{COMB.join(negs)} to {folder}/{tag}{' force' if force else ''}")
     conf = dictGet(_.paths, folder, {})
     to_add = f"{tag};%s;%s" % (SEPA.join(sorted(poss)), SEPA.join(sorted(negs)))
     for line in conf.get(TAG, []):  # all pattern markers for the given folder
@@ -157,7 +158,7 @@ class Configuration(object):
     debug(f"showTags for {folder}")
     inPath = set(safeSplit(folder, SLASH))  # break path into constituents
     inPath.update(reduce(lambda prev, step: prev + TOKENIZER.split(step) + TOKENIZER.split(normalizer.filenorm(step)), inPath, []))
-    warn("Tags derived from path: " + COMB.join(inPath))  # TODO filter output by ignore and skip
+    warn("Tags derived from path: " + COMB.join(inPath))  # TODO filter output by ignore and skip #91
     conf = dictGet(_.paths, folder, {})
     tags = dd()
     for line in conf.get(TAG, []): tags[line.split(SEPA)[0]].append(line)
@@ -168,7 +169,7 @@ class Indexer(object):
   ''' Main index creation. Walks through file tree and indexes folder tags.
       Addtionally, tags for single files or globs, and those mapped by FROM markers are included in the index.
       File-specific tags are only determined during the find phase.
-      TODO test and benchmark other methods of serialization, e.g. shelve, pickleDB and others
+      TODO test and benchmark other methods of serialization, e.g. shelve, pickleDB and others #92
   '''
 
   def __init__(_, startDir):
@@ -269,7 +270,7 @@ class Indexer(object):
         other = os.path.normpath(os.path.join(folder, pathNorm(f)))[len(_.root):] if not f.startswith(SLASH) else pathNorm(f)
         _marks = _.cfg.paths.get(other, {})  # marks of mapped folder
         for t in _marks.get(TAG, []):
-          tag, pos, neg = t.split(SEPA)  # HINT the actual pattern filtering is implemented in findFiles TODO or even findFolders
+          tag, pos, neg = t.split(SEPA)  # HINT the actual pattern filtering is implemented in findFiles
           info(f"Tag <{tag}> (+<{pos}> -<{neg}>) in '{folder[len(_.root):]}'")
           i = findIndexOrAppend(_.tags, tag); adds.add(i)
           appendnew(_.tag2paths[i], findex)
@@ -294,7 +295,7 @@ class Indexer(object):
         if iext != ext and not _.cfg.reduce_storage:  # store normalized extension if different from literal, unless told not to
           i = findIndexOrAppend(_.tags, iext); adds.add(i)  # add file extension to local dir's tags only
           _.tag2paths[i].append(findex)  # add current dir to index of that extension
-      # TODO optionally also index file names and their tokens! this would also cover dot-first files ignored above
+      # TODO #93 optionally also index file names and their tokens! this would also cover dot-first files ignored above
 
     # 3.  prepare recursion
     newtags = [t for t in tags[:-last if ignore else None]]  # tags to propagate into subfolders (except current folder names if ignored)
