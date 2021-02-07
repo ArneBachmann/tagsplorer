@@ -7,6 +7,7 @@
 import doctest, inspect, logging, os, subprocess, sys, unittest, traceback
 from io import StringIO
 
+sys.argv.append("--stdout")  # trigger only stdout output. option removed in tp to not interpret as exclusive <stdout> tag
 from tagsplorer import constants, lib, simfs, tp, utils  # entire files
 
 REPO = '_test-data'

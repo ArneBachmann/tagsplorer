@@ -18,6 +18,7 @@ logging.basicConfig(
   stream = sys.stdout if '--stdout' in sys.argv else sys.stderr,  # log to stderr, write results to stdout
   format =  '%(asctime)-8s.%(msecs)03d %(levelname)-4s %(module)s:%(funcName)s:%(lineno)d | %(message)s',
   datefmt = '%H:%M:%S')
+wrapExc(lambda: sys.argv.remove('--stdout'))  # remove if present
 _log = logging.getLogger(__name__)
 def log(func): return (lambda *s: func(sjoin([_() if callable(_) else _ for _ in s]), **({"stacklevel": 2} if sys.version_info >= (3, 8) else {})))
 debug, info, warn, error = log(_log.debug), log(_log.info), log(_log.warning), log(_log.error)
