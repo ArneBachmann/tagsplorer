@@ -79,7 +79,7 @@ class TestRepoTestCase(unittest.TestCase):
     else:    call(f'git checkout "{REPO + os.sep + constants.CONFIG}"')
     try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))
     except: pass
-    _.assertIn("Updated configuration entry", runP("--set case_sensitive=True -v"))  # fixed value for reproducibility TODO allow all combinations on all platforms
+    _.assertIn("Updated configuration entry", runP("--set case_sensitive=True -v"))  # fixed value for reproducibility TODO test all combinations on all platforms
     runP("-U")  # initial indexing, invisible
 
   def assertAllIn(_, what, where):
@@ -87,8 +87,8 @@ class TestRepoTestCase(unittest.TestCase):
     [_.assertIn(a, where) for a in what]
 
   def assertAllInAny(_, what, where):
-    ''' Assert all elements of what are contained in at least one of where's entries. '''
-    [_.assertTrue([a in entry for entry in where]) for a in what]  # TODO check if not same as above and used correctly
+    ''' Assert each element of what is contained at least in one of where's entries. '''
+    [_.assertTrue([a in entry for entry in where]) for a in what]
 
   def testSjoin(_):
     _.assertEqual("",    utils.sjoin())
@@ -163,7 +163,8 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Found 2 files in 1 folders", runP("Case -v"))  # index contains original case only
     _.assertIn("Found 0 files in 0 folders", runP("case -v"))  # normalized version not in index anymore
 #    _.assertIn("Found 2 files in ? folders", runP("case -c -v"))  # find anyway TODO should work but gets 0 in 0
-    _.assertIn("Reset configuration parameters", runP("--reset"))  # TODO test if parameters reset to default
+    _.assertIn("Reset configuration parameters", runP("--reset"))
+    _.assertAllIn([f"case_sensitive = {'False' if constants.ON_WINDOWS else 'True'}", "Configuration entry: reduce_storage = False", "Configuration entry: compression = 2"], runP("--config"))
 
   def testFilenameCaseSetting(_):
     ''' This test confirms that case setting works (only executed on Linux). '''
@@ -339,7 +340,10 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertNotIn(".ext1", runP("-s a -x .ext1"))
     _.assertIn("Found 4 files in 1 folders", runP("a1 -x .ext1 -v"))
     _.assertIn("Found 3 files in 3 folders", runP("-s a -x .ext2 -v"))
-    _.assertIn("Found 2 files in %d folders" % (27 if constants.ON_WINDOWS or simfs.SIMFS else 26), runP("b1 -x .ext2 -v"))
+    _.assertIn(f"Found 2 files in {27 if constants.ON_WINDOWS or simfs.SIMFS else 26} folders", runP("b1 -x .ext2 -v"))
+
+  def testSameTagFolderFile(_):
+    _.assertIn("Found 1 files in 1 folders", runP("a1 a1 -v"))
 
   def testUnwalk(_):
     def unwalk(_, idx = 0, path = ""):
@@ -355,7 +359,7 @@ class TestRepoTestCase(unittest.TestCase):
       unwalk(i)
     result = wrapChannels(tmp).replace("\r", "")
     logFile.write(result + "\n")
-    _.assertEqual(31, len(result.split("\n")))  # TODO check if correct
+    _.assertEqual(31, len(result.split("\n")))
 
 
 def _compressionTest():
@@ -367,7 +371,7 @@ def _compressionTest():
     i.compressed = j
     i.store("../_test-data/" + constants.INDEX)
     s = os.stat(constants.INDEX)[6]  # get compressed size
-    print("Level %d: %f %d" % (j, timeit.Timer(lambda: i.load(constants.INDEX)).timeit(number = 20), s))
+    print(f"Level {j}: %f {s}" % timeit.Timer(lambda: i.load(constants.INDEX)).timeit(number = 20))
 
 
 def load_tests(loader, tests, ignore):

@@ -19,7 +19,9 @@ setup(
   name = 'tagsPlorer',
   version = versionString,
   description = "tagsPlorer V" + versionString + micro,
-  long_description = "",
+  description_content_type = "text/markdown",
+  long_description = open("README.md", "r", encoding = "utf-8").read(),
+  long_description_content_type = "text/markdown",
   classifiers = [c.strip() for c in """
         Development Status :: 5 - Production/Stable
         Intended Audience :: Other Audience
@@ -37,7 +39,7 @@ setup(
   author_email = 'ArneBachmann@users.noreply.github.com',
   maintainer = 'Arne Bachmann',
   maintainer_email = 'ArneBachmann@users.noreply.github.com',
-  url = 'http://github.com/ArneBachmann/corrupdetect',
+  url = 'http://github.com/ArneBachmann/tagsplorer',
   license = 'MPL-2.0',
   packages = ["tagsplorer"],
   #package_dir = {"tagsplorer": ""},

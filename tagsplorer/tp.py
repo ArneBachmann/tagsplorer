@@ -114,10 +114,11 @@ class Main:
     cfg.load(meta)
     stop = False
     for path, defs in cfg.paths.items():  # check for correctness
+      if not isDir(folder + path): error(f"Configured folder '{folder + path}' not found, please fix"); stop = True; continue
       for other in defs.get(FROM, []):
         abspath = (folder + other) if other.startswith(SLASH) else os.path.normpath(folder + path + SLASH + other)
-        if   not isUnderRoot(folder, abspath): error(f"Configured mapped folder '{other}' for '{path}' is outside indexed folder tree, please fix"); stop = True
-        elif not isDir(              abspath): error(f"Configured mapped folder '{other}' for '{path}' not found, please fix"); stop = True
+        if   not isUnderRoot(folder, abspath): error(f"Configured mapped folder '{other}' for '{path}' is outside indexed folder tree, please fix"); stop = True; continue
+        elif not isDir(              abspath): error(f"Configured mapped folder '{other}' for '{path}' not found, please fix"); stop = True; continue
     if stop: return None, 1
     idx = Indexer(folder)  # no need to load the old index
     idx.walk(cfg)  # track all files using the configuration settings
@@ -131,7 +132,7 @@ class Main:
     poss, negs = splitByPredicate(splitTags(_.args), lambda e: e[0] != '-')  # allows direct arguments, potentially suffixed by +/-
     poss.extend(splitTags(_.options.includes))
     negs.extend(splitTags(_.options.excludes))
-    poss, negs = removeTagPrefixes(poss, negs)
+    poss, negs = removeTagPrefixes(poss, negs)  # removes +/-
 
     folder, meta = getRoot(_.options, _.args)
     indexFile = os.path.join(meta, INDEX)
@@ -147,8 +148,7 @@ class Main:
     poss, negs = map(lambda l: list(map(normalizer.filenorm, l)), (poss, negs))  # convert search terms to normalized case, if necessary
     debug("Effective search filters +<%s> -<%s>"        % (COMB.join(poss), COMB.join(negs)))
     _exts = [ext for ext in poss + negs if ext and ext[0] == DOT]
-    if len(_exts) > 1:
-      error("Cannot match anything if more than one file extension is specified (%s)" % COMB.join(_exts)); return 1
+    if len(_exts) > 1: error(f"Cannot match anything if more than one file extension is specified ({COMB.join(_exts)})"); return 1
 
     info(f"Search '{idx.root}' for tags +<%s> -<%s>" % (COMB.join(poss), COMB.join(negs)))
     paths = idx.findFolders(poss, negs)
@@ -412,12 +412,12 @@ class Main:
     op.add_option(      '--simulate-winfs', action = "store_true",  dest = "winfs",       default = True,              help = optparse.SUPPRESS_HELP)  # "Simulate case-insensitive file system")  # but option is checked outside parser in simfs.py
     op.add_option('-h', '--help',           action = "help",                                                           help = optparse.SUPPRESS_HELP)  # whoever showed the help, doesn't need this information
     _.options, _.args = op.parse_args()  # TODO replace with argparse?
-    reserved1, reserved2 = (set(_) for _ in splitByPredicate([_.get_opt_string() for _ in op.option_list], lambda e: e[:2] != '--'))  # handle reserved option switches that must be masked by a dash to operate as an exclude tag
-    _.args, excludes = splitByPredicate(_.args,   lambda e: e[:2] != '---')      # split definitive excludes (triple dash)
+    reserved1, reserved2 = (set(_) for _ in splitByPredicate([_.get_opt_string() for _ in op.option_list], lambda e: e[:2] != '--'))  # allow option switches operate as an exclude tag when masked by an additional dash
+    _.args, excludes = splitByPredicate(_.args,   lambda e: e[:3] != '---')      # split definitive excludes (triple dash)
     _.args, exclude_ = splitByPredicate(_.args,   lambda e: e[:2] != '--')       # split potential  excludes (double dash)
     add2, exclude2   = splitByPredicate(exclude_, lambda e: e not in reserved2)  # filter out program options with double dash
     add1, exclude1   = splitByPredicate(exclude2, lambda e: e not in reserved1)  # filter out program options with single dash
-    _.options.excludes.extend([_.strip("---") for _ in excludes] + [_.strip("--") for _ in add2] + [_.strip("-") for _ in add1])  # update excludes option
+    _.options.excludes.extend([_.lstrip("---") for _ in excludes] + [_.lstrip("--") for _ in add2] + [_.lstrip("-") for _ in add1])  # update excludes option
     logLevel = logging.DEBUG if _.options.debug_on else (logging.INFO if _.options.verbose else logging.WARNING)
     _log.setLevel(logLevel)
     for mod in (lib, simfs, utils): mod._log.setLevel(logLevel)

@@ -478,8 +478,8 @@ class Indexer(object):
   def findFiles(_, current, poss, negs):
     ''' Determine files for the given folder (from findFolders() with potential matchs).
         current: root-relative folder to filter files in
-        poss:    (opt. case-normalized) positive (including) tags, file extensions, file names or globs
-        negs:    negative (excluding) tags, file extensions, file names or globs
+        poss:    list of (opt. case-normalized) positive (including) tags, file extensions, file names or globs
+        negs:    list of negative (excluding) tags, file extensions, file names or globs
         returns: 2-tuple([filenames], skip?)
     '''
     debug(f"findFiles '{current}' {poss} {negs}")
@@ -488,11 +488,14 @@ class Indexer(object):
     inPath.update(reduce(lambda prev, step: prev + TOKENIZER.split(step), inPath, []))  # add tokenized path steps
     inPath.discard('')  # tokenizer may split an empty string
     inPath.update([normalizer.filenorm(f) for f in inPath])  # adds case-normalized versions if case_sensitive
-    poss = set([p for p in poss if not normalizer.globfilter(inPath, p)])  # remove already true positive tags (folder name match)
+    extrap, extran = list(poss), list(negs)  # shallow copy
+    for unique in set(poss): extrap.remove(unique)  # parameters contained more than once:
+    for unique in set(negs): extran.remove(unique)  # filter once in folder index, and once more in files
+    poss = list(set([p for p in poss if not normalizer.globfilter(inPath, p)])) + extrap  # remove already true positive tags (folder name match)
+    negs += extran
     info(f"Filter folder '{current}' %s" % (("by remaining including tags <%s>" % (COMB.join(poss)) if len(poss) else (("by remaining excluding tags " + COMB.join(negs)) if len(negs) else "with no constraint"))))
     conf = _.cfg.paths.get(current, {})  # if empty we return all files
     mapped = [pathNorm(m if m.startswith(SLASH) else os.path.normpath(current + SLASH + m)) for m in conf.get(FROM, [])]  # root-absolute or folder-relative path
-#    mapped[:] = [m for m in mapped if usInderRoot] TODO sanity check if path exists or if outside repository? could be considered a feature though
     if len(mapped): debug(f"Mapped folders: {os.pathsep.join(mapped)}")  # root-relative paths
     skipFilter = len(poss) + len(negs) + len(mapped) == 0
 
