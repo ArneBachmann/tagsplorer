@@ -47,7 +47,8 @@ setup(
   zip_safe = False,
   entry_points = {
     'console_scripts': [
-      'tp=tagsplorer.tp:main'
+      'tp=tagsplorer.tp:main',
+      'tpserve=tagsplorer.serve:main'
     ]
   },
 )

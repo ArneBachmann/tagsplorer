@@ -5,9 +5,9 @@
 import logging, optparse, os, sys, time
 assert sys.version_info >= (3, 6), "tagsPlorer requires Python 3.6+"
 
-from tagsplorer.constants import ALL, APPNAME, COMB, CONFIG, DOT, FROM, GLOBAL, IGNORED, IGNOREDS, INDEX, RIGHTS, SKIPD, SKIPDS, SLASH, ST_MTIME
+from tagsplorer.constants import ALL, APPNAME, COMB, CONFIG, DOT, FROM, GLOBAL, IGNORED, IGNOREDS, INDEX, NL, RIGHTS, SKIPD, SKIPDS, SLASH, ST_MTIME
 from tagsplorer.lib import Configuration, Indexer
-from tagsplorer.utils import caseCompareKey, casefilter, dd, dictGetSet, isDir, isGlob, isUnderRoot, lindex, normalizer, pathNorm, removeTagPrefixes, safeSplit, safeRSplit, sjoin, splitByPredicate, splitTags, wrapExc, xany
+from tagsplorer.utils import caseCompareKey, casefilter, dd, dictGetSet, isDir, isGlob, isUnderRoot, lindex, normalizer, pathNorm, removeTagPrefixes, safeRSplit, safeSplit, sjoin, splitByPredicate, splitTags, wrapExc, xany
 from tagsplorer import lib, simfs, utils  # for setting the log level dynamically
 
 
@@ -96,7 +96,7 @@ class Main:
     if _.options.strict and os.path.exists(os.path.join(meta, CONFIG)): error("Index already exists. Use --force or -f to override"); return 1
     info(f"Create root configuration at '{meta}'")
     cfg = Configuration()
-    if SKIPFS:   dictGetSet(cfg.paths, '', {})[SKIPD]   = SKIPDS  # initialize defaults
+    if SKIPDS:   dictGetSet(cfg.paths, '', {})[SKIPD]   = SKIPDS  # initialize defaults
     if IGNOREDS: dictGetSet(cfg.paths, '', {})[IGNORED] = IGNOREDS
     if not _.options.simulate:
       try: os.makedirs(meta, mode = RIGHTS, exist_ok = True)
@@ -144,27 +144,27 @@ class Main:
       idx, code = _.updateIndex()  # crawl folder tree immediately and return search index
       if code: return code
     else:
-      idx = Indexer(meta)
+      idx = Indexer(folder)
       idx.load(indexFile, ignore_skew = _.options.keep_index)  # load search index from root
     normalizer.setupCasematching(not (_.options.ignore_case or not idx.cfg.case_sensitive))  # case option can be overriden by --ignore-case
     poss, negs = map(lambda l: list(map(normalizer.filenorm, l)), (poss, negs))  # convert search terms to normalized case, if necessary
-    debug("Effective search filters +<%s> -<%s>"        % (COMB.join(poss), COMB.join(negs)))
+    debug("Effective search filters +<{COMB.join(poss)}> -<{COMB.join(negs)}>")
     _exts = [ext for ext in poss + negs if ext and ext[0] == DOT]
     if len(_exts) > 1: error(f"Cannot match anything if more than one file extension is specified ({COMB.join(_exts)})"); return 1
 
-    info(f"Search '{idx.root}' for tags +<%s> -<%s>" % (COMB.join(poss), COMB.join(negs)))
+    info(f"Search '{idx.root}' for tags +<{COMB.join(poss)}> -<{COMB.join(negs)}>")
     paths = idx.findFolders(poss, negs)
     debug(f"Found {len(paths)} potential path matches")
     #[debug(path) for path in paths]  # optimistic: all folders "seem" to match given tags, but only some might actually do (e.g. due to excludes)
 
-    if len(paths) == 0 and xany(lambda x: isGlob(x) or DOT in x, poss + negs):  # glob or extension
-      paths = idx.findFolders([], [], True)  # return all folders names unfiltered (except ignore/skip without marker files)
+    if len(paths) == 0 and xany(lambda x: isGlob(x) or DOT in x, negs): paths = idx.findFolders([], [], returnAll = True, checkPaths = True)  # for globs and extensions return all folders since filtering happens later
     if _.options.onlyfolders:
-#      for p in poss: paths[:] = [x for x in paths if not isGlob(p) or     normalizer.globmatch(safeRSplit(x), p)]  # successively reduce paths down to matching positive tags: in --dirs mode tags currently have to be folder names TODO later we should reflect actual mapping
-#      for n in negs: paths[:] = [x for x in paths if not isGlob(n) or not normalizer.globmatch(safeRSplit(x), n)]  # TODO is this too strict and ignores configured tags and the index entirely? TODO also handle tokenization here -> not necessary, as already found in findFolders since tokenized in the index
-      info(f"Found {len(paths)} folders for +<%s> -<%s>" % (COMB.join(poss), COMB.join(negs)))
+      for p in poss: paths[:] = [x for x in paths if not isGlob(p) or normalizer.globmatch(safeRSplit(x), p)]  # successively reduce paths down to matching positive tags: in --dirs mode tags currently have to be folder names TODO later we should reflect actual mapping
+      for n in negs: paths[:] = [x for x in paths if not isGlob(n) or not normalizer.globmatch(safeRSplit(x), n)]  # TODO is this too strict and ignores configured tags and the index entirely?
+      info(f"Found {len(paths)} folders for +<{COMB.join(poss)}> -<{COMB.join(negs)}>")
+      prefix = idx.root if not _.options.relative else ''
       try:
-        if len(paths): print("\n".join((idx.root if not _.options.relative else '') + path for path in paths))
+        if len(paths): print(NL.join(prefix + path for path in paths))
       except KeyboardInterrupt: pass  # idx.root + path + SLASH + file for file in files)); counter += len(files)
       return 0  # no file filtering requested
 
@@ -176,11 +176,11 @@ class Main:
       dcount += 1
       try:
         if len(files) > 0:
-          print("\n".join((idx.root if not _.options.relative else '') + path + SLASH + file for file in files))
+          print(NL.join((idx.root if not _.options.relative else '') + path + SLASH + file for file in files))
           counter += len(files)  # incremental output
           run = list(files)[0]
       except KeyboardInterrupt: break
-    info(f"Found {counter} files in {dcount} folders for +<%s> -<%s>" % (COMB.join(poss), COMB.join(negs)))
+    info(f"Found {counter} files in {dcount} folders for +<{COMB.join(poss)}> -<{COMB.join(negs)}>")
     if counter == 1 and _.options.run:
       import subprocess
       with subprocess.Popen(f'''{'start "tagsPlorer run"' if sys.platform == "win32" else ""} "{run}"''', shell = True) as process:
@@ -213,7 +213,7 @@ class Main:
       else: entries.append(f"{key}={value}"); warn(f"Added configuration entry: {key} = {value}")
       cfg.__dict__[key] = value if value.lower() not in ("true", "false") else value.lower() == "true"
     else:  # unset operation
-      if index is not None: del entries[index]; warn("Removed configuration entry for key '%s'" % key)
+      if index is not None: del entries[index]; warn(f"Removed configuration entry for key '{key}'")
       else: warn("Configuration entry not found, nothing to do")
       try: del cfg.__dict__[key]  # remove in-memory global configuration
       except: pass
@@ -244,7 +244,7 @@ class Main:
     poss, negs = splitByPredicate(tags, lambda e: e[0] != '-')  # TODO only additive tags allowed (index is over-specified and removing is hard?)
     poss, negs = removeTagPrefixes(poss, negs)
     if (len(poss) + len(negs)) == 0: error("No tag(s) provided to assign for " + COMB.join(_.args)); return 1
-    if xany(lambda p: p in negs, poss): error("Same tag in both inclusive and exclusive pattern " + ', '.join(["'%s'" % p for p in poss if p in negs])); return 2
+    if xany(lambda p: p in negs, poss): error("Same tag in both inclusive and exclusive pattern " + ', '.join([f"'{p}'" for p in poss if p in negs])); return 2
 
     args = [pathNorm(arg) for arg in _.args]
     modified = False
@@ -272,7 +272,7 @@ class Main:
           elif isGlob(p): exists = len(casefilter(files, p)) > 0
           else:           exists = p in files
           if not exists:
-            warn(f"No file matches for glob '{path}/{p}'%s'" % (", skip" if _.options.strict else ", add anyway"))
+            warn(f"No file matches for glob '{path}/{p}" + "'%s'" % (", skip" if _.options.strict else ", add anyway"))
             if _.options.strict: continue
           l.append(p)
       if len(_i + _e):
@@ -291,8 +291,8 @@ class Main:
     tags = safeSplit(_.options.untag)  # from -u option
     poss, negs = splitByPredicate(tags, lambda e: e[0] != '-')
     poss, negs = removeTagPrefixes(poss, negs)
-    if (len(poss) + len(negs)) == 0: error("No tag(s) provided to remove for %s" % COMB.join(_.args)); return 1
-    if xany(lambda p: p in negs, poss): error("Same tag in both inclusive and exclusive pattern " + ', '.join(["'%s'" % p for p in poss if p in negs])); return 2
+    if (len(poss) + len(negs)) == 0: error(f"No tag(s) provided to remove for {COMB.join(_.args)}"); return 1
+    if xany(lambda p: p in negs, poss): error("Same tag in both inclusive and exclusive pattern " + ', '.join([f"'{p}'" for p in poss if p in negs])); return 2
 
     args = [pathNorm(arg) for arg in _.args]
     modified = False
@@ -316,7 +316,7 @@ class Main:
           elif isGlob(p): exists = len(casefilter(files, p)) > 0
           else:           exists = p in files
           if not exists:
-            warn(f"No file matches for glob '{path}/{p}'%s'" % (", skip" if _.options.strict else ", remove anyway"))
+            warn(f"No file matches for glob '{path}/{p}" + "'%s'" % (", skip" if _.options.strict else ", remove anyway"))
             if _.options.strict: continue
           l.append(p)
 
@@ -353,7 +353,7 @@ class Main:
       idx, code = _.updateIndex()  # crawl folder tree immediately and return search index
       if code: return code
     else:
-      idx = Indexer(meta)
+      idx = Indexer(folder)
       idx.load(indexFile, ignore_skew = _.options.keep_index)
     _.options.relative = True  # don't output full paths here
     warn("Configuration stats:")
@@ -440,7 +440,7 @@ class Main:
     elif _.args \
       or _.options.includes \
       or _.options.excludes:    code = _.find()
-    else: error("No option specified. Use '--help' to list all options")
+    else: error(f"No option specified. Use '--help' to list all options. {sys.argv} {_.options} {_.args}")
     info("Finished at %s after %.1fs" % (time.strftime("%H:%M:%S"), time.time() - ts))
     sys.exit(code)
 

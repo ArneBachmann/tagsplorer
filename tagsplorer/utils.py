@@ -166,7 +166,7 @@ def findIndexOrAppend(lizt, elem):
   return lindex(lizt, elem, otherwise = lambda l, v: l.append(v) or len(l) - 1)
 
 
-def isDir(f):  return wrapExc(lambda: os.path.isdir(f) and not os.path.ismount(f), False)  # HINT silently catches encoding errors
+def isDir(f):  return wrapExc(lambda: os.path.isdir(f) and not os.path.islink(f), False)  # HINT silently catches encoding errors
 
 
 def isFile(f): return wrapExc(lambda: os.path.isfile(f), False)  # handle "no file" errors

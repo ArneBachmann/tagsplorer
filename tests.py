@@ -4,11 +4,12 @@
 
 # HINT Set environment variable SKIP=true to avoid reverting test data prior to test run
 
-import doctest, inspect, logging, os, subprocess, sys, unittest, traceback
+import doctest, inspect, logging, os, subprocess, sys, time, unittest, traceback
 from io import StringIO
 
 sys.argv.append("--stdout")  # trigger only stdout output. option removed in tp to not interpret as exclusive <stdout> tag
-from tagsplorer import constants, lib, simfs, tp, utils  # entire files
+from tagsplorer import lib, simfs, tp, utils  # entire files
+from tagsplorer.constants import CONFIG, INDEX, NL, ON_WINDOWS, SLASH
 
 REPO = '_test-data'
 
@@ -21,12 +22,12 @@ def call(argstr, cwd = os.path.dirname(os.path.abspath(__file__))):
 def runP(argstr, repo = None):  # instead of script call via Popen, this allows coverage collection
   sys.argv = ["tp.py", "-r", repo if repo else REPO, "-i", repo if repo else REPO] + (["--simulate-winfs"] if simfs.SIMFS else []) + utils.safeSplit(argstr, " ")  # fake arguments
   def tmp():
-    logFile.write("TEST: %s " % inspect.stack()[3].function + " ".join(sys.argv) + "\n")
+    logFile.write("TEST: %s " % inspect.stack()[3].function + " ".join(sys.argv) + NL)
     try: tp.Main().parse_and_run()
     except SystemExit as e: logFile.write(f"EXIT: {e.code}\n")
   res = wrapChannels(tmp)
   logFile.write(res)
-  logFile.write("\n")
+  logFile.write(NL)
   return res
 
 
@@ -43,7 +44,7 @@ def wrapChannels(func):
 #  lib.debug, lib.info, lib.warn, lib.error =\
 #  tp.debug, tp.info, tp.warn, tp.error = debug, info, warn, error
   try: func()
-  except Exception as E: buf.write(str(E) + "\n"); traceback.print_exc(file = buf)
+  except Exception as E: buf.write(str(E) + NL); traceback.print_exc(file = buf)
   finally:
     sys.argv, sys.stdout, sys.stderr = oldv, oldo, olde
     tp._log.removeHandler(handler)
@@ -62,10 +63,10 @@ def tearDownModule():
   ''' Run once after the entire test suite. '''
   logFile.close()
   if not os.environ.get("SKIP", "False").lower() == "true":
-    try: os.unlink(REPO + os.sep + constants.INDEX)
+    try: os.unlink(REPO + os.sep + INDEX)
     except: pass
-    if SVN: call(f'svn revert   "{REPO + os.sep + constants.CONFIG}"')
-    else:   call(f'git checkout "{REPO + os.sep + constants.CONFIG}"')
+    if SVN: call(f'svn revert   "{REPO + os.sep + CONFIG}"')
+    else:   call(f'git checkout "{REPO + os.sep + CONFIG}"')
 
 
 class TestRepoTestCase(unittest.TestCase):
@@ -73,10 +74,10 @@ class TestRepoTestCase(unittest.TestCase):
 
   def setUp(_):
     ''' Run before each testCase. '''
-    try: os.unlink(REPO + os.sep + constants.INDEX)
+    try: os.unlink(REPO + os.sep + INDEX)
     except FileNotFoundError: pass  # if earlier tests finished without errors
-    if SVN:  call(f'svn revert   "{REPO + os.sep + constants.CONFIG}"')
-    else:    call(f'git checkout "{REPO + os.sep + constants.CONFIG}"')
+    if SVN:  call(f'svn revert   "{REPO + os.sep + CONFIG}"')
+    else:    call(f'git checkout "{REPO + os.sep + CONFIG}"')
     try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))
     except: pass
     _.assertIn("Updated configuration entry", runP("--set case_sensitive=True -v"))  # fixed value for reproducibility TODO test all combinations on all platforms
@@ -151,11 +152,11 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["Found 1 files", "/b/b2/b2a/x.x"], runP(".x -v"))
 
   def testReduceCaseStorage(_):
-    #_.assertIn("Added configuration entry: reduce_storage = False", runP("--set reduce_storage=False"))
+    #_.assertIn("Added configuration entry: reduce_storage = False", runP("--set reduce_storage=False"))  # default anyway
     _.assertIn("tags: 49", runP("--stats"))  # only few upper-case entries exist, therefore no big difference if reduce_storage is used
-    _.assertIn("Found 2 files in %d folders" % (2 if constants.ON_WINDOWS or simfs.SIMFS else 1), runP("Case -v"))  # contained in /cases/Case
+    _.assertIn("Found 2 files in 1 folders", runP("Case -v"))  # contained in /cases/Case
     _.assertIn("Found 0 files", runP("CASE -v"))  # wrong case writing, can't find
-    _.assertIn("Found %d files in %d folders" % ((4, 2) if constants.ON_WINDOWS or simfs.SIMFS else (2, 1)), runP("case -v -c"))  # ignore case: should find Case and case (no combination because different findFiles calls)
+    _.assertIn("Found 2 files in 1 folders", runP("case -v -c"))  # ignore case: should find Case and case (no combination because different findFiles calls)
     _.assertIn("Added configuration entry", runP("--set reduce_storage=True -v"))
     _.assertAllIn(["Configuration entry: case_sensitive = True", "Configuration entry: reduce_storage = True"], runP("--config -v"))
     runP("-U")  # trigger update index after config change (but should automatically do so anyway)
@@ -164,7 +165,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Found 0 files in 0 folders", runP("case -v"))  # normalized version not in index anymore
 #    _.assertIn("Found 2 files in ? folders", runP("case -c -v"))  # find anyway TODO should work but gets 0 in 0
     _.assertIn("Reset configuration parameters", runP("--reset"))
-    _.assertAllIn([f"case_sensitive = {'False' if constants.ON_WINDOWS else 'True'}", "Configuration entry: reduce_storage = False", "Configuration entry: compression = 2"], runP("--config"))
+    _.assertAllIn([f"case_sensitive = {'False' if ON_WINDOWS else 'True'}", "Configuration entry: reduce_storage = False", "Configuration entry: compression = 2"], runP("--config"))
 
   def testFilenameCaseSetting(_):
     ''' This test confirms that case setting works (only executed on Linux). '''
@@ -174,7 +175,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Found 0 files", runP("-s CASE --debug"))
     _.assertIn("Found 2 files", runP("-s case --debug --ignore-case"))  # should be same as next line above
     _.assertIn("Updated configuration entry", runP("--set case_sensitive=False -v"))
-    _.assertIn("Wrote", runP("-U -v"))  # update after config change
+    _.assertIn("Wrote", runP("-Uv"))  # update after config change
     _.assertIn("Found 2 files", runP("-s Case -V"))
     _.assertIn("Found 2 files", runP("-s case -v"))  # TODO should be found no matter what
     # Now file-search
@@ -199,7 +200,7 @@ class TestRepoTestCase(unittest.TestCase):
 
   def testIllegalConfig(_):
     class MyIO(StringIO):
-      def readlines(_):  return iter(_.read().split("\n"))
+      def readlines(_):  return iter(_.read().split(NL))
       def xreadlines(_): return _.readlines()
     def tmp():
       buf = MyIO("1494711739628\n[]\nfoo=bar\n")
@@ -243,7 +244,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertAllIn(["Found 1 file", "/mapping/two/2.2"], runP("-s two,test -v"))  # finds folder two with a mapped direct tag test
 
   def testExtensionOnly(_):
-    _.assertIn("Found 0 files in %d folders" % (27 if constants.ON_WINDOWS or simfs.SIMFS else 26), runP(".xyz -v"))  # /cases/case is added on Windows, and '' is not filtered on Windows
+    _.assertIn("Found 0 files in 0 folders", runP(".xyz -v"))  # /cases/case is added on Windows, and '' is not filtered on Windows
 
   def testMappedGlobExclude(_):
     pass
@@ -251,7 +252,7 @@ class TestRepoTestCase(unittest.TestCase):
   def testOnlyDirsOption(_):
     _.assertAllIn(["Found 1 folder", "/folders/folder1"], runP("-s folder1 -v --dirs"))
     _.assertAllIn(["Found 3 folders", "/folders", "/folders/folder1", "/folders/folder2"], runP('-v -s folder? --dirs'))  # must be quoted on command-line, though
-    _.assertAllIn(["Found 4 folders", "folder2", "folder1", "folders", "dot.folder"], runP('-s folder* -v --dirs'))
+    _.assertAllIn(["Found 4 folders", "folder2", "folder1", "folders", "dot.folder"], runP('-s *folder* -v --dirs'))
 
   def testExtensions(_):
     _.assertIn("Found 3 files in 2 folders", runP("-s .ext1 -v"))
@@ -261,13 +262,13 @@ class TestRepoTestCase(unittest.TestCase):
   def testFindFolder(_):
     def tmp():
       i = lib.Indexer(REPO)
-      i.load(os.path.join(REPO, constants.INDEX), ignore_skew = True, recreate_index = False)
+      i.load(os.path.join(REPO, INDEX), ignore_skew = True, recreate_index = False)
       print(i.findFolders(["folders", "folder2"], []))
     res = wrapChannels(tmp)
     _.assertAllIn(['/folders/folder2'], res)  # , 'Found potential matches in 1 folders'
     def tmp2():
       i = lib.Indexer(REPO)
-      i.load(os.path.join(REPO, constants.INDEX), ignore_skew = True, recreate_index = False)
+      i.load(os.path.join(REPO, INDEX), ignore_skew = True, recreate_index = False)
       print(utils.wrapExc(lambda: set(i.getPaths(i.tagdir2paths[i.tagdirs.index("a")], {})), lambda: set()))  # print output is captured
     _.assertAllIn(['/a/a2', '/a', '/a/a1', '/ignore_skip/marker-files/a'], wrapChannels(tmp2))
 
@@ -304,6 +305,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Found 0 files", runP("-s missing -v"))  # because neither file nor tagging exists
     # test adding on existing file, then search
     with open(os.path.join(REPO, "tagging", "anyfile1"), "w") as fd: fd.close()  # touch to create file
+    time.sleep(0.1)
     _.assertIn("Tag <missing> in '/tagging' for +anyfile1 -", runP("--tag missing,-exclusive _test-data/tagging/anyfile1 -v"))
     _.assertIn("Found 1 files in 1 folders", runP("-s missing -v"))  # is now found, since existing
     try: os.unlink(os.path.join(REPO, "tagging", "anyfile1"))  # remove again
@@ -316,8 +318,8 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("No option", runP(""))
 
   def testNegativeSearch(_):
-    _.assertAllInAny(["Found 4 folders for +<a> -<>", "/a", "/a/a1", "/a/a2"], runP("-s a -v --dirs").split("\n"))  # only display dirs
-    _.assertAllInAny(["Found 3 folders for +<a> -<a1>", "/a", "/a/a2"], runP("-s a -x a1 -v --dirs").split("\n"))  # with exclude only dirs
+    _.assertAllInAny(["Found 4 folders for +<a> -<>", "/a", "/a/a1", "/a/a2"], runP("-s a -v --dirs").split(NL))  # only display dirs
+    _.assertAllInAny(["Found 3 folders for +<a> -<a1>", "/a", "/a/a2"], runP("-s a -x a1 -v --dirs").split(NL))  # with exclude only dirs
     _.assertIn("Found 8 files in 4 folders", runP("-s a -v"))  # only include with files
     _.assertAllIn(["Found 4 files in 3 folders", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -v"))  # with exclude with files
 
@@ -340,7 +342,7 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertNotIn(".ext1", runP("-s a -x .ext1"))
     _.assertIn("Found 4 files in 1 folders", runP("a1 -x .ext1 -v"))
     _.assertIn("Found 3 files in 3 folders", runP("-s a -x .ext2 -v"))
-    _.assertIn(f"Found 2 files in {27 if constants.ON_WINDOWS or simfs.SIMFS else 26} folders", runP("b1 -x .ext2 -v"))
+    _.assertIn(f"Found 2 files in {27 if ON_WINDOWS or simfs.SIMFS else 26} folders", runP("b1 -x .ext2 -v"))
 
   def testSameTagFolderFile(_):
     _.assertIn("Found 1 files in 1 folders", runP("a1 a1 -v"))
@@ -350,16 +352,16 @@ class TestRepoTestCase(unittest.TestCase):
       ''' Walk entire tree from index (slow but proof of correctness). '''
       tag = _.tagdirs[idx]  # name of head element
       children = (f[0] for f in filter(lambda a: a[1] == idx and a[0] != idx, ((e, v) for e, v in enumerate(_.tagdir2parent))))  # using generator expression
-      print(path + tag + constants.SLASH)
-      for child in children: unwalk(_, idx = child, path = path + tag + constants.SLASH)
+      print(path + tag + SLASH)
+      for child in children: unwalk(_, idx = child, path = path + tag + SLASH)
 
     def tmp():
       i = lib.Indexer(REPO)
-      i.load(os.path.join(REPO, constants.INDEX), True, False)
+      i.load(os.path.join(REPO, INDEX), True, False)
       unwalk(i)
     result = wrapChannels(tmp).replace("\r", "")
-    logFile.write(result + "\n")
-    _.assertEqual(31, len(result.split("\n")))
+    logFile.write(result + NL)
+    _.assertEqual(31, len(result.split(NL)))
 
 
 def _compressionTest():
@@ -369,9 +371,9 @@ def _compressionTest():
   for j in range(10):
     print(f"Compression level {j}")
     i.compressed = j
-    i.store("../_test-data/" + constants.INDEX)
-    s = os.stat(constants.INDEX)[6]  # get compressed size
-    print(f"Level {j}: %f {s}" % timeit.Timer(lambda: i.load(constants.INDEX)).timeit(number = 20))
+    i.store("../_test-data/" + INDEX)
+    s = os.stat(INDEX)[6]  # get compressed size
+    print(f"Level {j}: %f {s}" % timeit.Timer(lambda: i.load(INDEX)).timeit(number = 20))
 
 
 def load_tests(loader, tests, ignore):
@@ -385,7 +387,7 @@ def load_tests(loader, tests, ignore):
 
 if __name__ == '__main__':
   os.chdir(os.path.dirname(os.path.abspath(__file__)))  # change to own folder
-  PYTHON = '"' + os.path.realpath(sys.executable) + '"' if constants.ON_WINDOWS else os.path.realpath(sys.executable)
+  PYTHON = '"' + os.path.realpath(sys.executable) + '"' if ON_WINDOWS else os.path.realpath(sys.executable)
   logFile = None
   SVN = tp.findRootFolder('.svn') is not None
   print(f'Using VCS \'{"Subversion" if SVN else "Git"}\' to revert test data')
