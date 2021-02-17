@@ -12,6 +12,12 @@ from tagsplorer import lib, simfs, tp, utils  # entire files
 from tagsplorer.constants import CONFIG, INDEX, NL, ON_WINDOWS, SLASH
 
 REPO = '_test-data'
+PACKAGE = 'tagsplorer'
+
+PROFILE = ['--profile' in sys.argv]  # module-level references are immutable, therefore using a list
+if True in PROFILE:
+  sys.argv.remove('--profile')
+  PROFILE[0] = tp.Profiler()  # replace flag by actual profiler
 
 
 def call(argstr, cwd = os.path.dirname(os.path.abspath(__file__))):
@@ -102,9 +108,14 @@ class TestRepoTestCase(unittest.TestCase):
       if a == None: raise Exception("xany should not process this part!")
       return bool(a)
     _.assertTrue(tp.xany(x, [3, 3, 3, None]))
+    _.assertFalse(tp.xany(x, [0]))
+    _.assertTrue(tp.xany(x, set([3, 1, None])))
+    _.assertTrue(tp.xany(x, iter([3, 3, 3, None])))
     _.assertFalse(tp.xany(x, []))
     _.assertTrue(utils.xall(x, [3, 3, 3]))
-    _.assertFalse(utils.xall(x, [0, None]))
+    _.assertTrue(utils.xall(x, set([3, 3, 3])))
+    _.assertTrue(utils.xall(x, iter([3, 3, 3])))
+    _.assertFalse(utils.xall(x, [False]))
     _.assertTrue(utils.isFile("tests.py"))
     _.assertFalse(os.path.isdir("tests.py"))
     _.assertFalse(utils.isFile(os.getcwd()))
@@ -323,11 +334,11 @@ class TestRepoTestCase(unittest.TestCase):
     _.assertIn("Found 8 files in 4 folders", runP("-s a -v"))  # only include with files
     _.assertAllIn(["Found 4 files in 3 folders", "file3.ext1", "file3.ext2", "file3.ext3"], runP("-s a -x a1 -v"))  # with exclude with files
 
-  @unittest.skip("doesn't run on CI because No module named 'tagsplorer'")
+  @unittest.skip(f"doesn't run on CI because No module named '{PACKAGE}'")
   def testTestLib(_):
-    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " lib.py -v", cwd = os.path.dirname(os.path.abspath(__file__)) + os.sep + "tagsplorer"))
-    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " tp.py --test -v", cwd = os.path.dirname(os.path.abspath(__file__)) + os.sep + "tagsplorer"))
-    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " utils.py -v", cwd = os.path.dirname(os.path.abspath(__file__)) + os.sep + "tagsplorer"))
+    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " lib.py -v", cwd = os.path.dirname(os.path.abspath(__file__)) + os.sep + PACKAGE))
+    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " tp.py --test -v", cwd = os.path.dirname(os.path.abspath(__file__)) + os.sep + PACKAGE))
+    _.assertAllIn(["Test passed", "Test passed"], call(PYTHON + " utils.py -v", cwd = os.path.dirname(os.path.abspath(__file__)) + os.sep + PACKAGE))
 
   def testExtensionAndTag(_):
     _.assertAllIn(["Found 2 files in 1 folders", "/b/b1/file3.ext1"], runP("b .ext1 -v"))
@@ -392,3 +403,4 @@ if __name__ == '__main__':
   SVN = tp.findRootFolder('.svn') is not None
   print(f'Using VCS \'{"Subversion" if SVN else "Git"}\' to revert test data')
   unittest.main(exit = False)  # warnings = "ignore")
+  if PROFILE[0]: PROFILE[0].stats()

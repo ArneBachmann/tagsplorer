@@ -181,8 +181,8 @@ class Indexer(object):
     _.root = pathNorm(startDir.rstrip("/\\"))  # slash-normalized absolute path
     _.timestamp = 1.23456789  # for comparison with configuration timestamp
     _.cfg = None  # reference to latest corresponding configuration
-    _.tagdirs = []  # array of tags (plain dirnames and manually set tags (not represented in parent), both case-normalized and as-is)
-    _.tagdir2parent = []  # index of dir entry (tagdirs) -> index of parent to represent tree structure (excluding folder links)
+    _.tagdirs = None  # array of tags (plain dirnames and manually set tags (not represented in parent), both case-normalized and as-is)
+    _.tagdir2parent = []   # index of dir entry (tagdirs) -> index of parent to represent tree structure (excluding folder links)
     _.tagdir2paths = dd()  # dirname/tag index -> list of [all path indices relevant for that dirname/tag]
 
   def load(_, filename, ignore_skew = False, recreate_index = False):
@@ -231,8 +231,10 @@ class Indexer(object):
     _.tagdir2paths = dd()  # maps index of tagdir entries to list of path leaf indexes, to find all paths ending in that suffix
     _.tags = []            # temporary data structure for "set" of (manually set or folder-derived) tag names and file extensions, which gets mapped into the tagdirs structure
     _.tag2paths = dd()     # temporary data structure for config-specified tag and extension mapping to matching respective paths
+
     _._walk(_.root, 0)     # recursive indexing
     _.mapTagsIntoDirsAndCompressIndex()  # manual tags are combined in the index with folder names for simple lookup and filtering
+
     del _.tags, _.tag2paths  # remove temporary structures
     _.tagdir2paths = [_.tagdir2paths[i] if i in _.tagdir2paths else [] for i in range(max(_.tagdir2paths) + 1)] if _.tagdir2paths else []  # safely convert map values to list positions (as we don't know if all exist)
     info(f"Indexed {len(_.tagdirs)} folders with {len(_.tagdir2paths)} tags")
@@ -281,7 +283,7 @@ class Indexer(object):
           appendnew(_.tag2paths[i], findex)
 
     # 2. process folder's file names
-    files, folders = wrapExc(lambda: splitByPredicate(os.listdir(folder), lambda f: isFile(folder + SLASH + f)), ([], []))  # HINT right-hand side is not automatically a directory, thus filtered below:
+    files, folders = wrapExc(lambda: splitByPredicate(os.scandir(folder), lambda f: f.is_file(), transform = lambda f: f.name), ([], []))  # HINT right-hand side is not automatically a directory, thus filtered below:
     folders[:] = sorted([f for f in folders if isDir(folder + SLASH + f)])  # remove special files like ".desktop"
     if SKPFILE in files:  # HINT allow other than lower case skip file? should be no problem, as even Windows allows lower-case file names and should match here
       info(f"Skip '{folder[len(_.root):]}' due to local skip marker file")
@@ -338,12 +340,10 @@ class Indexer(object):
           debug(f"Store case-normalized token '{itoken}' for '{_.getPath(findex, cache)}'")
           i = findIndexOrAppend(_.tags, itoken); addt.add(i)
           _.tag2paths[i].append(idxs[-added])
-      assert len(_.tagdirs) == len(_.tagdir2parent)  # invariant
 
       if not ignore:  # then index current folder
         debug(f"Mark folder '{folder[len(_.root):]}{SLASH}{subfolder}' with " + "<%s>" % (COMB.join(set([_.tagdirs[x] for x in (newtags + idxs)]) | set([_.tags[x] for x in (adds | addt)]))))  # per subfolder, not promoted to recursive call
-        for tag in newtags + idxs:
-          _.tagdir2paths[_.tagdirs.index(_.tagdirs[tag])].extend(idxs)  # add sub-folder reference(s) for all collected parent folder tags to the tag name
+        for tag in newtags + idxs: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tag])].extend(idxs)   # add sub-folder reference(s) for all collected parent folder tags to the tag name
 
       # 4. recurse into subfolder
       try:
@@ -448,7 +448,7 @@ class Indexer(object):
       debug(f"Build list of all paths.  Global ignores: {idirs}  Global skips: {sdirs}")
       return set(_.getPaths(list(reduce(lambda a, b: a.update(set(b)) or a, _.tagdir2paths, set())), cache))  # compute union of all paths (cached when running as a server)
     _.allPaths = wrapExc(lambda: _.allPaths, rebuild)  # lazy computation. fails and computes if property not defined
-    alls = [path for path in _.allPaths if not pathHasGlobalIgnore(path, idirs) and not pathHasGlobalSkip(path, sdirs) and not anyParentIsSkipped(path, _.cfg.paths) and IGNORE not in dictGet(_.cfg.paths, path, {})]
+    alls = [path for path in _.allPaths if not pathHasGlobalIgnore(path, idirs) and not pathHasGlobalSkip(path, sdirs) and not anyParentIsSkipped(path, _.cfg.paths) and IGNORE not in dictGet(_.cfg.paths, path, {})]  # TODO shouldn't this already be covered by the index? but tests fail if removed
     if returnAll or len(include) == 0:  # if only exclusive tags, we need all paths and prune them later
       debug(f"Prune skipped and ignored paths from {len(_.allPaths)} to {len(alls)} paths")
       if returnAll:
@@ -478,7 +478,7 @@ class Indexer(object):
     paths = list(paths)
     debug(f"Found {len(paths)} path matches")
     if _.cfg.case_sensitive:  # eliminate different letter cases, otherwise return both, although only one physically exists TOOD why not use "not"?
-      paths[:] = [p for p in paths if not checkPaths or os.path.basename(p) in os.listdir(_.root + (os.sep + os.path.dirname(p) if SLASH in p else '')) and os.path.isdir(_.root + os.sep + p)]  # ensure that only correct letter cases are retained on case-sensitive file systems
+      paths[:] = [p for p in paths if not checkPaths or os.path.basename(p) in [f.name for f in os.scandir(_.root + (os.sep + os.path.dirname(p) if SLASH in p else '')) if f.is_dir()]]  # ensure that only correct letter cases are retained on case-sensitive file systems
       debug(f"Retained {len(paths)} paths after removing duplicates")  # TODO on windows, all checks may succeed although case differs!
     assert all(path.startswith(SLASH) or path == '' for path in paths), paths  # only return root-relative paths
     return paths
@@ -508,11 +508,11 @@ class Indexer(object):
     skipFilter = len(poss) + len(negs) + len(mapped) == 0
 
     willskip = False  # contains files from current or mapped folders (without path, since "mapped", but could get a local symlink - TODO
-    found = set() if not skipFilter else set(wrapExc(lambda: [f for f in os.listdir(_.root + current) if isFile(_.root + current + os.sep + f)], []))  # TODO what if folder doesn't exist TODO duplicate of below as special case for no further constraints -> returns all
+    found = set() if not skipFilter else set(wrapExc(lambda: [f.name for f in os.scandir(_.root + current) if f.is_file()], []))  # TODO what if folder doesn't exist TODO duplicate of below as special case for no further constraints -> returns all
     if IGNFILE in found: skipFilter, found = True, set()  # enable skip but don't return anything
     for _f, folder in enumerate([] if skipFilter else [current] + mapped):
-      info(("Check %s %%sfolder%%s" % ('mapped' if _f else 'proper')) % (('', f" '{folder}'") if folder else ("root ", "")))
-      files = set(wrapExc(lambda: [f for f in os.listdir(_.root + folder) if isFile(_.root + folder + os.sep + f)], []))  # TODO silently catches for OS errors, e.g. encoding problems
+      info((f"Check {'mapped' if _f else 'proper'} " + (f"folder '{folder}'") if folder else "root folder"))
+      files = set(wrapExc(lambda: [f.name for f in os.scandir(_.root + folder) if f.is_file()], []))  # TODO silently catches for OS errors, e.g. encoding problems
       if IGNFILE in files: continue  # ignore is easy
       if folder == current and SKPFILE in files:  # only applies to non-mapped folder
         willskip = True  # skip is more difficult to handle than ignore, cf. return 2-tuple (call in tp.find())

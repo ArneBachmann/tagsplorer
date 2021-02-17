@@ -1,9 +1,9 @@
 ''' tagsPlorer utilities  (C) 2016-2021  Arne Bachmann  https://github.com/ArneBachmann/tagsplorer '''
 
-import collections, fnmatch, logging, os, re, sys, time
+import collections, fnmatch, logging, os, sys, time
 from functools import reduce
 
-from tagsplorer.constants import COMB, ON_WINDOWS, REGEX_SANITIZE, SKIP, SLASH
+from tagsplorer.constants import COMB, ON_WINDOWS, SKIP, SLASH
 
 
 _log = logging.getLogger(__name__)
@@ -82,9 +82,14 @@ def sjoin(*string, sep = " "):
   return sep.join([str(elem) for elem in string if elem])
 
 
-# short-circuit operations: intentionally doesn't iterate over string characters. Converts string and other data types to a one-element list instead
-def xany(pred, *lizt): return reduce(lambda a, b: a or  pred(b), lizt[0] if isinstance(lizt[0], (list, set, dict)) else lizt, False)
-def xall(pred, *lizt): return reduce(lambda a, b: a and pred(b), lizt[0] if    hasattr(lizt[0], '__iter__')        else lizt, True)
+def xany(pred, lizt):
+  ''' Lazy any implementation. '''
+  return any(pred(elem) for elem in lizt)  # works with all iterables and generators, using short-circuit logic
+
+
+def xall(pred, lizt):
+  ''' Predicate-first implementation. '''
+  return all([pred(elem) for elem in lizt])
 
 
 def wrapExc(func, otherwise = None):
@@ -205,38 +210,49 @@ def dictGet(dikt, key, default, set = False):
   ''' dict.get() that returns default when missing.
       dikt: a dictionary
       key:  key to find value of
-      default: value to use if key missing
+      default: value or callable (to compute value) to use if key missing
   >>> dictGet({}, 'a', dictGet({'a': 1}, 'b', 2))
   2
+  >>> dictGet({}, 'a', dictGet({'a': 1}, 'b', lambda: 3))
+  3
   '''
   try: return dikt[key]
   except KeyError:
-    if set: dikt[key] = default
-    return default
+    try: value = default()  # Pythonic way - this is slightly faster than the ternary expression below!
+    except: value = default
+    # value = default() if callable(default) else default
+    if set: dikt[key] = value
+    return value
 
 
 def dictGetSet(dikt, key, default):
   ''' dict.get() that computes and adds missing values.
-      Returns existing value otherwise new value.
+      dikt: dictionary
+      key:  key to get or set
+      default: value or callable to compute value
+      Returns existing value otherwise new (computed) value.
   >>> a = {}; b = a.get(0, 0); print((a, b))  # normal dict get
   ({}, 0)
   >>> a = {}; b = dictGetSet(a, 0, 0); print((a, b))  # improved dict get
   ({0: 0}, 0)
+  >>> a = {}; b = dictGetSet(a, 0, lambda: 1); print((a, b))  # improved dict get
+  ({0: 1}, 1)
   '''
   return dictGet(dikt, key, default, set = True)
 
 
-def splitByPredicate(lizt, pred):
+def splitByPredicate(lizt, pred, transform = None):
   ''' Split lists by a (boolean) predicate.
+      transform: optional transformation on resulting elements
       returns ([if-true], [if-false])
   >>> print(splitByPredicate([1,2,3,4,5], lambda e: e % 2 == 0))
   ([2, 4], [1, 3, 5])
   '''
   MATCH, NO_MATCH = 0, 1
   return reduce(lambda acc, nxt_: (
-      lappend(acc[MATCH], nxt_), acc[NO_MATCH])
+      lappend(acc[MATCH], nxt_ if transform is None else transform(nxt_)), acc[NO_MATCH])
     if pred(nxt_) else
-      (acc[MATCH], lappend(acc[NO_MATCH], nxt_)),
+      (acc[MATCH], lappend(acc[NO_MATCH], nxt_ if transform is None else transform(nxt_))),
     lizt, ([], []))
 
 
@@ -247,12 +263,10 @@ def caseCompareKey(c):
   return ord(c.lower())
 
 
-def escapeRegex(name):
-  r''' Escape the string for regex matching.
-  >>> escapeRegex("a(b)")
-  'a\\(b\\)'
-  '''
-  return REGEX_SANITIZE.sub(r"\\\1", name)
+def constituentInPath(path, skip):
+  if path.endswith(SLASH + skip):  return True  # also covers: if path == SLASH + skip: return True
+  if SLASH + skip + SLASH in path: return True  # also covers: if path.startswith(SLASH + skip + SLASH): return True
+  return False
 
 
 def pathHasGlobalSkip(path, skips):
@@ -267,7 +281,7 @@ def pathHasGlobalSkip(path, skips):
   '''
   assert isinstance(path, str)
   assert isinstance(skips, list)
-  return xany(lambda skip: wrapExc(lambda: re.search(r"((^%s$)|(^%s/)|(/%s/)|(/%s$))" % ((escapeRegex(skip),) * 4), path).groups()[0].replace("/", "") == skip, False), skips)
+  return xany(lambda skip: constituentInPath(path, skip), skips)
 
 
 def pathHasGlobalIgnore(path, ignores):
@@ -293,7 +307,7 @@ def pathHasGlobalIgnore(path, ignores):
 
 
 def anyParentIsSkipped(path, paths):
-  ''' True if any prefix path of path is marked as "skip", so that all chlildren can be skipped, too.
+  ''' True if any prefix path of path is marked as "skip", so that all children can be skipped, too.
   >>> anyParentIsSkipped('/a/b', {'/a': {'skip': ''}})
   True
   >>> anyParentIsSkipped('/a/b', {'/a/b': {'ignore': ''}})
@@ -301,7 +315,11 @@ def anyParentIsSkipped(path, paths):
   '''
   assert isinstance(path, str)
   assert isinstance(paths, dict)
-  return xany(lambda i: SKIP in dictGetSet(paths, SLASH.join(path.split(SLASH)[:i + 1]), {}), list(range(path.count(SLASH))))  # test all parent paths
+  def append(elem): nonlocal current; current += (SLASH + elem); return current  # append expression
+  elements = path.split(SLASH)
+  current = elements[0]
+  if SKIP in paths.get(current, {}): return True
+  return xany(lambda i: SKIP in paths.get(append(elements[i]), {}), range(1, len(elements)))  # test all parent paths
 
 
 def splitTags(lizt):

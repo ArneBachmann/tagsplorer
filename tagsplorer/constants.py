@@ -14,7 +14,6 @@ IGNFILE = ".tagsplorer.ign"  # ignore marker file (could equally be configured i
 IGNORE, SKIP, TAG, FROM, SKIPD, IGNORED, GLOBAL = "ignore", "skip", "tag", "from", "skipd", "ignored", "global"  # allowed config file options
 NL, COMB, SEPA, SLASH, DOT, ALL, ST_MTIME, ST_SIZE = "\n", ",", ";", "/", os.extsep, "*", 8, 6  # often-used constants
 TOKENIZER = re.compile(r"[\s\-_\.!\?#,]+")  # tokenize file names as additional tags
-REGEX_SANITIZE = re.compile(r"([\.\[\]\(\)\^\$\+\*\?\{\}])")  # all special regex characters to escape
 PICKLE_PROTOCOL = 4  # (Python V3.4+) for pypy3 compatibility
 SKIPDS   = [".git", ".svn", "$RECYCLE.BIN", "System Volume Information"]
 IGNOREDS = []

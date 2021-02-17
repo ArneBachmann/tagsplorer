@@ -11,11 +11,12 @@ from tagsplorer.utils import caseCompareKey, casefilter, dd, dictGetSet, isDir, 
 from tagsplorer import lib, simfs, utils  # for setting the log level dynamically
 
 
+STREAM = sys.stdout if '--stdout' in sys.argv else sys.stderr
 logging.basicConfig(
   level =  logging.DEBUG if '-V' in sys.argv or '--debug'   in sys.argv or os.environ.get("DEBUG",   "False").lower() == "true" else
           (logging.INFO  if '-v' in sys.argv or '--verbose' in sys.argv or os.environ.get("VERBOSE", "False").lower() == "true" else
            logging.WARNING),  # must be set here to already limit writing to info and debug (e.g. "Started at...")
-  stream = sys.stdout if '--stdout' in sys.argv else sys.stderr,  # log to stderr, write results to stdout
+  stream = STREAM,  # log to stderr, write results to stdout
   format =  '%(asctime)-8s.%(msecs)03d %(levelname)-4s %(module)s:%(funcName)s:%(lineno)d | %(message)s',
   datefmt = '%H:%M:%S')
 wrapExc(lambda: sys.argv.remove('--stdout'))  # remove if present
@@ -25,7 +26,21 @@ debug, info, warn, error = log(_log.debug), log(_log.info), log(_log.warning), l
 
 
 with open(os.path.join(os.path.dirname(__file__), 'VERSION'), encoding = 'utf-8') as fd: VERSION = fd.read()
-APPSTR  = APPNAME + " version %s  (C) 2016-2021  Arne Bachmann" % VERSION
+APPSTR  = f"{APPNAME} version {VERSION}  (C) 2016-2021  Arne Bachmann"
+
+
+class Profiler:
+  def __init__(_):
+    import cProfile
+    _.profiler = cProfile.Profile()
+    _.profiler.enable()
+  def stats(_):
+    import pstats
+    stats = pstats.Stats(_.profiler)
+    stats.strip_dirs()  # remove path prefixes
+    stats.sort_stats(pstats.SortKey.TIME)  # CALLS (#), CUMULATIVE (including sub-calls), TIME (spent only in function)
+    info("Profile stats:"); print(file = STREAM)
+    stats.print_stats(50)  # lines
 
 
 def findRootFolder(filename, start = None):
@@ -261,12 +276,12 @@ class Main:
       for pn in (poss + negs):
         if pn in safeSplit(path, SLASH): warn(f"Specified tag <{pn}> should not match any path constituents of '{path}'"); continue  # TODO unless positive, and folder is ignored somehow
       assert path[0] == SLASH
-      files = os.listdir(root + path)  # check current state on file system
+      files = [f.name for f in os.scandir(root + path)]  # check current state on file system
       _i, _e = [], []
       for ps, l, t in zip((inc, exc), (_i, _e), ("Inclusive", "Exclusive")):  # performs sanity checks on inclusive and exclusive patterns
         for p in ps:
           exists = False
-          if   p == '': error(f"{t} tag pattern for '{path}' cannot be empty, skip"); continue
+          if    p == '':  error(f"{t} tag pattern for '{path}' cannot be empty, skip"); continue
           if p[0] == DOT: exists = len(casefilter(files, p)) > 0
           elif  p == ALL: exists = len(files) > 0
           elif isGlob(p): exists = len(casefilter(files, p)) > 0
@@ -305,7 +320,7 @@ class Main:
         error(f"Specified pattern path '{path}' is outside indexed folder tree '{root}'; skip '{pathpatterns}'"); continue
       path = path[len(root):]  # make repo-relative
       assert path[0] == SLASH
-      files = os.listdir(root + path)  # check current state on file system
+      files = [f.name for f in os.scandir(root + path)]  # check current state on file system
       _i, _e = [], []
       for ps, l, t in zip((inc, exc), (_i, _e), ("Inclusive", "Exclusive")):  # performs sanity checks on inclusive and exclusive patterns
         for p in ps:
@@ -410,10 +425,12 @@ class Main:
     op.add_option('-v', '--verbose',        action = "store_true",  dest = "verbose",     default = False,             help = "Display more information")
     op.add_option('-V', '--debug',          action = "store_true",  dest = "debug_on",    default = False,             help = "Display internal data state")
     op.add_option(      '--stats',          action = "store_true",  dest = "stats",       default = False,             help = "List index internals")
+    op.add_option(      '--profile',        action = "store_true",  dest = "profile",     default = False,             help = "Profile code performance")
     op.add_option(      '--relative',       action = "store_true",  dest = "relative",    default = False,             help = "Output files with root-relative paths only")  # instead of absolute file system paths
     op.add_option(      '--simulate-winfs', action = "store_true",  dest = "winfs",       default = True,              help = optparse.SUPPRESS_HELP)  # "Simulate case-insensitive file system")  # but option is checked outside parser in simfs.py
     op.add_option('-h', '--help',           action = "help",                                                           help = optparse.SUPPRESS_HELP)  # whoever showed the help, doesn't need this information
     _.options, _.args = op.parse_args()  # TODO replace with argparse?
+    if _.options.profile: _.options.profile = Profiler()
     reserved1, reserved2 = (set(_) for _ in splitByPredicate([_.get_opt_string() for _ in op.option_list], lambda e: e[:2] != '--'))  # allow option switches operate as an exclude tag when masked by an additional dash
     _.args, excludes = splitByPredicate(_.args,   lambda e: e[:3] != '---')      # split definitive excludes (triple dash)
     _.args, exclude_ = splitByPredicate(_.args,   lambda e: e[:2] != '--')       # split potential  excludes (double dash)
@@ -440,8 +457,9 @@ class Main:
     elif _.args \
       or _.options.includes \
       or _.options.excludes:    code = _.find()
-    else: error(f"No option specified. Use '--help' to list all options. {sys.argv} {_.options} {_.args}")
-    info("Finished at %s after %.1fs" % (time.strftime("%H:%M:%S"), time.time() - ts))
+    else: error(f"No option specified. Use '--help' to list all options"); debug(f"{sys.argv} {_.options} {_.args}")
+    info(f'Finished at {time.strftime("%H:%M:%S")} after %.1fs' % (time.time() - ts))
+    if _.options.profile: _.options.profile.stats()
     sys.exit(code)
 
 
