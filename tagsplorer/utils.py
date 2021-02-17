@@ -33,7 +33,7 @@ class Normalizer(object):
     >>> print(n.globfilter(["dot.folder"], "DOT*"))  # regression test
     ['dot.folder']
     '''
-    if not suppress: debug("Case-sensitive matching: %s" % ("On" if case_sensitive else "Off"))
+    if not suppress: debug("Case-sensitive matching: " + ("On" if case_sensitive else "Off"))
     _.filenorm   = (lambda _: _)       if case_sensitive else str.lower
     _.globmatch  = fnmatch.fnmatchcase if case_sensitive else lambda f, g: fnmatch.fnmatch(f.lower(), g.lower())
     _.globfilter = casefilter if case_sensitive else \

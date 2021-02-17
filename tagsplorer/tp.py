@@ -374,8 +374,8 @@ class Main:
     warn("Configuration stats:")
     warn("  Compression level:", idx.cfg.compression)
     warn("  Number of configured paths: %d" % len(idx.cfg.paths))
-    warn("  Average number of markers per folder: %.2f" % ((sum([len(_) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip, ignore, manual tags
-    warn("  Average number of entries per folder: %.2f" % ((sum([sum([len(__) for __ in _.values()]) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip
+    warn("  Average number of markers per folder: %.1f" % ((sum([len(_) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip, ignore, manual tags
+    warn("  Average number of entries per folder: %.1f" % ((sum([sum([len(__) for __ in _.values()]) for _ in idx.cfg.paths.values()]) / len(idx.cfg.paths)) if idx.cfg.paths else 0.))  # e.g. skip
     warn("  Last update: " + time.strftime("%Y-%m-%d@%H:%M", time.localtime(os.stat(os.path.join(meta, CONFIG))[ST_MTIME])))
     warn("Index stats:")
     warn("  Root folder:", idx.root)

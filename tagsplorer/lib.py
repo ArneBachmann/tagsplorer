@@ -67,7 +67,7 @@ class Configuration(object):
   def __init__(_, case_sensitive = None):
     _.paths = {}  # {relative dir path -> {marker -> [entries]}}
     _.reset(case_sensitive)
-    normalizer.setupCasematching(_.case_sensitive, suppress = True)  # initialize normalizer, but can be overridden during load()
+    normalizer.setupCasematching(_.case_sensitive, suppress = True)  # initialize normalizer, but overridden during load()
 
   def reset(_, case_sensitive = None):
     _.case_sensitive = (not ON_WINDOWS) if case_sensitive is None else case_sensitive  # search behavior
@@ -104,7 +104,7 @@ class Configuration(object):
 
   def store(_, folder, timestamp = None):
     ''' Store configuration to file, prepending data by the timestamp, or the current time. '''
-    debug(f"Store configuration to {folder}" + (" (%.1f)" % timestamp if timestamp else ""))
+    debug(f"Store configuration to {folder} ({timestamp / 1000 if timestamp else '-'})")
     if not timestamp: timestamp = getTsMs()  # for those cases, in which we modify only the config file (e.g. tag, untag, config)
     cp = ConfigParser(); cp.sections = _.paths
     with open(os.path.join(folder, CONFIG), "w", encoding = "utf-8") as fd: fd.write(f"{timestamp}\n"); cp.store(fd, parent = _)
@@ -179,10 +179,10 @@ class Indexer(object):
       startDir = os.getcwd()  # get actual folder on drive
       os.chdir(cwd)  # return to original drive/folder
     _.root = pathNorm(startDir.rstrip("/\\"))  # slash-normalized absolute path
-    _.timestamp = 1.23456789  # for comparison with configuration timestamp
+    _.timestamp = 1.23456789  # bogus value for distincation with configuration timestamp
     _.cfg = None  # reference to latest corresponding configuration
-    _.tagdirs = None  # array of tags (plain dirnames and manually set tags (not represented in parent), both case-normalized and as-is)
-    _.tagdir2parent = []   # index of dir entry (tagdirs) -> index of parent to represent tree structure (excluding folder links)
+    _.tagdirs = None       # array of tags (folder names and manually set tags (not represented in parent), both case-normalized and as-is) WARN do not try to convert into a dict! It contains duplicates on purpose
+    _.tagdir2parent = None # index of dir entry (tagdirs) -> index of parent to represent tree structure (excluding folder links)
     _.tagdir2paths = dd()  # dirname/tag index -> list of [all path indices relevant for that dirname/tag]
 
   def load(_, filename, ignore_skew = False, recreate_index = False):
@@ -204,7 +204,7 @@ class Indexer(object):
         _.cfg = cfg  # set more recent config and update
         _.walk()  # re-create this index
         _.store(filename)
-      normalizer.setupCasematching(_.cfg.case_sensitive)  # update with just loaded setting
+      else: normalizer.setupCasematching(_.cfg.case_sensitive, suppress = not recreate_index)  # update with just loaded setting
 
   def store(_, filename, config_too = True):
     ''' Persist index in a file, including currently active configuration. '''
@@ -228,16 +228,12 @@ class Indexer(object):
     debug(f"Configuration: case_sensitive = {_.cfg.case_sensitive}, reduce_storage = {_.cfg.reduce_storage}")
     _.tagdirs = [""]       # list of directory names, duplicates allowed and required to represent the tree structure. "" represents the root folder
     _.tagdir2parent = [0]  # pointer to parent directory. the self-reference at index 0 marks root. each index position responds to one entry in tagdirs (!)
-    _.tagdir2paths = dd()  # maps index of tagdir entries to list of path leaf indexes, to find all paths ending in that suffix
+    _.tagdir2paths = dd()  # maps index of tagdir entries to list of path leaf indexes, to find all paths ending in that suffix HINT stored as list-of-sets after processing
     _.tags = []            # temporary data structure for "set" of (manually set or folder-derived) tag names and file extensions, which gets mapped into the tagdirs structure
     _.tag2paths = dd()     # temporary data structure for config-specified tag and extension mapping to matching respective paths
 
     _._walk(_.root, 0)     # recursive indexing
-    _.mapTagsIntoDirsAndCompressIndex()  # manual tags are combined in the index with folder names for simple lookup and filtering
-
-    del _.tags, _.tag2paths  # remove temporary structures
-    _.tagdir2paths = [_.tagdir2paths[i] if i in _.tagdir2paths else [] for i in range(max(_.tagdir2paths) + 1)] if _.tagdir2paths else []  # safely convert map values to list positions (as we don't know if all exist)
-    info(f"Indexed {len(_.tagdirs)} folders with {len(_.tagdir2paths)} tags")
+    _.mapTagsIntoDirsAndCompressIndex()  # manual tags are combined in the index with folder names for faster lookup and filtering
 
   def _walk(_, folder, findex, tags = None, last = 0):
     ''' Recursive traversal through folder tree.
@@ -316,7 +312,7 @@ class Indexer(object):
       info(f"Store literal folder '{subfolder}' for '{_.getPath(findex, cache)}'")
       idxs.append(len(_.tagdirs))  # for this subfolder, always add a *new* element, no matter if name already exists in the index, because parent differs (to keep tree structure)
       _.tagdirs.append(subfolder)  # now add the subfolder name to the list of known tags/folders (duplicates allowed, because we build the tree structure here)
-      _.tagdir2parent.append(findex)  # placed at same index as tagdirs "next" position
+      _.tagdir2parent.append(findex)  # add current folder index as parent of subfolder (placed at same index as tagdirs)
       added += 1
       assert len(_.tagdirs) == len(_.tagdir2parent)  # invariant
 
@@ -342,7 +338,7 @@ class Indexer(object):
           _.tag2paths[i].append(idxs[-added])
 
       if not ignore:  # then index current folder
-        debug(f"Mark folder '{folder[len(_.root):]}{SLASH}{subfolder}' with " + "<%s>" % (COMB.join(set([_.tagdirs[x] for x in (newtags + idxs)]) | set([_.tags[x] for x in (adds | addt)]))))  # per subfolder, not promoted to recursive call
+        debug(f"Mark folder '{folder[len(_.root):]}{SLASH}{subfolder}' with " + "<%s>" % (COMB.join(set(_.tagdirs[x] for x in (newtags + idxs)) | set([_.tags[x] for x in (adds | addt)]))))  # per subfolder, not promoted to recursive call
         for tag in newtags + idxs: _.tagdir2paths[_.tagdirs.index(_.tagdirs[tag])].extend(idxs)   # add sub-folder reference(s) for all collected parent folder tags to the tag name
 
       # 4. recurse into subfolder
@@ -351,22 +347,26 @@ class Indexer(object):
       except KeyboardInterrupt: return True
 
   def mapTagsIntoDirsAndCompressIndex(_):
-    ''' After recursion finished, map extensions or manually set tags into the tagdir structure to save space. '''
+    ''' After folder tree recursion, map file extensions and manually set tags into the tagdir structure to save space. '''
     info("Map tags into folder index")
-    for itag, tag in enumerate(_.tags):
-      idx = findIndexOrAppend(_.tagdirs, tag)  # get (first) index in list, or append if not found yet
-      _.tagdir2paths[idx].extend(_.tag2paths[itag])  # tag2paths contains true parent folder index from _.tagdirs
+    for itag, tag in enumerate(_.tags):  # combine manual tags with automatic folder name entries
+      idx = findIndexOrAppend(_.tagdirs, tag)  # get (first matching) index in list or create one
+      _.tagdir2paths[idx].extend(_.tag2paths[itag])  # tag2paths contains true parent folder index from _.tagdirs array
+
     rm = [tag for tag, dirs in _.tagdir2paths.items() if len(dirs) == 0]  # find entries that are empty due to ignores
-    for r in rm:
-      del _.tagdir2paths[r]
-      debug(f"Remove childless tag '{_.tagdirs[r]}'")  # remove empty lists from index (was too optimistic, removed by ignore or skip)
+    for r in rm: del _.tagdir2paths[r]; debug(f"Remove childless tag '{_.tagdirs[r]}'")  # remove empty lists from index (was too optimistic, removed by ignore or skip)
     debug(f"Removed {len(rm)} childless tags from index")
+
     found = 0
     for tag, dirs in _.tagdir2paths.items():
-      _l = len(_.tagdir2paths[tag])  # get size of mapped paths
-      _.tagdir2paths[tag] = set(dirs)  # remove duplicates
-      found += (_l - len(_.tagdir2paths[tag]))  # check any removed
+      l, dirs = len(dirs), set(dirs)
+      _.tagdir2paths[tag] = dirs  # remove duplicates HINT converts to set
+      found += (l - len(_.tagdir2paths[tag]))
     if found: debug(f"Removed {found} duplicates from index")
+    del _.tags, _.tag2paths  # remove temporary structures
+    info(f"Indexed {len(_.tagdirs)} folders with {len(_.tagdir2paths)} tags")  # log must be before next line because structure is expanded to list below
+    _.tagdir2paths = [_.tagdir2paths[i] if i in _.tagdir2paths else set() for i in range(max(_.tagdir2paths) + 1)] if _.tagdir2paths else []  # safely convert map values to list positions (as we don't know if all exist)
+
 
   def getPath(_, idx, cache):
     ''' Return one root-relative path for the given index by recursively going through {index: name} mappings and combining them into a full path.
